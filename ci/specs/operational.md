@@ -12,16 +12,22 @@
 ## Publishing
 
 - `publish` pushes `ghcr.io/cosminci/plant-journal:<version>` and `:latest` to the **private** GHCR
-  package. It requires a workstation PAT with `write:packages`, passed as a Secret; the pipeline
-  does not create it. If the token is absent, stop and provide it — do not work around it.
-- `$GHCR_PUBLISH_PAT` is not set on this workstation, so publishing is unavailable until it is
-  provided.
+  package (GHCR is the account's own GitHub namespace — no separate registry account; the package is
+  created private on first publish, registry user `cosminci`).
+- It takes a `write:packages` GitHub PAT as a Secret. The workstation's `GITHUB_PERSONAL_PAT`
+  carries that scope:
+
+  ```
+  dagger call publish --token=env:GITHUB_PERSONAL_PAT
+  ```
 
 ## Deployment
 
-- The NAS pulls `ghcr.io/cosminci/plant-journal:<version>`. Preferred path: WUD auto-update — the
-  image is labelled `wud.watch=true`, and WUD authenticates with its existing `read:packages` PAT,
-  as it does for lscr.io. Manual path: `ssh nas 'docker pull … && docker compose up -d plant-journal'`.
+- The NAS pulls `ghcr.io/cosminci/plant-journal:<version>` (a private image, so the pull is
+  authenticated). Preferred path: WUD auto-update — the image is labelled `wud.watch=true`, and WUD
+  authenticates with a `read:packages` PAT, as it does for lscr.io (the workstation's read-only
+  equivalent is `GITHUB_PERSONAL_RO_PACKAGES_PAT`). Manual path:
+  `ssh nas 'docker pull … && docker compose up -d plant-journal'`.
 - The container needs a writable `/data` volume (the SQLite database) and the baked environment
   (contracts.md → Runtime image). It listens on 8080.
 - The Unraid template wiring (volume, port, Tailscale) is a first-deploy detail; record it here when

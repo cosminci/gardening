@@ -23,7 +23,9 @@ before code is written. The final phase syncs the living docs and archives the c
 
 - **Specs live in-repo** under [`specs/changes/<slug>/proposal.md`](specs/changes/), archived to
   `specs/changes/archive/YYYY-MM-DD-<slug>/`. The living docs are
-  `specs/{design,contracts,testing,operational}.md`; the pipeline's are `ci/specs/`.
+  `specs/{design,contracts,testing,operational}.md` (the pipeline's are `ci/specs/`); each follows a
+  strict template in [`specs/templates/`](specs/templates/) — one fact in one place, empty sections
+  omitted — so they stay lean as the app grows.
 - **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored,
   never reviewed).
 

@@ -79,7 +79,10 @@ not do).
 ## Phase 5 — Sync & archive
 
 Apply the spec's Doc Sync to the living docs (`specs/*.md`, and `ci/specs/*.md` if the pipeline
-changed), so the docs describe the system as it now is. Then move the spec to
+changed), so they describe the system as it now is. Structure every living doc against its template
+in `specs/templates/<name>.md`: add only the sections that template defines, keep each fact in one
+place (link instead of restating), and omit a section rather than pad it. Then move the spec to
 `specs/changes/archive/YYYY-MM-DD-<slug>/`.
 
-Gate: every Doc Sync entry is applied; the spec is archived; the checklist is fully satisfied.
+Gate: every Doc Sync entry is applied; each touched living doc conforms to its template (no
+out-of-template sections, no duplicated facts); the spec is archived; the checklist is satisfied.

@@ -43,6 +43,7 @@ bare short sha when untagged), leading `v` stripped. A dirty tree keeps git's `-
 ## Publish
 
 Pushes `ghcr.io/cosminci/plant-journal:<version>` and `:latest` to the private package.
-Authentication is a workstation PAT with `write:packages`, provided by the caller as a Secret
-(`$GHCR_PUBLISH_PAT`); the pipeline never creates it. `publish` runs `releaseGuard` and builds the
-image, but does not run the checks — run `verify --all` before publishing.
+Authentication is a GitHub PAT with `write:packages`, provided by the caller as a Secret — the
+workstation's `GITHUB_PERSONAL_PAT` carries that scope (`--token=env:GITHUB_PERSONAL_PAT`). `publish`
+runs `releaseGuard` and builds the image, but does not run the checks — run `verify --all` before
+publishing.

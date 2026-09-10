@@ -37,7 +37,7 @@ archive). Do not add product behaviour outside a reviewed change spec.
   that already opt into it; adding it elsewhere breaks scalafmt/scalafix parsing.
 - Do not introduce an effect system (Cats Effect, ZIO). The backend is direct-style on Loom;
   capabilities are injected with `using`.
-- Do not commit secrets, and do not create the GHCR publish token. If a release needs it and it is
-  absent, stop and ask (see [ci/specs/operational.md](ci/specs/operational.md)).
+- Do not commit secrets. Publishing reads a `write:packages` GitHub PAT as a Dagger Secret
+  (`--token=env:GITHUB_PERSONAL_PAT`); never embed or print it (see [ci/specs/operational.md](ci/specs/operational.md)).
 - Do not delete or move `plants/`, `guides/`, `shopping-list.md`, or `GARDEN-GUIDE.md` — they are
   the import source for a later feature.
