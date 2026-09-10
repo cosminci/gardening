@@ -1,0 +1,12 @@
+{
+  "name": "gardening-contract",
+  "private": true,
+  "type": "module",
+  "description": "Generated API contract. Do not edit generated/ by hand; run `npm run generate`.",
+  "scripts": {
+    "generate": "openapi-typescript openapi.yaml --output generated/api.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.6.1"
+  }
+}

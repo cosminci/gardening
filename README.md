@@ -1,77 +1,68 @@
-# Bucharest Balcony Garden
+# plant-journal
 
-12th floor (top floor), S-W orientation, 36sqm Z-shaped open terrace with roof.
-Intense wind (20-40 km/h gusts), intense summer heat (38-42°C), sub-zero winters (-10 to -20°C).
-USDA Zone 6b. No windbreakers allowed.
+A searchable journal of the household's house plants — ordered by where each one lives, each
+showing its most recent dated care actions. English-only; source records are Romanian and are
+translated on import. Runs on the home NAS, reachable over LAN and Tailscale only, with no
+application authentication.
 
-## Quick Reference
+## Status
 
-### Plants — Existing (baby, already owned)
+Foundation scaffold plus a walking skeleton: the backend serves `GET /health` and the built
+frontend on one port, and the frontend renders an app shell that reads `/health` through the
+generated client. Product features land one change spec at a time through the SDD skill — the next
+action in this repo is to write a change spec for the first feature.
 
-| Plant | Survival | Placement | Soil Group |
-|-------|:--------:|-----------|:----------:|
-| [Japanese Maple](plants/acer-palmatum.md) | 55% | Shaded inner corner | A (acid) |
-| [Magnolia Susan](plants/magnolia-susan.md) | 60% | Transition zone | A (acid) |
-| [Olive Tree](plants/olea-europaea.md) | 65% | Scorching sun | B (med.) |
-| [Fig Tree](plants/ficus-carica.md) | 70% | Scorching sun | C |
-| [Clematis](plants/clematis.md) | 50% | Shade pot, climb to sun | C |
-| [Honeysuckle](plants/lonicera.md) | 85% | Transition zone | C |
-| [English Ivy](plants/hedera-helix.md) | 95% | Shaded corner | C |
+## Stack
 
-### Plants — Tier 1 (to buy, 95%+ survival)
+- **Backend** — Scala 3 (direct style, no effect system) on Java 25 + Loom; tapir (sync/Netty)
+  over Magnum + SQLite.
+- **Frontend** — SolidJS + TypeScript, built with Vite.
+- **Contract** — the HTTP API is single-sourced from the backend's tapir endpoints to OpenAPI, and
+  the TypeScript client is generated from it. Generated files under `contract/` are committed and
+  read-only.
+- **CI** — a TypeScript Dagger module (`.dagger/`) with an affected-component selector.
+- **Packaging** — one slim, non-root runtime image serving the API and the built frontend.
 
-| Plant | Qty | Placement | Soil Group |
-|-------|:---:|-----------|:----------:|
-| [Pinus mugo](plants/pinus-mugo.md) | 1 | Scorching sun (big plant) | D |
-| [Juniperus horizontalis](plants/juniperus-horizontalis.md) | 2 | Sun edges | D |
-| [Juniperus Blue Star](plants/juniperus-blue-star.md) | 1 | Sun/partial shade | D |
-| [Taxus repandens](plants/taxus-repandens.md) | 1 | Shaded corner | D |
-| [Boxwood](plants/buxus.md) | 1 | Partial shade to sun | D |
-| [Boston Ivy](plants/parthenocissus.md) | 1 | Sun side wall | C |
-| [Russian Vine](plants/fallopia.md) | 1 | Fast coverage | C |
-| [Trumpet Vine](plants/campsis.md) | 1 | Sunny wall | C |
-| [Blue Fescue](plants/festuca-glauca.md) | 3 | Sun edges | B |
-| [Feather Grass](plants/stipa-tenuissima.md) | 2 | Sun zones | B |
-| [Stonecrop](plants/sedum-spectabile.md) | 3 | Full sun | B |
-| [Hens & Chicks](plants/sempervivum.md) | 5 | Edges, crevices | B |
-| [English Lavender](plants/lavandula.md) | 3 | Full sun | B |
-| [Bergenia](plants/bergenia.md) | 2 | Shade corner | C |
+## Prerequisites
 
-### Plants — Tier 2 (to buy, 80-90% survival)
+Install the pinned toolchain (Java 25, Scala 3.8, Node LTS) with [mise](https://mise.jdx.dev):
+`mise install`. Docker is required for the Dagger pipeline and the image build. Commands below
+assume mise is shell-activated; otherwise prefix them with `mise exec --`.
 
-| Plant | Qty | Placement | Soil Group |
-|-------|:---:|-----------|:----------:|
-| [Hydrangea paniculata](plants/hydrangea-paniculata.md) | 1 | Partial shade, sheltered | C |
-| [Rosa rugosa](plants/rosa-rugosa.md) | 1 | Full sun | C |
-| [Euonymus fortunei](plants/euonymus-fortunei.md) | 1 | Partial shade | D |
-| [Cotoneaster](plants/cotoneaster-horizontalis.md) | 1 | Sun/partial shade | D |
+## Commands
 
-### Soil Mix Groups
+| Task | Command |
+|------|---------|
+| Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
+| Run the backend | `cd backend && sbt run` |
+| Frontend gate | `cd frontend && npm run verify` |
+| Frontend dev server | `cd frontend && npm run dev` |
+| Pipeline gate | `cd .dagger && npm run verify` |
+| Regenerate the contract | `cd backend && sbt "runMain gardening.app.GenerateOpenApi ../contract/openapi.yaml" && cd ../contract && npm run generate` |
+| Affected checks (local / pre-push) | `dagger call verify` |
+| All checks | `dagger call verify --all` |
+| Build the runtime image | `dagger call build-image` |
 
-| Group | pH | Plants | Key Rule |
-|:-----:|:--:|--------|----------|
-| **A** | 5.5-6.5 | Japanese maple, Magnolia | Kekkilä **Rhododendron** only |
-| **B** | 7.0-8.0 | Olive, Lavender, Sedum, Sempervivum, Festuca, Stipa | Poor, gritty, fast-draining |
-| **C** | 6.0-7.0 | Fig, Clematis, Lonicera, Ivy, Hydrangea, Rosa, climbers, Bergenia | Moisture-retentive + drainage |
-| **D** | 6.0-7.0 | Pinus, Junipers, Taxus, Buxus, Euonymus, Cotoneaster | Standard + extra drainage |
+## Repository map
 
-## Guides
+| Path | What |
+|------|------|
+| `backend/` | Scala 3 service — `domain`, `capabilities` (ports), `adapters`, `app`. |
+| `frontend/` | SolidJS single-page app. |
+| `contract/` | Generated OpenAPI document and TypeScript client (read-only). |
+| `.dagger/` | TypeScript Dagger CI module. |
+| `specs/` | Living design / contracts / testing / operational docs, and change specs. |
+| `ci/specs/` | The pipeline's own design / contracts / testing / operational docs. |
+| `.claude/skills/sdd/` | The spec-driven development skill. |
+| `plants/`, `guides/`, `shopping-list.md`, `GARDEN-GUIDE.md` | The Bucharest balcony-garden guide — import source for a later feature, not part of the app. |
 
-- [Pot Systems](guides/pot-systems.md) — Double-wall, shared tray, fabric inner pots
-- [Soil Mixes](guides/soil-mixes.md) — Four soil groups, layer system, additives
-- [General Care](guides/general-care.md) — Watering, feeding, wind, heat, baby plant rules
-- [Winter Protection](guides/winter-protection.md) — Wrapping, grouping, per-plant hardiness
-- [Layout](guides/layout.md) — Z-shape placement strategy with diagrams
-- [Lavender Post-Mortem](guides/lavender-post-mortem.md) — Why it died, how to fix it
+## Documentation
 
-## Shopping List
+- [CONTRIBUTING.md](CONTRIBUTING.md) — conventions, the SDD workflow, definition of done.
+- [CLAUDE.md](CLAUDE.md) — agent guardrails.
+- [GLOSSARY.md](GLOSSARY.md) — domain terms.
+- [specs/](specs/) — how the service works. [ci/specs/](ci/specs/) — how the pipeline works.
 
-See [shopping-list.md](shopping-list.md) for the complete bill of materials with quantities and totals.
+## Security & exposure
 
-## Plants to Avoid
-
-- **Oleander** — dies below -10°C
-- **Citrus** — no chance
-- **Wisteria** — too heavy, wind catches canopy, rips supports
-- **Clematis** — risky (already owned, keeping with precautions)
-- **Bamboo** — root-bound death in pots within 2 years, wind shreds leaves
+LAN + Tailscale only; no application authentication. No secrets are committed to the repository.

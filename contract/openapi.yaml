@@ -1,0 +1,36 @@
+openapi: 3.1.0
+info:
+  title: Gardening API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Liveness and readiness probe
+      description: Reports the service version and database reachability.
+      operationId: getHealth
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    HealthResponse:
+      title: HealthResponse
+      type: object
+      required:
+      - status
+      - version
+      - database
+      - checkedAt
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        database:
+          type: boolean
+        checkedAt:
+          type: string
