@@ -4,6 +4,12 @@
 
 How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indirection Layers, and the reasoning behind the strict build — lives in [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md); read it first, since the conventions below follow from it. Machine-enforceable style lives in the tool configs (scalafmt, scalafix + WartRemover, ESLint, Prettier, dependency-cruiser) and is not repeated here. Markdown prose is soft-wrapped — one line per paragraph, no manual line breaks — so it reflows to the reader's width; Prettier's `proseWrap: never` enforces it. This document covers the judgment calls a reviewer makes and the workflow every change follows.
 
+## Documentation style
+
+- Short, technical, concise — bullet lists over multi-sentence paragraphs.
+- Treat every word as a cost; cut hedging, filler, and restatement.
+- Never repeat a fact — state it once, in one place.
+
 ## Development workflow — SDD
 
 Every change goes through the **SDD skill** at [`.claude/skills/sdd/SKILL.md`](.claude/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:
