@@ -5,8 +5,7 @@ info:
 paths:
   /health:
     get:
-      summary: Liveness and readiness probe
-      description: Reports the service version and database reachability.
+      summary: Liveness probe
       operationId: getHealth
       responses:
         '200':
@@ -23,14 +22,8 @@ components:
       required:
       - status
       - version
-      - database
-      - checkedAt
       properties:
         status:
           type: string
         version:
-          type: string
-        database:
-          type: boolean
-        checkedAt:
           type: string

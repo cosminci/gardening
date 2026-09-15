@@ -11,10 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Liveness and readiness probe
-         * @description Reports the service version and database reachability.
-         */
+        /** Liveness probe */
         get: operations["getHealth"];
         put?: never;
         post?: never;
@@ -32,8 +29,6 @@ export interface components {
         HealthResponse: {
             status: string;
             version: string;
-            database: boolean;
-            checkedAt: string;
         };
     };
     responses: never;

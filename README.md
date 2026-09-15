@@ -7,10 +7,10 @@ application authentication.
 
 ## Status
 
-Foundation scaffold plus a walking skeleton: the backend serves `GET /health` and the built
-frontend on one port, and the frontend renders an app shell that reads `/health` through the
-generated client. Product features land one change spec at a time through the SDD skill — the next
-action in this repo is to write a change spec for the first feature.
+Foundation scaffold: the backend serves a `GET /health` liveness probe (for the host/container
+healthcheck) and the built frontend on one port, and the frontend renders a static app shell.
+Product features land one change spec at a time through the SDD skill — the next action in this repo
+is to write a change spec for the first feature.
 
 ## Stack
 
@@ -58,10 +58,14 @@ assume mise is shell-activated; otherwise prefix them with `mise exec --`.
 
 ## Documentation
 
+The context files every contributor — human or agent — works from, outermost-in:
+
+- [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) — how the code is designed and built; read first.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — conventions, the SDD workflow, definition of done.
-- [CLAUDE.md](CLAUDE.md) — agent guardrails.
+- [CLAUDE.md](CLAUDE.md) — operational guardrails for agents, on top of the two above.
+- [.claude/skills/sdd/SKILL.md](.claude/skills/sdd/SKILL.md) — the spec-driven development skill every change runs through.
 - [GLOSSARY.md](GLOSSARY.md) — domain terms.
-- [specs/](specs/) — how the service works. [ci/specs/](ci/specs/) — how the pipeline works.
+- [specs/](specs/) and [specs/templates/](specs/templates/) — the service's living docs and their templates; [ci/specs/](ci/specs/) — the pipeline's.
 
 ## Security & exposure
 
