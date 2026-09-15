@@ -2,9 +2,7 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template. The API schema has one home — the generated contract/openapi.yaml. Never
-> restate field-level request/response shapes here; link to it. Domain meaning → design.md;
-> error-handling philosophy and conventions → CONTRIBUTING.md.
+> Living-doc template. The API schema has one home — the generated contract/openapi.yaml. Never restate field-level request/response shapes here; link to it. Domain meaning → design.md; error-handling philosophy and conventions → CONTRIBUTING.md.
 
 ## HTTP API
 
