@@ -2,9 +2,7 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template. Cross-cutting conventions — test categories, file naming, mocking strategy,
-> coverage gates — live in CONTRIBUTING.md; do NOT repeat them here. This file holds only what is
-> specific to testing THIS component.
+> Living-doc template. Cross-cutting conventions — test categories, file naming, mocking strategy, coverage gates — live in CONTRIBUTING.md; do NOT repeat them here. This file holds only what is specific to testing THIS component.
 
 ## Service-specific strategy
 

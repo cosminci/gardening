@@ -2,12 +2,9 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template. Fill a section only when it carries current, non-duplicated fact; delete each
-> guidance comment as you populate it, and omit a section entirely rather than leave it empty.
+> Living-doc template. Fill a section only when it carries current, non-duplicated fact; delete each guidance comment as you populate it, and omit a section entirely rather than leave it empty.
 >
-> Belongs elsewhere, not here: build/run commands and repo map → README.md; term definitions →
-> GLOSSARY.md; API and schemas → contracts.md + contract/openapi.yaml; test strategy → testing.md;
-> operating the running app → operational.md; pipeline/versioning/release → ci/specs/.
+> Belongs elsewhere, not here: build/run commands and repo map → README.md; term definitions → GLOSSARY.md; API and schemas → contracts.md + contract/openapi.yaml; test strategy → testing.md; operating the running app → operational.md; pipeline/versioning/release → ci/specs/.
 
 ## Service overview
 

@@ -2,8 +2,7 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template for operating the RUNNING service. Pipeline, versioning, release, publish, and
-> deploy mechanics live in ci/specs/ — do NOT duplicate them here.
+> Living-doc template for operating the RUNNING service. Pipeline, versioning, release, publish, and deploy mechanics live in ci/specs/ — do NOT duplicate them here.
 
 ## Alerts
 
