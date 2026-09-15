@@ -1,9 +1,12 @@
 package gardening.adapters.system
 
-import java.time.Instant
+import gardening.domain.Clock
 
 class SystemClockSuite extends munit.FunSuite:
-  test("now returns an instant that is not in the past relative to a prior sample"):
-    val before  = Instant.now()
-    val sampled = SystemClock.now()
-    assert(!sampled.isBefore(before))
+
+  private val clock: Clock = SystemClock
+
+  test("should sample instants in non-decreasing order"):
+    val first  = clock.now()
+    val second = clock.now()
+    assert(second.compareTo(first) >= 0, "a later sample must not predate an earlier one")

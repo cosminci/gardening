@@ -4,6 +4,7 @@ import gardening.adapters.http.{HealthApi, StaticSite}
 import sttp.tapir.server.netty.sync.NettySyncServer
 
 object Main:
+
   def main(args: Array[String]): Unit =
     val version   = sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-dev")
     val staticDir = sys.env.getOrElse("GARDENING_STATIC_DIR", "static")
