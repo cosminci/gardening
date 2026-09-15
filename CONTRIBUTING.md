@@ -4,6 +4,37 @@
 
 How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indirection Layers, and the reasoning behind the strict build — lives in [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md); read it first, since the conventions below follow from it. Machine-enforceable style lives in the tool configs (scalafmt, scalafix + WartRemover, ESLint, Prettier, dependency-cruiser) and is not repeated here. Markdown prose is soft-wrapped — one line per paragraph, no manual line breaks — so it reflows to the reader's width; Prettier's `proseWrap: never` enforces it. This document covers the judgment calls a reviewer makes and the workflow every change follows.
 
+## Working in the repo
+
+**Stack.** A Scala 3 backend (direct style, no effect system) on Java 25 + Loom — tapir (sync/Netty) over Magnum + SQLite; a SolidJS + TypeScript frontend built with Vite; the HTTP contract single-sourced from the backend's tapir endpoints to OpenAPI, with the TypeScript client generated from it (`contract/` is committed and read-only); CI as a TypeScript Dagger module (`.dagger/`) with an affected-component selector; and packaging as one slim, non-root runtime image serving the API and the built frontend.
+
+**Setup.** Install the pinned toolchain (Java 25, Scala 3.8, Node LTS) with [mise](https://mise.jdx.dev): `mise install`. Docker is required for the Dagger pipeline and the image build. The commands below assume mise is shell-activated; otherwise prefix them with `mise exec --`.
+
+**Exposure.** Runs on the home NAS, reachable over LAN and Tailscale only, with no application authentication; no secrets are committed.
+
+| Task | Command |
+| --- | --- |
+| Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
+| Run the backend | `cd backend && sbt run` |
+| Frontend gate | `cd frontend && npm run verify` |
+| Frontend dev server | `cd frontend && npm run dev` |
+| Pipeline gate | `cd .dagger && npm run verify` |
+| Regenerate the contract | `cd backend && sbt "runMain gardening.app.GenerateOpenApi ../contract/openapi.yaml" && cd ../contract && npm run generate` |
+| Affected checks (local / pre-push) | `dagger call verify` |
+| All checks | `dagger call verify --all` |
+| Build the runtime image | `dagger call build-image` |
+
+| Path | What |
+| --- | --- |
+| `backend/` | Scala 3 service — `domain`, `capabilities` (ports), `adapters`, `app`. |
+| `frontend/` | SolidJS single-page app. |
+| `contract/` | Generated OpenAPI document and TypeScript client (read-only). |
+| `.dagger/` | TypeScript Dagger CI module. |
+| `specs/` | Living design / contracts / testing / operational docs, and change specs. |
+| `ci/specs/` | The pipeline's own docs. |
+| `.claude/skills/sdd/` | The spec-driven development skill. |
+| `plants/`, `guides/`, `shopping-list.md`, `GARDEN-GUIDE.md` | Import source for a later feature, not part of the app. |
+
 ## Documentation style
 
 - Short, technical, concise — bullet lists over multi-sentence paragraphs.
