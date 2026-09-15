@@ -2,9 +2,11 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 
-Machine-enforceable style lives in the tool configs (scalafmt, scalafix + WartRemover, ESLint,
-Prettier, dependency-cruiser) and is not repeated here. This document covers the judgment calls a
-reviewer makes and the workflow every change follows.
+How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indirection Layers, and the
+reasoning behind the strict build — lives in [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md); read it
+first, since the conventions below follow from it. Machine-enforceable style lives in the tool
+configs (scalafmt, scalafix + WartRemover, ESLint, Prettier, dependency-cruiser) and is not repeated
+here. This document covers the judgment calls a reviewer makes and the workflow every change follows.
 
 ## Development workflow — SDD
 
@@ -48,18 +50,23 @@ before code is written. The final phase syncs the living docs and archives the c
 
 - **Backend** uses MUnit; name suites `<Unit>Suite`. Test behaviour through the domain and the
   capability ports, never implementation details, so a test fails only when a stated behaviour
-  changes. Use a real in-memory SQLite for persistence-adapter tests (a seam test); substitute the
-  capability traits (`Clock`, and `Database` via a `DatabaseProbe` stub) for application tests.
+  changes. Substitute the capability ports for domain and application tests; exercise a persistence
+  adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic
+  by driving its endpoints over a stub of the service it delegates to — never by reaching past that
+  service to a lower port.
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)`
   (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real
   seam), and `*.systemIntegrationTest.ts(x)` (the running system).
 - Prefer duplication over a shared test helper until the third repetition — a test should read
   top-to-bottom without indirection.
-- Coverage is enforced at 100%. The only regions excluded are the imperative shells with no
-  branching logic: the backend composition root, HTTP transport, and endpoint/DTO declarations;
-  the frontend composition root (`main.tsx`) and port interfaces (`domain/ports.ts`); and the
-  pipeline entrypoint (`index.ts`), its `hooks/**`, and `buildEnv.ts`. Put untestable glue in one
-  of these regions rather than lowering a threshold.
+- Coverage is enforced at 100% — as a means, not a goal (see DESIGN-PRINCIPLES.md §6). Hard-to-test
+  code is a design signal, not a licence to hack the test or lower a threshold. The HTTP layer is
+  tested at its seam, not excluded: logic-bearing endpoints through the tapir stub interpreter and
+  static serving against a live server. The only exclusions are composition roots that just wire
+  already-tested parts together: the backend's (`gardening.app.*`), the frontend's (`main.tsx`), and
+  the pipeline entrypoint (`index.ts`) with its `hooks/**` and `buildEnv.ts`. Adapters that carry
+  logic — request mapping, error translation, persistence — are never excluded. Exclude only a
+  genuine wiring shell; never contort a test to reach one.
 
 ## Definition of done
 

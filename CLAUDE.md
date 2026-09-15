@@ -2,10 +2,13 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 
-Agent guardrails for this repo. Orientation lives elsewhere — read it there rather than here:
-[README.md](README.md) (purpose, commands, repo map), [CONTRIBUTING.md](CONTRIBUTING.md)
-(conventions, workflow, definition of done), [specs/](specs/) and [ci/specs/](ci/specs/) (how the
-service and pipeline work), [GLOSSARY.md](GLOSSARY.md) (domain terms), and the SDD skill at
+The engineering standard here is written for everyone, not just agents:
+[DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) is how the code is designed and built, and
+[CONTRIBUTING.md](CONTRIBUTING.md) covers conventions, workflow, and the definition of done. Read
+those first and hold to them as any engineer would; this file only adds the operational guardrails an
+agent needs on top. Further orientation: [README.md](README.md) (purpose, commands, repo map),
+[specs/](specs/) and [ci/specs/](ci/specs/) (how the service and pipeline work),
+[GLOSSARY.md](GLOSSARY.md) (domain terms), and the SDD skill at
 [.claude/skills/sdd/SKILL.md](.claude/skills/sdd/SKILL.md).
 
 ## How work happens here
@@ -29,12 +32,9 @@ archive). Do not add product behaviour outside a reviewed change spec.
 ## What agents must not do
 
 - Do not weaken a gate to make it pass: no lowering coverage thresholds, no `// scalafix:off`, no
-  `eslint-disable`, no adding files to a formatter/scalafix exclude list. The single existing
-  exclusion — `backend/src/main/scala/gardening/capabilities/Database.scala` from scalafmt and
-  scalafix — exists only because those scalameta-based tools cannot parse capture-checking `^`
-  syntax. Do not extend it to other files.
-- Do not use capture-checking `^` syntax outside the capability wrapper and domain-purity files
-  that already opt into it; adding it elsewhere breaks scalafmt/scalafix parsing.
+  `eslint-disable`, no widening a formatter/scalafix/coverage exclusion to dodge a finding. If code
+  is hard to test or lint, that is a design signal — fix the design, or move genuine glue into an
+  existing imperative-shell exclusion — never relax the gate (see DESIGN-PRINCIPLES.md §6).
 - Do not introduce an effect system (Cats Effect, ZIO). The backend is direct-style on Loom;
   capabilities are injected with `using`.
 - Do not commit secrets. Publishing reads a `write:packages` GitHub PAT as a Dagger Secret

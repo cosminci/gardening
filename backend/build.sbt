@@ -4,8 +4,6 @@ ThisBuild / version      := sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-de
 
 val tapirV   = "1.13.31"
 val apispecV = "0.11.10"
-val magnumV  = "1.3.1"
-val sqliteV  = "3.53.4.0"
 val munitV   = "1.3.6"
 
 lazy val root = (project in file("."))
@@ -15,7 +13,7 @@ lazy val root = (project in file("."))
     Compile / mainClass := Some("gardening.app.Main"),
     // Bundle a minimal jlink runtime (only the modules the app needs) so the image ships a ~60MB
     // JRE instead of a full 190MB one. Ignore jdeps' missing-optional-dependency errors that a
-    // classpath (non-modular) app on Netty/Magnum otherwise trips.
+    // classpath (non-modular) app on Netty otherwise trips.
     jlinkIgnoreMissingDependency := JlinkIgnore.everything,
     jlinkOptions ++= Seq("--no-header-files", "--no-man-pages", "--strip-debug", "--compress=zip-6"),
     scalacOptions ++= Seq(
@@ -32,11 +30,6 @@ lazy val root = (project in file("."))
     ),
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
-    // Capture-checking syntax (`^`) is not yet understood by the scalameta parser scalafix
-    // uses, so the one capability wrapper that needs it opts out of scalafix. It is still held
-    // to -Werror, capture checking, WartRemover, and 100% coverage.
-    Compile / scalafix / unmanagedSources := (Compile / unmanagedSources).value
-      .filterNot(_.getName == "Database.scala"),
     wartremoverErrors ++= Seq(
       Wart.Null,
       Wart.Return,
@@ -50,10 +43,10 @@ lazy val root = (project in file("."))
     coverageFailOnMinimum      := true,
     coverageMinimumStmtTotal   := 100,
     coverageMinimumBranchTotal := 100,
-    // Composition root, HTTP transport wiring, and endpoint/DTO declarations carry no
-    // branching domain logic; behaviour is proven through the ports they delegate to.
-    coverageExcludedPackages := "gardening\\.app\\..*;gardening\\.adapters\\.http\\..*",
-    Test / fork              := true,
+    coverageExcludedPackages := List(
+      "gardening\\.app\\..*" // composition root and build-time OpenAPI writer; exercised by the packaged runtime, not unit tests
+    ).mkString(";"),
+    Test / fork := true,
     // tapir pulls Netty's `netty-all` aggregate, which drags in codecs this app never uses (and
     // whose jdeps analysis breaks jlink on a missing optional aalto module). Dropping them fixes
     // the jlink build and trims the runtime jars.
@@ -79,8 +72,7 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir"   %% "tapir-openapi-docs"      % tapirV,
       "com.softwaremill.sttp.tapir"   %% "tapir-files"             % tapirV,
       "com.softwaremill.sttp.apispec" %% "openapi-circe-yaml"      % apispecV,
-      "com.augustnagro"               %% "magnum"                  % magnumV,
-      "org.xerial"                     % "sqlite-jdbc"             % sqliteV,
-      "org.scalameta"                 %% "munit"                   % munitV % Test
+      "org.scalameta"                 %% "munit"                   % munitV % Test,
+      "com.softwaremill.sttp.tapir"   %% "tapir-sttp-stub-server"  % tapirV % Test
     )
   )
