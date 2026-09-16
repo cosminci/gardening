@@ -6,7 +6,7 @@ import sttp.model.StatusCode
 import sttp.tapir.server.stub.TapirStubInterpreter
 
 class HealthApiSuite extends munit.FunSuite:
-  test("GET /health returns ok and the running version"):
+  test("should report ok and the running version"):
     val backend =
       TapirStubInterpreter(SttpBackendStub.synchronous)
         .whenServerEndpoint(HealthApi.serverEndpoint("1.2.3"))

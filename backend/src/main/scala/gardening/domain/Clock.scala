@@ -1,4 +1,4 @@
-package gardening.capabilities
+package gardening.domain
 
 import java.time.Instant
 

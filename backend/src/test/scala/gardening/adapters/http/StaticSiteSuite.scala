@@ -8,7 +8,7 @@ import sttp.tapir.server.netty.sync.NettySyncServer
 import java.nio.file.Files
 
 class StaticSiteSuite extends munit.FunSuite:
-  test("serves the built single-page app from the given directory"):
+  test("should serve the built single-page app from a directory"):
     val directory = Files.createTempDirectory("gardening-static")
     Files.writeString(directory.resolve("index.html"), "<!doctype html><title>Gardening</title>")
 

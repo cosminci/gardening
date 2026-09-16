@@ -4,6 +4,7 @@ ThisBuild / version      := sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-de
 
 val tapirV   = "1.13.31"
 val apispecV = "0.11.10"
+val ironV    = "3.3.2"
 val munitV   = "1.3.6"
 
 lazy val root = (project in file("."))
@@ -72,6 +73,7 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir"   %% "tapir-openapi-docs"      % tapirV,
       "com.softwaremill.sttp.tapir"   %% "tapir-files"             % tapirV,
       "com.softwaremill.sttp.apispec" %% "openapi-circe-yaml"      % apispecV,
+      "io.github.iltotore"            %% "iron"                    % ironV,
       "org.scalameta"                 %% "munit"                   % munitV % Test,
       "com.softwaremill.sttp.tapir"   %% "tapir-sttp-stub-server"  % tapirV % Test
     )
