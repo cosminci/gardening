@@ -5,7 +5,7 @@ import sttp.client3.{UriContext, basicRequest}
 import sttp.model.StatusCode
 import sttp.tapir.server.stub.TapirStubInterpreter
 
-class HealthApiSuite extends munit.FunSuite:
+class HealthApiUnitTest extends munit.FunSuite:
   test("should report ok and the running version"):
     val backend =
       TapirStubInterpreter(SttpBackendStub.synchronous)

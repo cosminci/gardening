@@ -6,6 +6,11 @@ val tapirV   = "1.13.31"
 val apispecV = "0.11.10"
 val ironV    = "3.3.2"
 val munitV   = "1.3.6"
+val magnumV  = "1.3.1"
+val flywayV  = "13.7.0"
+val archUnitV = "1.5.0"
+val catsV    = "2.13.0"
+val circeV   = "0.14.16"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
@@ -26,6 +31,7 @@ lazy val root = (project in file("."))
       "-Werror",
       "-Wunused:all",
       "-Wvalue-discard",
+      "-language:experimental.captureChecking",
       "-java-output-version",
       "25"
     ),
@@ -74,6 +80,14 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir"   %% "tapir-files"             % tapirV,
       "com.softwaremill.sttp.apispec" %% "openapi-circe-yaml"      % apispecV,
       "io.github.iltotore"            %% "iron"                    % ironV,
+      "com.augustnagro"               %% "magnum"                  % magnumV,
+      "org.xerial"                     % "sqlite-jdbc"              % "3.49.1.0",
+      "org.flywaydb"                   % "flyway-core"              % flywayV,
+      "org.flywaydb"                   % "flyway-database-nc-sqlite" % flywayV,
+      "org.typelevel"                 %% "cats-core"                % catsV,
+      "io.circe"                      %% "circe-core"                % circeV,
+      "io.circe"                      %% "circe-parser"              % circeV,
+      "com.tngtech.archunit"           % "archunit"                 % archUnitV % Test,
       "org.scalameta"                 %% "munit"                   % munitV % Test,
       "com.softwaremill.sttp.tapir"   %% "tapir-sttp-stub-server"  % tapirV % Test
     )

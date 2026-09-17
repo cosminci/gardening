@@ -45,6 +45,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 - Optional fields, vals, and params are prefixed `maybe` — `maybeNickname: Option[Nickname]`.
 - `Either`-typed fields, vals, and params are suffixed `Result` — `editResult: Either[…, …]`.
+- Name an argument when its value does not reveal its role at the call site — for example `maybeNote = None`, `date = Instant.parse(…)`, or `share = 100`. Keep self-describing variables and value wrappers positional.
 
 ## Development workflow — SDD
 
@@ -75,7 +76,8 @@ Its five phases are **classify → spec → tests → implement → sync & archi
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)` (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real seam), and `*.systemIntegrationTest.ts(x)` (the running system).
 - Every test name starts with `should ` and describes a use case, not an implementation detail.
 - Prefer duplication over a shared test helper until the third repetition — a test should read top-to-bottom without indirection.
-- Coverage is enforced at 100% — as a means, not a goal (see DESIGN-PRINCIPLES.md §6). Hard-to-test code is a design signal, not a licence to hack the test or lower a threshold. The HTTP layer is tested at its seam, not excluded: logic-bearing endpoints through the tapir stub interpreter and static serving against a live server. The only exclusions are composition roots that just wire already-tested parts together: the backend's (`gardening.app.*`), the frontend's (`main.tsx`), and the pipeline entrypoint (`index.ts`) with its `hooks/**` and `buildEnv.ts`. Adapters that carry logic — request mapping, error translation, persistence — are never excluded. Exclude only a genuine wiring shell; never contort a test to reach one.
+- Coverage is enforced at 100% — as a means, not a goal (see DESIGN-PRINCIPLES.md §6). Hard-to-test code is a design signal, not a licence to hack the test or lower a threshold. The HTTP layer is tested at its seam, not excluded: logic-bearing endpoints through the tapir stub interpreter and static serving against a live server. The only file or package exclusions are composition roots that just wire already-tested parts together: the backend's (`gardening.app.*`), the frontend's (`main.tsx`), and the pipeline entrypoint (`index.ts`) with its `hooks/**` and `buildEnv.ts`. Adapters that carry logic — request mapping, error translation, persistence — are never excluded. Exclude only a genuine wiring shell; never contort a test to reach one.
+- A narrowly scoped `$COVERAGE-OFF$` / `$COVERAGE-ON$` exclusion is permitted for an unreachable branch when an adjacent comment names the domain invariant that makes it unreachable. Never exclude a reachable failure mode or the enclosing method.
 
 ## Definition of done
 

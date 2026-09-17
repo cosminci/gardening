@@ -2,7 +2,7 @@ package gardening.domain
 
 import io.github.iltotore.iron.*
 
-class SubstrateSuite extends munit.FunSuite:
+class SubstrateUnitTest extends munit.FunSuite:
 
   test("should accept a mix of distinct components whose shares total at most 100"):
     val parts = List(

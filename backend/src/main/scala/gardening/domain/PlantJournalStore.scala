@@ -1,8 +1,10 @@
 package gardening.domain
 
 trait PlantJournalStore:
-  def getPlants: Vector[Plant]
-  def getOperations(plantId: PlantId): Vector[Operation]
+  def getPlant(id: PlantId): JournalReadResult[Plant]
+  def getPlants: JournalReadResult[Vector[Plant]]
+  def getOperations(plantId: PlantId): JournalReadResult[Vector[Operation]]
+  def getOperation(id: OperationId): JournalReadResult[Operation]
   def addOperation(operation: Operation): LogOperationResult
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult
-  def deleteOperation(id: OperationId): RemoveOperationResult
+  def updatePlant(plant: Plant): Unit

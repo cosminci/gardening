@@ -1,5 +1,7 @@
 package gardening.domain
 
+import cats.Eq
+import cats.data.NonEmptyList
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 
@@ -7,11 +9,13 @@ import java.time.Instant
 
 opaque type PlantId = String
 object PlantId:
-  def apply(value: String): PlantId = value
+  def apply(value: String): PlantId         = value
+  extension (id: PlantId) def value: String = id
 
 opaque type OperationId = String
 object OperationId:
-  def apply(value: String): OperationId = value
+  def apply(value: String): OperationId         = value
+  extension (id: OperationId) def value: String = id
 
 opaque type Species = String
 object Species:
@@ -27,12 +31,16 @@ object Location:
 
 opaque type Note = String
 object Note:
-  def apply(value: String): Note = value
+  def apply(value: String): Note           = value
+  extension (note: Note) def value: String = note
 
 type Percentage = Int :| Interval.Closed[1, 100]
 
-enum PlantStatus:
+enum PlantStatus derives CanEqual:
   case Active, Archived
+
+object PlantStatus:
+  given Eq[PlantStatus] = Eq.fromUniversalEquals
 
 enum SubstrateComponent(val label: String):
   case KekkilaUniversal  extends SubstrateComponent("Kekkila universal peat")
@@ -46,7 +54,6 @@ enum SubstrateComponent(val label: String):
 enum ActionType(val label: String):
   case Watered    extends ActionType("Watered")
   case Fertilized extends ActionType("Fertilized")
-  case Repotted   extends ActionType("Repotted")
   case Pesticide  extends ActionType("Insecticide / H2O2")
   case Pruned     extends ActionType("Pruned")
   case NoAction   extends ActionType("None")
@@ -62,6 +69,7 @@ final case class SubstratePart(component: SubstrateComponent, share: Percentage)
 
 enum SubstrateError:
   case Empty
+  case Malformed
   case DuplicateComponent
   case ExceedsTotal
 
@@ -73,6 +81,8 @@ object Substrate:
     else if parts.map(part => part.share: Int).sum > 100 then Left(SubstrateError.ExceedsTotal)
     else Right(parts)
 
+  extension (substrate: Substrate) def parts: List[SubstratePart] = substrate
+
 final case class Plant(
     id: PlantId,
     species: Species,
@@ -82,15 +92,37 @@ final case class Plant(
     status: PlantStatus
 )
 
-final case class OperationDetails(
-    date: Instant,
-    actions: Set[ActionType],
-    moisture: MoistureLevel,
-    maybeSubstrate: Option[Substrate],
-    maybeNote: Option[Note]
-)
+sealed trait OperationDetails:
+  def date: Instant
+  def maybeNote: Option[Note]
+
+object OperationDetails:
+  final case class Care(
+      override val date: Instant,
+      actions: Set[ActionType],
+      moisture: MoistureLevel,
+      override val maybeNote: Option[Note]
+  ) extends OperationDetails
+
+  final case class Repot(
+      override val date: Instant,
+      substrate: Substrate,
+      override val maybeNote: Option[Note]
+  ) extends OperationDetails
 
 final case class Operation(id: OperationId, plantId: PlantId, details: OperationDetails)
+
+enum JournalRecord:
+  case Plant(id: PlantId)
+  case Operation(id: OperationId)
+
+final case class JournalCorruption(record: JournalRecord, reason: Throwable)
+
+enum JournalReadResult[+A]:
+  case Read(value: A)
+  case RecordMissing
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
 
 enum LogOperationResult:
   case Logged(id: OperationId)
@@ -99,9 +131,6 @@ enum LogOperationResult:
 enum EditOperationResult:
   case Edited(operation: Operation)
   case OperationMissing
+  case OperationTypeMismatch
+  case Corrupted(details: NonEmptyList[JournalCorruption])
   case EditFailed(reason: Throwable)
-
-enum RemoveOperationResult:
-  case Removed(operation: Operation)
-  case AlreadyRemoved
-  case RemoveFailed(reason: Throwable)

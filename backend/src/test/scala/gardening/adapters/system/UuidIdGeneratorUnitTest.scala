@@ -2,7 +2,7 @@ package gardening.adapters.system
 
 import gardening.domain.IdGenerator
 
-class UuidIdGeneratorSuite extends munit.FunSuite:
+class UuidIdGeneratorUnitTest extends munit.FunSuite:
 
   private val idGenerator: IdGenerator = UuidIdGenerator
 
