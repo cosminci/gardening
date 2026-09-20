@@ -2,7 +2,7 @@ package gardening.adapters.system
 
 import gardening.domain.Clock
 
-class SystemClockSuite extends munit.FunSuite:
+class SystemClockUnitTest extends munit.FunSuite:
 
   private val clock: Clock = SystemClock
 

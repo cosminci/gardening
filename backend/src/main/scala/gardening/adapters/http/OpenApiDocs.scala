@@ -10,5 +10,5 @@ object OpenApiDocs:
 
   val yaml: String =
     OpenAPIDocsInterpreter()
-      .toOpenAPI(endpoints, "Gardening API", "0.1.0")
+      .toOpenAPI(endpoints, title = "Gardening API", version = "0.1.0")
       .toYaml

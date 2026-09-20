@@ -1,8 +1,9 @@
 package gardening.domain
 
+import cats.syntax.option.*
 import io.github.iltotore.iron.*
 
-class SubstrateSuite extends munit.FunSuite:
+class SubstrateUnitTest extends munit.FunSuite:
 
   test("should accept a mix of distinct components whose shares total at most 100"):
     val parts = List(
@@ -12,18 +13,18 @@ class SubstrateSuite extends munit.FunSuite:
     assert(Substrate.of(parts).isRight)
 
   test("should reject an empty mix"):
-    assertEquals(Substrate.of(Nil).swap.toOption, Some(SubstrateError.Empty))
+    assertEquals(Substrate.of(Nil).swap.toOption, SubstrateError.Empty.some)
 
   test("should reject a mix that repeats a component"):
     val parts = List(
       SubstratePart(SubstrateComponent.Perlite, share = 30),
       SubstratePart(SubstrateComponent.Perlite, share = 30)
     )
-    assertEquals(Substrate.of(parts).swap.toOption, Some(SubstrateError.DuplicateComponent))
+    assertEquals(Substrate.of(parts).swap.toOption, SubstrateError.DuplicateComponent.some)
 
   test("should reject a mix whose shares exceed 100"):
     val parts = List(
       SubstratePart(SubstrateComponent.Perlite, share = 60),
       SubstratePart(SubstrateComponent.PineBark, share = 60)
     )
-    assertEquals(Substrate.of(parts).swap.toOption, Some(SubstrateError.ExceedsTotal))
+    assertEquals(Substrate.of(parts).swap.toOption, SubstrateError.ExceedsTotal.some)

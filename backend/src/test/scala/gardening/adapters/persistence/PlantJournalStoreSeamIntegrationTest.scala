@@ -1,0 +1,490 @@
+package gardening.adapters.persistence
+
+import cats.syntax.either.*
+import cats.syntax.option.*
+import gardening.domain.*
+import io.github.iltotore.iron.autoRefine
+import munit.FunSuite
+import org.flywaydb.core.Flyway
+
+import com.augustnagro.magnum.Transactor
+import java.sql.Connection
+import java.time.Instant
+import java.util.UUID
+import javax.sql.DataSource
+
+class PlantJournalStoreSeamIntegrationTest extends FunSuite:
+
+  private val date = Instant.parse("2026-01-01T00:00:00Z")
+
+  private val care = OperationDetails.Care(
+    actions = Set(ActionType.Watered, ActionType.Fertilized),
+    moisture = MoistureLevel.Wet,
+    maybeNote = Note("a little dry").some
+  )
+
+  test("should return no plants when none have been seeded"):
+    withStore: (_, store) =>
+      assertEquals(store.getPlants, Vector.empty.asRight)
+
+  test("should return an active plant with its persisted substrate"):
+    withStore: (dataSource, store) =>
+      seedPlant(
+        dataSource,
+        id = "p1",
+        maybeNickname = "Fig".some,
+        substrate = List(SubstrateComponent.Perlite -> 100)
+      )
+
+      store.getPlants match
+        case Right(Vector(plant)) =>
+          assertEquals(plant.id, PlantId("p1"))
+          assertEquals(plant.details.maybeNickname, Nickname("Fig").some)
+          assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+          assertEquals(store.getPlant(PlantId("p1")), plant.asRight)
+          assertEquals(store.getPlant(PlantId("missing")), JournalReadFailure.RecordMissing.asLeft)
+        case other => fail(s"expected one plant, got $other")
+
+  test("should exclude archived plants"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "active-1", status = PlantStatus.Active)
+      seedPlant(dataSource, id = "archived-1", status = PlantStatus.Archived)
+
+      store.getPlants match
+        case Right(plants) => assertEquals(plants.map(_.id), Vector(PlantId("active-1")))
+        case other         => fail(s"expected Right, got $other")
+
+  test("should report every corrupted plant row"):
+    withStore: (dataSource, store) =>
+      seedPlant(
+        dataSource,
+        id = "duplicate-components",
+        substrate = List(SubstrateComponent.Perlite -> 60, SubstrateComponent.Perlite -> 60)
+      )
+      seedPlant(dataSource, id = "unknown-component")
+      seedPlant(dataSource, id = "missing-share")
+      seedPlant(dataSource, id = "invalid-share")
+      updatePlantSubstrate(dataSource, id = "unknown-component", substrate = "Unknown:100")
+      updatePlantSubstrate(dataSource, id = "missing-share", substrate = "Perlite")
+      updatePlantSubstrate(dataSource, id = "invalid-share", substrate = "Perlite:0")
+
+      store.getPlants match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          val expected: Set[(JournalRecord, String)] = Set(
+            JournalRecord.Plant(PlantId("duplicate-components")) -> "invalid stored substrate: DuplicateComponent",
+            JournalRecord.Plant(PlantId("unknown-component"))    -> "invalid stored substrate: unknown component: Unknown",
+            JournalRecord.Plant(PlantId("missing-share"))        -> "invalid stored substrate: malformed part: Perlite",
+            JournalRecord.Plant(PlantId("invalid-share"))        -> "invalid stored substrate: invalid share: 0"
+          )
+          assertEquals(details.length, 4)
+          assertEquals(details.toList.map(detail => detail.record -> detail.reason.getMessage).toSet, expected)
+        case other => fail(s"expected Corrupted, got $other")
+
+      store.getPlant(PlantId("duplicate-components")) match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          assertEquals(
+            details.toList.map(detail => detail.record -> detail.reason.getMessage),
+            List(JournalRecord.Plant(PlantId("duplicate-components")) -> "invalid stored substrate: DuplicateComponent")
+          )
+        case other => fail(s"expected Corrupted, got $other")
+
+  test("should round-trip a care operation without changing plant substrate"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+
+      assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+
+      assertEquals(readOperationKind(dataSource, operation.id.value), "Care")
+      assertEquals(store.getOperations(PlantId("p1")), Vector(operation).asRight)
+      store.getPlants match
+        case Right(Vector(plant)) =>
+          assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+        case other => fail(s"expected one plant, got $other")
+
+  test("should round-trip a care observation without actions"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val observation = Operation(
+        OperationId("o1"),
+        PlantId("p1"),
+        date,
+        OperationDetails.Care(actions = Set.empty, moisture = care.moisture, maybeNote = none)
+      )
+
+      assertEquals(store.addOperation(observation), LogOperationResult.Logged(observation.id))
+      assertEquals(store.getOperations(PlantId("p1")), Vector(observation).asRight)
+
+  test("should persist a repot without changing the plant"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val substrate = substrateOf(SubstrateComponent.Sand3to5 -> 100)
+      val operation = Operation(
+        OperationId("o1"),
+        PlantId("p1"),
+        date,
+        OperationDetails.Repot(
+          substrate,
+          maybeNote = Note("new mix").some
+        )
+      )
+
+      assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+      assertEquals(readOperationKind(dataSource, operation.id.value), "Repot")
+      assertEquals(store.getOperation(operation.id), operation.asRight)
+      store.getPlants match
+        case Right(Vector(plant)) =>
+          assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+        case other => fail(s"expected one plant, got $other")
+
+  test("should require operation timestamps to be unique only within a plant"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      seedPlant(dataSource, id = "p2")
+      val firstPlantOperation  = Operation(OperationId("p1-o1"), PlantId("p1"), date, care)
+      val secondPlantOperation = Operation(OperationId("p2-o1"), PlantId("p2"), date, care)
+      val timestampCollision   = Operation(OperationId("p1-o2"), PlantId("p1"), date, care)
+
+      assertEquals(store.addOperation(firstPlantOperation), LogOperationResult.Logged(firstPlantOperation.id))
+      assertEquals(store.addOperation(secondPlantOperation), LogOperationResult.Logged(secondPlantOperation.id))
+      store.addOperation(timestampCollision) match
+        case LogOperationResult.LoggingFailed(reason) =>
+          assert(reason.getMessage.contains("UNIQUE constraint failed: operation.plant_id, operation.date"))
+        case other => fail(s"expected LoggingFailed, got $other")
+
+  test("should reject unknown operation kinds and malformed JSON payloads"):
+    withStore: (dataSource, _) =>
+      seedPlant(dataSource, id = "p1")
+
+      val unknownKind = intercept[java.sql.SQLException]:
+        insertOperation(dataSource, "unknown-kind", "p1", date.toString, "Unknown", "{}")
+      val malformedPayload = intercept[java.sql.SQLException]:
+        insertOperation(dataSource, "malformed-payload", "p1", date.toString, "Care", "not-json")
+
+      assert(unknownKind.getMessage.contains("CHECK constraint failed"))
+      assert(malformedPayload.getMessage.contains("CHECK constraint failed"))
+
+  test("should update every editable plant detail"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val updatedPlant = Plant(
+        PlantId("p1"),
+        PlantDetails(
+          species = Species("Monstera deliciosa"),
+          maybeNickname = Nickname("Monty").some,
+          location = Location("Living room"),
+          substrate = substrateOf(SubstrateComponent.Leca -> 100),
+          status = PlantStatus.Archived
+        )
+      )
+
+      assertEquals(store.updatePlant(updatedPlant), ().asRight)
+      assertEquals(store.getPlant(updatedPlant.id), updatedPlant.asRight)
+      assertEquals(store.getPlants, Vector.empty.asRight)
+
+  test("should return no operation for an unknown id"):
+    withStore: (_, store) =>
+      assertEquals(store.getOperation(OperationId("missing")), JournalReadFailure.RecordMissing.asLeft)
+      assertEquals(store.getOperations(PlantId("missing")), Vector.empty.asRight)
+
+  test("should report every corrupted operation row"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val repot = Operation(
+        OperationId("o1"),
+        PlantId("p1"),
+        date,
+        OperationDetails.Repot(substrateOf(SubstrateComponent.Perlite -> 100), maybeNote = none)
+      )
+      val careOperation = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
+      assertEquals(store.addOperation(repot), LogOperationResult.Logged(repot.id))
+      assertEquals(store.addOperation(careOperation), LogOperationResult.Logged(careOperation.id))
+      updateOperationPayload(
+        dataSource,
+        id = "o1",
+        payload = """{"substrate":[{"component":"Perlite","share":60},{"component":"Perlite","share":60}]}"""
+      )
+      updateOperationPayload(dataSource, id = "o2", payload = """{"moisture":"Wet","note":null}""")
+
+      store.getOperations(PlantId("p1")) match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          val expected: Set[(JournalRecord, String)] = Set(
+            JournalRecord.Operation(OperationId("o1")) -> "invalid stored substrate: DuplicateComponent",
+            JournalRecord.Operation(OperationId("o2")) -> "invalid stored operation payload: Missing required field"
+          )
+          assertEquals(details.length, 2)
+          assertEquals(details.toList.map(detail => detail.record -> detail.reason.getMessage).toSet, expected)
+        case other => fail(s"expected Corrupted, got $other")
+
+      store.getOperation(repot.id) match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          assertEquals(
+            details.toList.map(detail => detail.record -> detail.reason.getMessage),
+            List(JournalRecord.Operation(OperationId("o1")) -> "invalid stored substrate: DuplicateComponent")
+          )
+        case other => fail(s"expected Corrupted, got $other")
+
+      store.getOperation(careOperation.id) match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          assertEquals(
+            details.toList.map(detail => detail.record -> detail.reason.getMessage),
+            List(JournalRecord.Operation(OperationId("o2")) -> "invalid stored operation payload: Missing required field")
+          )
+        case other => fail(s"expected Corrupted, got $other")
+
+  test("should attribute every independent corruption in stored operations"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      insertOperation(
+        dataSource,
+        id = "invalid-care",
+        plantId = "p1",
+        storedDate = "tomorrow",
+        kind = "Care",
+        payload = """{"actions":["Unknown"],"moisture":"Unknown","note":null}"""
+      )
+      insertOperation(
+        dataSource,
+        id = "invalid-repot",
+        plantId = "p1",
+        storedDate = date.toString,
+        kind = "Repot",
+        payload = """{"substrate":[{"component":"Unknown","share":50},{"component":"Perlite","share":0}],"note":null}"""
+      )
+
+      store.getOperations(PlantId("p1")) match
+        case Left(JournalReadFailure.Corrupted(details)) =>
+          val expected: Set[(JournalRecord, String)] = Set(
+            JournalRecord.Operation(OperationId("invalid-care"))  -> "invalid stored operation date: tomorrow",
+            JournalRecord.Operation(OperationId("invalid-care"))  -> "invalid stored operation payload: invalid action: Unknown",
+            JournalRecord.Operation(OperationId("invalid-care"))  -> "invalid stored operation payload: invalid moisture: Unknown",
+            JournalRecord.Operation(OperationId("invalid-repot")) -> "invalid stored substrate: unknown component: Unknown",
+            JournalRecord.Operation(OperationId("invalid-repot")) -> "invalid stored substrate: invalid share: 0"
+          )
+          assertEquals(details.toList.map(detail => detail.record -> detail.reason.getMessage).toSet, expected)
+        case other => fail(s"expected Corrupted, got $other")
+
+  test("should amend a repot without changing the plant"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val oldSubstrate = substrateOf(SubstrateComponent.Sand3to5 -> 100)
+      val operation    = Operation(
+        OperationId("o1"),
+        PlantId("p1"),
+        date,
+        OperationDetails.Repot(oldSubstrate, maybeNote = none)
+      )
+      val newSubstrate = substrateOf(SubstrateComponent.Leca -> 100)
+      val amended      = OperationDetails.Repot(newSubstrate, maybeNote = none)
+      assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+
+      assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
+      store.getPlants match
+        case Right(Vector(plant)) =>
+          assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+        case other => fail(s"expected one plant, got $other")
+
+  test("should remove and restore operations for compensation"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val original = Operation(OperationId("o1"), PlantId("p1"), date, care)
+      val amended  = OperationDetails.Care(actions = Set.empty, moisture = MoistureLevel.Dry, maybeNote = none)
+      assertEquals(store.addOperation(original), LogOperationResult.Logged(original.id))
+      assertEquals(store.updateOperation(original.id, amended), EditOperationResult.Edited(original.copy(details = amended)))
+
+      assertEquals(store.restoreOperation(original), ().asRight)
+      assertEquals(store.getOperation(original.id), original.asRight)
+      assertEquals(store.removeOperation(original.id), ().asRight)
+      assertEquals(store.getOperation(original.id), JournalReadFailure.RecordMissing.asLeft)
+      assertEquals(store.removeOperation(original.id), ().asRight)
+
+  test("should report missing compensation targets"):
+    withStore: (_, store) =>
+      val missing = Operation(OperationId("missing"), PlantId("p1"), date, care)
+      assertEquals(
+        store.restoreOperation(missing).left.map(_.getMessage),
+        "operation not found while restoring: missing".asLeft
+      )
+      assertEquals(
+        store.updatePlant(plant(id = PlantId("missing"))).left.map(_.getMessage),
+        "plant not found while updating: missing".asLeft
+      )
+
+  test("should report corrupted operation metadata after an edit"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      insertOperation(
+        dataSource,
+        id = "o1",
+        plantId = "p1",
+        storedDate = "today",
+        kind = "Care",
+        payload = """{"actions":[],"moisture":"Wet","note":null}"""
+      )
+
+      store.updateOperation(OperationId("o1"), care) match
+        case EditOperationResult.Corrupted(details) =>
+          assertEquals(details.head.reason.getMessage, "invalid stored operation date: today")
+        case other => fail(s"expected Corrupted, got $other")
+
+  test("should report a logging failure when the plant does not exist"):
+    withStore: (_, store) =>
+      store.addOperation(Operation(OperationId("o1"), PlantId("no-such-plant"), date, care)) match
+        case LogOperationResult.LoggingFailed(_) => ()
+        case other                               => fail(s"expected LoggingFailed, got $other")
+
+  test("should report a missing operation when editing an unknown id"):
+    withStore: (_, store) =>
+      assertEquals(store.updateOperation(OperationId("nope"), care), EditOperationResult.OperationMissing)
+
+  test("should edit an existing care operation without changing plant substrate"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+      val amended   = OperationDetails.Care(
+        actions = care.actions,
+        moisture = MoistureLevel.Dry,
+        maybeNote = none
+      )
+      assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+
+      assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
+      store.getPlants match
+        case Right(Vector(plant)) =>
+          assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+        case other => fail(s"expected one plant, got $other")
+
+  test("should report an edit failure when the database is read-only"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+      assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+      val readOnlyStore = SqlitePlantJournalStore.make(Transactor(dataSource, connectionConfig = makeReadOnly))
+
+      readOnlyStore.updateOperation(operation.id, care) match
+        case EditOperationResult.EditFailed(_) => ()
+        case other                             => fail(s"expected EditFailed, got $other")
+      assert(readOnlyStore.removeOperation(operation.id).isLeft)
+      assert(readOnlyStore.restoreOperation(operation).isLeft)
+      assert(readOnlyStore.updatePlant(plant()).isLeft)
+
+  test("should return read failures when the journal schema is unavailable"):
+    val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    try
+      val store = SqlitePlantJournalStore.make(connection.transactor)
+      List(
+        store.getPlants,
+        store.getPlant(PlantId("p1")),
+        store.getOperations(PlantId("p1")),
+        store.getOperation(OperationId("o1"))
+      ).foreach:
+        case Left(JournalReadFailure.ReadFailed(_)) => ()
+        case other                                  => fail(s"expected ReadFailed, got $other")
+    finally connection.close()
+
+  private def withStore(test: (DataSource, PlantJournalStore) => Unit): Unit =
+    val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    try
+      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
+      test(connection.dataSource, SqlitePlantJournalStore.make(connection.transactor))
+    finally connection.close()
+
+  private def makeReadOnly(connection: Connection): Unit =
+    val statement = connection.createStatement()
+    val _         = statement.execute("PRAGMA query_only = ON")
+    statement.close()
+
+  private def seedPlant(
+      dataSource: DataSource,
+      id: String,
+      species: String = "Ficus lyrata",
+      maybeNickname: Option[String] = none,
+      location: String = "Balcony",
+      status: PlantStatus = PlantStatus.Active,
+      substrate: List[(SubstrateComponent, Int)] = List(SubstrateComponent.Perlite -> 100)
+  ): Unit =
+    val connection = dataSource.getConnection()
+    try
+      val statement =
+        connection.prepareStatement(
+          "insert into plant (id, species, nickname, location, status, substrate) values (?, ?, ?, ?, ?, ?)"
+        )
+      statement.setString(1, id)
+      statement.setString(2, species)
+      maybeNickname match
+        case Some(nickname) => statement.setString(3, nickname)
+        case None           => statement.setNull(3, java.sql.Types.VARCHAR)
+      statement.setString(4, location)
+      statement.setString(5, status.toString)
+      statement.setString(6, substrate.map((component, share) => s"$component:$share").mkString(","))
+      val _ = statement.executeUpdate()
+      statement.close()
+    finally connection.close()
+
+  private def substrateOf(parts: (SubstrateComponent, Percentage)*): Substrate =
+    Substrate
+      .of(parts.map((component, share) => SubstratePart(component, share)).toList)
+      .getOrElse(fail("invalid test substrate"))
+
+  private def plant(id: PlantId = PlantId("p1")): Plant =
+    Plant(
+      id,
+      PlantDetails(
+        species = Species("Ficus lyrata"),
+        maybeNickname = none,
+        location = Location("Balcony"),
+        substrate = substrateOf(SubstrateComponent.Perlite -> 100),
+        status = PlantStatus.Active
+      )
+    )
+
+  private def updatePlantSubstrate(dataSource: DataSource, id: String, substrate: String): Unit =
+    execute(dataSource, "update plant set substrate = ? where id = ?", substrate, id)
+
+  private def updateOperationPayload(dataSource: DataSource, id: String, payload: String): Unit =
+    execute(dataSource, "update operation set payload = ? where id = ?", payload, id)
+
+  private def insertOperation(
+      dataSource: DataSource,
+      id: String,
+      plantId: String,
+      storedDate: String,
+      kind: String,
+      payload: String
+  ): Unit =
+    execute(
+      dataSource,
+      "insert into operation (id, plant_id, date, kind, payload) values (?, ?, ?, ?, ?)",
+      id,
+      plantId,
+      storedDate,
+      kind,
+      payload
+    )
+
+  private def readOperationKind(dataSource: DataSource, id: String): String =
+    queryString(dataSource, "select kind from operation where id = ?", id)
+
+  private def execute(dataSource: DataSource, sql: String, parameters: String*): Unit =
+    val connection = dataSource.getConnection()
+    try
+      val statement = connection.prepareStatement(sql)
+      try
+        parameters.zipWithIndex.foreach((parameter, index) => statement.setString(index + 1, parameter))
+        val _ = statement.executeUpdate()
+      finally statement.close()
+    finally connection.close()
+
+  private def queryString(dataSource: DataSource, sql: String, parameters: String*): String =
+    val connection = dataSource.getConnection()
+    try
+      val statement = connection.prepareStatement(sql)
+      try
+        parameters.zipWithIndex.foreach((parameter, index) => statement.setString(index + 1, parameter))
+        val result = statement.executeQuery()
+        try
+          assert(result.next(), s"expected query to return a row: $sql")
+          result.getString(1)
+        finally result.close()
+      finally statement.close()
+    finally connection.close()

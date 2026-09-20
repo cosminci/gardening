@@ -18,4 +18,4 @@ object HealthApi:
       .summary("Liveness probe")
 
   def serverEndpoint(version: String): ServerEndpoint.Full[Unit, Unit, Unit, Unit, HealthResponse, Any, Identity] =
-    endpoint.handleSuccess(_ => HealthResponse("ok", version))
+    endpoint.handleSuccess(_ => HealthResponse(status = "ok", version))
