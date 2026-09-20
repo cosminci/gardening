@@ -2,6 +2,7 @@ package gardening.domain
 
 import cats.Eq
 import cats.data.NonEmptyList
+import cats.syntax.either.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 
@@ -19,15 +20,18 @@ object OperationId:
 
 opaque type Species = String
 object Species:
-  def apply(value: String): Species = value
+  def apply(value: String): Species              = value
+  extension (species: Species) def value: String = species
 
 opaque type Nickname = String
 object Nickname:
-  def apply(value: String): Nickname = value
+  def apply(value: String): Nickname               = value
+  extension (nickname: Nickname) def value: String = nickname
 
 opaque type Location = String
 object Location:
-  def apply(value: String): Location = value
+  def apply(value: String): Location               = value
+  extension (location: Location) def value: String = location
 
 opaque type Note = String
 object Note:
@@ -69,22 +73,22 @@ final case class SubstratePart(component: SubstrateComponent, share: Percentage)
 
 enum SubstrateError:
   case Empty
-  case Malformed
   case DuplicateComponent
   case ExceedsTotal
 
 opaque type Substrate = List[SubstratePart]
 object Substrate:
   def of(parts: List[SubstratePart]): Either[SubstrateError, Substrate] =
-    if parts.isEmpty then Left(SubstrateError.Empty)
-    else if parts.map(_.component).distinct.size < parts.size then Left(SubstrateError.DuplicateComponent)
-    else if parts.map(part => part.share: Int).sum > 100 then Left(SubstrateError.ExceedsTotal)
-    else Right(parts)
+    if parts.isEmpty then SubstrateError.Empty.asLeft
+    else if parts.map(_.component).distinct.size < parts.size then SubstrateError.DuplicateComponent.asLeft
+    else if parts.map(part => part.share: Int).sum > 100 then SubstrateError.ExceedsTotal.asLeft
+    else parts.asRight
 
   extension (substrate: Substrate) def parts: List[SubstratePart] = substrate
 
-final case class Plant(
-    id: PlantId,
+final case class Plant(id: PlantId, details: PlantDetails)
+
+final case class PlantDetails(
     species: Species,
     maybeNickname: Option[Nickname],
     location: Location,
@@ -93,24 +97,20 @@ final case class Plant(
 )
 
 sealed trait OperationDetails:
-  def date: Instant
   def maybeNote: Option[Note]
 
 object OperationDetails:
   final case class Care(
-      override val date: Instant,
       actions: Set[ActionType],
       moisture: MoistureLevel,
       override val maybeNote: Option[Note]
   ) extends OperationDetails
-
   final case class Repot(
-      override val date: Instant,
       substrate: Substrate,
       override val maybeNote: Option[Note]
   ) extends OperationDetails
 
-final case class Operation(id: OperationId, plantId: PlantId, details: OperationDetails)
+final case class Operation(id: OperationId, plantId: PlantId, date: Instant, details: OperationDetails)
 
 enum JournalRecord:
   case Plant(id: PlantId)
@@ -118,8 +118,7 @@ enum JournalRecord:
 
 final case class JournalCorruption(record: JournalRecord, reason: Throwable)
 
-enum JournalReadResult[+A]:
-  case Read(value: A)
+enum JournalReadFailure:
   case RecordMissing
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)

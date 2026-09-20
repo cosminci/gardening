@@ -47,6 +47,18 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 - `Either`-typed fields, vals, and params are suffixed `Result` — `editResult: Either[…, …]`.
 - Name an argument when its value does not reveal its role at the call site — for example `maybeNote = None`, `date = Instant.parse(…)`, or `share = 100`. Keep self-describing variables and value wrappers positional.
 
+## Scala composition
+
+- Keep business orchestration visible in the public service method. Similar workflows should have visibly similar structure; do not hide their ordering or compensation inside helpers.
+- Give each helper one responsibility and return the narrowest neutral type that describes it. A persistence or domain-step helper must not construct the caller's public result ADT.
+- Adapt boundary ADTs to `Either` when several dependent steps need composition. Do not wrap a single result in `Either` only to unwrap it immediately.
+- Keep `for` comprehensions linear. Do not nest `flatMap`, matches, or multi-level conditionals inside them; extract a meaningful step or model the additional state explicitly.
+- Model success, expected short-circuiting, and failure as distinct states when all three exist. Do not misrepresent a successful no-op as an error merely to short-circuit an `Either`.
+- Attach compensation in the owning workflow, immediately beside the step it compensates. Run it lazily only after that step fails, preserve the primary failure when compensation succeeds, and retain both failures when compensation also fails.
+- Design ADTs so impossible states are unrepresentable. Prefer a failure subtype over accepting a success-or-failure result and adding an unreachable branch.
+- Never destructure a product merely to inspect one or two members. Match the relevant member directly and access other values by name so adding a field does not break unrelated patterns.
+- Prefer optics for focused updates through nested immutable domain values rather than nested `copy` calls.
+
 ## Development workflow — SDD
 
 Every change goes through the **SDD skill** at [`.claude/skills/sdd/SKILL.md`](.claude/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:

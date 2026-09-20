@@ -1,19 +1,21 @@
 package gardening.adapters.persistence
 
-import cats.data.{Validated, ValidatedNel}
+import cats.data.ValidatedNel
 import cats.syntax.apply.*
 import cats.syntax.either.*
 import cats.syntax.eq.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
-import gardening.adapters.persistence.StoredOperationDetails.*
+import gardening.adapters.persistence.StoredOperationPayload.*
 import gardening.domain.*
 import gardening.domain.EditOperationResult.*
-import gardening.domain.JournalReadResult.*
+import gardening.domain.JournalReadFailure.*
 import gardening.domain.LogOperationResult.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
 
+import java.time.Instant
+import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 object SqlitePlantJournalStore:
@@ -22,80 +24,82 @@ object SqlitePlantJournalStore:
 
   private class LiveSqlitePlantJournalStore(transactor: Transactor) extends PlantJournalStore:
 
-    override def getPlants: JournalReadResult[Vector[Plant]] =
+    override def getPlants: Either[JournalReadFailure, Vector[Plant]] =
       try
-        connect(transactor)(selectPlants.query[PlantRow].run()).traverse(toPlant) match
-          case Validated.Valid(plants) =>
-            Read(plants.filter(_.status === PlantStatus.Active))
-          case Validated.Invalid(details) => JournalReadResult.Corrupted(details)
-      catch case error: SqlException => ReadFailed(error)
+        connect(transactor)(selectPlants.query[PlantRow].run())
+          .traverse(toPlant)
+          .map(_.filter(_.details.status === PlantStatus.Active))
+          .leftMap(JournalReadFailure.Corrupted.apply)
+          .toEither
+      catch case error: SqlException => ReadFailed(error).asLeft
 
     private def selectPlants: Frag =
       sql"select id, species, nickname, location, substrate, status from plant"
 
-    override def getPlant(id: PlantId): JournalReadResult[Plant] =
+    override def getPlant(id: PlantId): Either[JournalReadFailure, Plant] =
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
-          case None      => RecordMissing
-          case Some(row) =>
-            toPlant(row) match
-              case Validated.Valid(plant)     => Read(plant)
-              case Validated.Invalid(details) => JournalReadResult.Corrupted(details)
-      catch case error: SqlException => ReadFailed(error)
+          case None      => RecordMissing.asLeft
+          case Some(row) => toPlant(row).leftMap(JournalReadFailure.Corrupted.apply).toEither
+      catch case error: SqlException => ReadFailed(error).asLeft
 
     private def selectPlant(id: String): Frag =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
 
     private def toPlant(row: PlantRow): ValidatedNel[JournalCorruption, Plant] =
       val record          = JournalRecord.Plant(PlantId(row.id))
-      val substrateResult = decodeSubstrate(row.substrate).left
-        .map(reason => JournalCorruption(record, RuntimeException(s"invalid stored substrate: $reason")))
-        .toValidatedNel
+      val substrateResult = decodeSubstrate(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
 
+      // The schema check constrains every stored status to a PlantStatus name.
+      // $COVERAGE-OFF$
       val statusResult = PlantStatus.values
         .find(_.toString.equals(row.status))
         .toRight(JournalCorruption(record, RuntimeException(s"invalid stored plant status: ${row.status}")))
         .toValidatedNel
+      // $COVERAGE-ON$
 
       (substrateResult, statusResult).mapN: (substrate, status) =>
         Plant(
           PlantId(row.id),
-          Species(row.species),
-          row.nickname.map(Nickname.apply),
-          Location(row.location),
-          substrate,
-          status
+          PlantDetails(
+            Species(row.species),
+            row.nickname.map(Nickname.apply),
+            Location(row.location),
+            substrate,
+            status
+          )
         )
 
-    override def getOperations(plantId: PlantId): JournalReadResult[Vector[Operation]] =
+    override def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]] =
       try
-        connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run()).traverse(toOperation) match
-          case Validated.Valid(operations) => Read(operations)
-          case Validated.Invalid(details)  => JournalReadResult.Corrupted(details)
-      catch case error: SqlException => ReadFailed(error)
+        connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run())
+          .traverse(toOperation)
+          .leftMap(JournalReadFailure.Corrupted.apply)
+          .toEither
+      catch case error: SqlException => ReadFailed(error).asLeft
 
     private def selectOperationsForPlant(plantId: String): Frag =
-      sql"select id, plant_id, details from operation where plant_id = $plantId"
+      sql"select id, plant_id, date, kind, payload from operation where plant_id = $plantId"
 
-    override def getOperation(id: OperationId): JournalReadResult[Operation] =
+    override def getOperation(id: OperationId): Either[JournalReadFailure, Operation] =
       try
         connect(transactor)(selectOperation(id.value).query[OperationRow].run().headOption) match
-          case None      => RecordMissing
-          case Some(row) =>
-            toOperation(row) match
-              case Validated.Valid(operation) => Read(operation)
-              case Validated.Invalid(details) => JournalReadResult.Corrupted(details)
-      catch case error: SqlException => ReadFailed(error)
+          case None      => RecordMissing.asLeft
+          case Some(row) => toOperation(row).leftMap(JournalReadFailure.Corrupted.apply).toEither
+      catch case error: SqlException => ReadFailed(error).asLeft
 
     private def selectOperation(id: String): Frag =
-      sql"select id, plant_id, details from operation where id = $id"
+      sql"select id, plant_id, date, kind, payload from operation where id = $id"
 
     private def toOperation(row: OperationRow): ValidatedNel[JournalCorruption, Operation] =
-      val record = JournalRecord.Operation(OperationId(row.id))
-      row.details.decode
-        .leftMap(_.map(reason => JournalCorruption(record, reason)))
-        .map: details =>
-          Operation(OperationId(row.id), PlantId(row.plantId), details)
+      val record     = JournalRecord.Operation(OperationId(row.id))
+      val dateResult = Try(Instant.parse(row.date)).toEither.left
+        .map(_ => JournalCorruption(record, RuntimeException(s"invalid stored operation date: ${row.date}")))
+        .toValidatedNel
+      val detailResult = row.payload.decode(row.kind).leftMap(_.map(reason => JournalCorruption(record, reason)))
+
+      (dateResult, detailResult).mapN: (date, details) =>
+        Operation(OperationId(row.id), PlantId(row.plantId), date, details)
 
     override def addOperation(operation: Operation): LogOperationResult =
       try
@@ -104,45 +108,77 @@ object SqlitePlantJournalStore:
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation): Frag =
-      val details = StoredOperationDetails.encode(operation.details)
-      sql"insert into operation (id, plant_id, details) values (${operation.id.value}, ${operation.plantId.value}, $details)"
+      val kind    = StoredOperationPayload.kind(operation.details)
+      val payload = StoredOperationPayload.encode(operation.details)
+      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $kind, $payload)"
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
         transact(transactor):
           updateOperationRow(id.value, details)
-            .query[String]
+            .query[OperationRow]
             .run()
             .headOption
-            .map(plantId => Edited(Operation(id, PlantId(plantId), details)))
-            .getOrElse(OperationMissing)
+            .fold[EditOperationResult](OperationMissing): row =>
+              toOperation(row).fold(EditOperationResult.Corrupted.apply, Edited.apply)
       catch case e: SqlException => EditFailed(e)
 
-    override def updatePlant(plant: Plant): Unit =
-      transact(transactor):
-        val _ = updatePlantRow(plant).update.run()
+    override def removeOperation(id: OperationId): Either[Throwable, Unit] =
+      try transact(transactor)(sql"delete from operation where id = ${id.value}".update.run()).pipe(_ => ().asRight)
+      catch case error: SqlException => error.asLeft
+
+    override def restoreOperation(operation: Operation): Either[Throwable, Unit] =
+      try
+        val kind    = StoredOperationPayload.kind(operation.details)
+        val payload = StoredOperationPayload.encode(operation.details)
+        transact(transactor)(sql"update operation set kind = $kind, payload = $payload where id = ${operation.id.value}".update.run()) match
+          case 1 => ().asRight
+          case _ => RuntimeException(s"operation not found while restoring: ${operation.id.value}").asLeft
+      catch case error: SqlException => error.asLeft
+
+    override def updatePlant(plant: Plant): Either[Throwable, Unit] =
+      try
+        transact(transactor)(updatePlantRow(plant).update.run()) match
+          case 1 => ().asRight
+          case _ => RuntimeException(s"plant not found while updating: ${plant.id.value}").asLeft
+      catch case error: SqlException => error.asLeft
 
     private def updatePlantRow(plant: Plant): Frag =
-      sql"update plant set substrate = ${encodeSubstrate(plant.substrate)} where id = ${plant.id.value}"
+      val details = plant.details
+      sql"""update plant
+           set species = ${details.species.value},
+               nickname = ${details.maybeNickname.map(_.value)},
+               location = ${details.location.value},
+               substrate = ${encodeSubstrate(details.substrate)},
+               status = ${details.status.toString}
+           where id = ${plant.id.value}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails): Frag =
-      val encodedDetails = StoredOperationDetails.encode(details)
-      sql"update operation set details = $encodedDetails where id = $operationId returning plant_id"
+      val kind    = StoredOperationPayload.kind(details)
+      val payload = StoredOperationPayload.encode(details)
+      sql"update operation set kind = $kind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
 
-  private def decodeSubstrate(encoded: String): Either[SubstrateError, Substrate] =
+  private def decodeSubstrate(encoded: String): Either[Throwable, Substrate] =
     for
       parts     <- encoded.split(",", -1).toList.traverse(decodePart)
-      substrate <- Substrate.of(parts)
+      substrate <- Substrate.of(parts).leftMap(reason => invalidSubstrate(reason.toString))
     yield substrate
 
-  private def decodePart(encoded: String): Either[SubstrateError, SubstratePart] =
+  private def decodePart(encoded: String): Either[Throwable, SubstratePart] =
     encoded.split(":", -1).toList match
       case component :: share :: Nil =>
         for
-          parsedComponent <- SubstrateComponent.values.find(_.toString.equals(component)).toRight(SubstrateError.Malformed)
-          parsedShare     <- share.toIntOption.flatMap(_.refineOption[Interval.Closed[1, 100]]).toRight(SubstrateError.Malformed)
+          parsedComponent <- SubstrateComponent.values
+            .find(_.toString.equals(component))
+            .toRight(invalidSubstrate(s"unknown component: $component"))
+          parsedShare <- share.toIntOption
+            .flatMap(_.refineOption[Interval.Closed[1, 100]])
+            .toRight(invalidSubstrate(s"invalid share: $share"))
         yield SubstratePart(parsedComponent, parsedShare)
-      case _ => Left(SubstrateError.Malformed)
+      case _ => invalidSubstrate(s"malformed part: $encoded").asLeft
+
+  private def invalidSubstrate(reason: String): RuntimeException =
+    RuntimeException(s"invalid stored substrate: $reason")
 
   private def encodeSubstrate(substrate: Substrate): String =
     substrate.parts.map(part => s"${part.component}:${part.share: Int}").mkString(",")
@@ -150,4 +186,4 @@ object SqlitePlantJournalStore:
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)
       derives DbCodec
 
-  private case class OperationRow(id: String, plantId: String, details: StoredOperationDetails) derives DbCodec
+  private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec

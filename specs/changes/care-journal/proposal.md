@@ -55,14 +55,14 @@ enum MoistureLevel(val label: String):
 final case class SubstratePart(component: SubstrateComponent, share: Percentage)
 opaque type Substrate = List[SubstratePart]
 
-final case class Plant(id: PlantId, species: Species, nickname: Option[Nickname], location: Location, substrate: Substrate, status: PlantStatus)
-final case class Operation(id: OperationId, plantId: PlantId, details: OperationDetails)
+final case class Plant(id: PlantId, details: PlantDetails)
+final case class PlantDetails(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate, status: PlantStatus)
+final case class Operation(id: OperationId, plantId: PlantId, date: Instant, details: OperationDetails)
 
 sealed trait OperationDetails:
-  def date: Instant
   def maybeNote: Option[Note]
-final case class Care(override val date: Instant, actions: Set[ActionType], moisture: MoistureLevel, override val maybeNote: Option[Note]) extends OperationDetails
-final case class Repot(override val date: Instant, substrate: Substrate, override val maybeNote: Option[Note]) extends OperationDetails
+final case class Care(actions: Set[ActionType], moisture: MoistureLevel, override val maybeNote: Option[Note]) extends OperationDetails
+final case class Repot(substrate: Substrate, override val maybeNote: Option[Note]) extends OperationDetails
 
 enum LogOperationResult:
   case Logged(id: OperationId)
@@ -81,15 +81,14 @@ enum JournalRecord:
 
 final case class JournalCorruption(record: JournalRecord, reason: Throwable)
 
-enum JournalReadResult[+A]:
-  case Read(value: A)
+enum JournalReadFailure:
   case RecordMissing
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
 trait PlantJournal:
-  def getPlants: JournalReadResult[Vector[Plant]]
-  def getOperations(plantId: PlantId): JournalReadResult[Vector[Operation]]
+  def getPlants: Either[JournalReadFailure, Vector[Plant]]
+  def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]]
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
 
@@ -97,16 +96,18 @@ trait IdGenerator:
   def nextId(): String
 
 trait PlantJournalStore:
-  def getPlant(id: PlantId): JournalReadResult[Plant]
-  def getPlants: JournalReadResult[Vector[Plant]] // live plants only
-  def getOperations(plantId: PlantId): JournalReadResult[Vector[Operation]]
-  def getOperation(id: OperationId): JournalReadResult[Operation]
+  def getPlant(id: PlantId): Either[JournalReadFailure, Plant]
+  def getPlants: Either[JournalReadFailure, Vector[Plant]] // live plants only
+  def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]]
+  def getOperation(id: OperationId): Either[JournalReadFailure, Operation]
   def addOperation(operation: Operation): LogOperationResult
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult
-  def updatePlant(plant: Plant): Unit
+  def removeOperation(id: OperationId): Either[Throwable, Unit]
+  def restoreOperation(operation: Operation): Either[Throwable, Unit]
+  def updatePlant(plant: Plant): Either[Throwable, Unit]
 
 object PlantJournal:
-  def make(using store: PlantJournalStore^, idGenerator: IdGenerator^): PlantJournal^{store, idGenerator}
+  def make(using store: PlantJournalStore^, idGenerator: IdGenerator^, clock: Clock^): PlantJournal^{store, idGenerator, clock}
 ```
 
 `Substrate`, enforced at construction:
@@ -115,13 +116,13 @@ object PlantJournal:
 - Shares total at most 100 — a shortfall is an unspecified remainder, not an error.
 - Rejected: total over 100, a repeated component, an empty mix.
 
-A plant owns its current substrate. After successfully recording or amending a repot, the journal updates the affected plant's mix through a distinct store operation. Ordinary care operations leave the mix unchanged. Reads return the stored mix without reconstructing it from operation history.
+A plant owns its current substrate, which matches the substrate of its greatest-date repot; operation timestamps are immutable, backend-generated, and unique within a plant, so a newly recorded repot is the latest repot without reading operation history. Logging and editing workflows are serialized so their writes, plant synchronization, and compensation cannot interleave. Recording always writes the operation first, then a repot updates the plant substrate; a failed post-write plant read or update removes the new repot. Amending always writes the editable operation details first; if the operation is the latest repot, the journal then updates the plant substrate. A failed post-edit read or plant update restores the previous operation. The overall operation fails, and a failed compensation is also reported while retaining both causes. Editing an older repot does not update the plant. Ordinary care operations leave the mix unchanged. Reads return the stored mix without reconstructing it from operation history.
 
-Plants are not deleted. Every operation belongs to an existing plant and cannot outlive it.
+Plants are not deleted. Every operation belongs to an existing plant and cannot outlive it. Operations have no user-facing deletion capability; store-level removal exists only to compensate a failed repot log.
 
-Persistence treats operation details as one discriminated value. A stored value identifies its care or repot variant and contains only that variant's fields; persistence does not model the variants as one nullable-field product.
+Persistence keeps common operation metadata relational: a constrained `kind` column identifies the care or repot variant, while a valid-JSON `payload` column contains only that variant's fields. This keeps the schema queryable and constrained without modelling variants as one nullable-field product or coupling its shape to the domain model.
 
-`PlantJournal` captures its store and identifier generator, making their authority explicit in the journal value's type and preventing it from escaping a shorter-lived capability scope.
+`PlantJournal` captures its store, identifier generator, and clock, making their authority explicit in the journal value's type and preventing it from escaping a shorter-lived capability scope.
 
 ## Frontend
 
@@ -160,8 +161,7 @@ interface SubstratePart {
 }
 type Substrate = readonly SubstratePart[] & { readonly brand: "Substrate" };
 
-interface Plant {
-  readonly id: PlantId;
+interface PlantDetails {
   readonly species: Species;
   readonly nickname: Nickname | null;
   readonly location: Location;
@@ -169,9 +169,13 @@ interface Plant {
   readonly status: PlantStatus;
 }
 
+interface Plant {
+  readonly id: PlantId;
+  readonly details: PlantDetails;
+}
+
 interface CareOperationDetails {
   readonly kind: "care";
-  readonly date: Instant;
   readonly actions: ReadonlySet<ActionType>;
   readonly moisture: MoistureLevel;
   readonly notes: Note | null;
@@ -179,7 +183,6 @@ interface CareOperationDetails {
 
 interface RepotOperationDetails {
   readonly kind: "repot";
-  readonly date: Instant;
   readonly substrate: Substrate;
   readonly notes: Note | null;
 }
@@ -189,6 +192,7 @@ type OperationDetails = CareOperationDetails | RepotOperationDetails;
 interface Operation {
   readonly id: OperationId;
   readonly plantId: PlantId;
+  readonly date: Instant;
   readonly details: OperationDetails;
 }
 
@@ -230,23 +234,27 @@ interface JournalClient {
 
 - Active plants: one row each. Row shows species, location, nickname, and current substrate (component mix with percentages).
 - Row shows the three most recent operations, oldest→newest, one cell each; a new operation shifts the row, keeping the latest three. A care cell reads `date — moisture level — action(s)`; a repot cell identifies the repot and its new mix. Notes are appended when present.
-- Add via a form: date (prefilled today, editable), a care-operation type, and optional note. A care operation records a moisture level and zero or more action-types, allowing a moisture-only observation. A repot captures a required new substrate mix (components distinct, shares ≤ 100). Saving a repot records it, then updates the plant's current substrate.
-- Any field except the operation type is editable through the same form. Cells are date-ranked, so editing a date can change which three show and their order; a repot edit updates the plant's current substrate after its operation is saved.
-- Operations cannot be deleted, because each records care that has already happened.
+- Add via a form: a care-operation type and optional note. The backend assigns the immutable operation timestamp when logging. A care operation records a moisture level and zero or more action-types, allowing a moisture-only observation. A repot captures a required new substrate mix (components distinct, shares ≤ 100). Saving a latest repot records it, then updates the plant's current substrate.
+- Editable operation-detail fields use the same form; operation type, identifier, plant, and timestamp are immutable. Editing the latest repot updates the plant's current substrate after its details are saved; editing an older repot leaves the plant unchanged.
+- Operations cannot be deleted by users, because each records care that has already happened. A newly written repot is removed only when compensating a failed current-substrate update.
 - A care operation cannot carry a substrate mix; a repot always carries one.
 - Substrate changes only via a repot — no standalone editor; the row reflects the plant's persisted current mix.
+- Logging a repot succeeds only when both the operation and the plant's current substrate match the resulting greatest-date repot. If the post-write plant read or substrate update fails, the new operation is removed and logging reports failure.
+- Editing the latest repot succeeds only when both its amended details and the plant's current substrate are persisted. A pre-write read failure changes nothing; if the post-write substrate update fails, the previous operation is restored and editing reports failure. Editing an older repot never updates the plant.
+- Logging and editing operation workflows do not interleave; one completes its synchronization or compensation before another begins.
+- If repot compensation also fails, the overall failure reports both causes rather than returning success.
 - An edit cannot change an operation between care and repot.
 - Attempting to change an operation between care and repot reports an operation-type mismatch without changing the journal.
-- Stored care and repot details round-trip according to their discriminator. Store reads report malformed JSON, discriminators, required fields, dates, enum values, and substrates as attributed corruption rather than valid domain values, accumulating independent failures within and across rows.
+- Stored operation timestamps and care/repot details round-trip, with a relational discriminator and variant-specific JSON payload. Database constraints reject malformed JSON payloads and unknown discriminators; store reads report schema-accepted malformed timestamps, required fields, enum values, and substrates as attributed corruption rather than valid domain values, accumulating independent failures within and across rows.
 - Collection reads validate every persisted row before visibility filtering and report every corruption together, with each cause attributed to its plant or operation identifier; valid archived plants remain hidden, while malformed status data is never silently omitted.
-- A missing plant or operation is reported as `RecordMissing`, distinct from a successful single-record read.
-- Collection reads never report `RecordMissing`; an empty journal, including the operation log requested for an unknown plant, is `Read(Vector.empty)`.
+- A missing plant or operation is reported as `Left(RecordMissing)`, distinct from a successful single-record read.
+- Collection reads never report `RecordMissing`; an empty journal, including the operation log requested for an unknown plant, is `Right(Vector.empty)`.
 - Database access failures are reported separately from stored-data corruption.
 - First run is pre-populated: a one-time, idempotent import script loads every plant (attributes, substrate mix, full operation history) from the household spreadsheet, retired plants archived.
 
 ## Tradeoffs accepted
 
-- A recorded real-world repot remains in the journal if an infrastructure failure prevents the subsequent current-substrate refresh. This change does not introduce a partial-success result or automatic repair workflow.
+- Compensation can itself fail after the primary substrate-update failure. The journal reports both causes explicitly; automated repair beyond the immediate compensation attempt and process-crash recovery between saga steps are deferred.
 
 ## Out of scope
 

@@ -1,5 +1,6 @@
 package gardening.adapters.http
 
+import cats.syntax.either.*
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{UriContext, basicRequest}
 import sttp.model.StatusCode
@@ -16,4 +17,4 @@ class HealthApiUnitTest extends munit.FunSuite:
     val response = basicRequest.get(uri"http://test/health").send(backend)
 
     assertEquals(response.code, StatusCode.Ok)
-    assertEquals(response.body, Right("""{"status":"ok","version":"1.2.3"}"""))
+    assertEquals(response.body, """{"status":"ok","version":"1.2.3"}""".asRight)

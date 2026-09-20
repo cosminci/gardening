@@ -10,8 +10,9 @@ create table plant (
 create table operation (
     id text primary key,
     plant_id text not null references plant (id),
-    details text not null check (
-        json_valid(details)
-        and json_extract(details, '$.kind') in ('Care', 'Repot')
-    )
+    date text not null,
+    kind text not null check (kind in ('Care', 'Repot')),
+    payload text not null check (json_valid(payload))
 );
+
+create unique index operation_plant_date_idx on operation (plant_id, date);
