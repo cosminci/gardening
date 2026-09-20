@@ -75,20 +75,45 @@ enum EditOperationResult:
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case EditFailed(reason: Throwable)
 
+enum OperationCompensationResult:
+  case Compensated
+  case CompensationFailed(reason: Throwable)
+
+enum UpdatePlantResult:
+  case Updated
+  case UpdateFailed(reason: Throwable)
+
 enum JournalRecord:
   case Plant(id: PlantId)
   case Operation(id: OperationId)
 
 final case class JournalCorruption(record: JournalRecord, reason: Throwable)
 
-enum JournalReadFailure:
+enum GetPlantResult:
+  case Read(plant: Plant)
   case RecordMissing
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
+enum GetPlantsResult:
+  case Read(plants: Vector[Plant])
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
+enum GetOperationResult:
+  case Read(operation: Operation)
+  case RecordMissing
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
+enum GetOperationsResult:
+  case Read(operations: Vector[Operation])
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
 trait PlantJournal:
-  def getPlants: Either[JournalReadFailure, Vector[Plant]]
-  def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]]
+  def getPlants: GetPlantsResult
+  def getOperations(plantId: PlantId): GetOperationsResult
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
 
@@ -96,15 +121,15 @@ trait IdGenerator:
   def nextId(): String
 
 trait PlantJournalStore:
-  def getPlant(id: PlantId): Either[JournalReadFailure, Plant]
-  def getPlants: Either[JournalReadFailure, Vector[Plant]] // live plants only
-  def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]]
-  def getOperation(id: OperationId): Either[JournalReadFailure, Operation]
+  def getPlant(id: PlantId): GetPlantResult
+  def getPlants: GetPlantsResult // live plants only
+  def getOperations(plantId: PlantId): GetOperationsResult
+  def getOperation(id: OperationId): GetOperationResult
   def addOperation(operation: Operation): LogOperationResult
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult
-  def removeOperation(id: OperationId): Either[Throwable, Unit]
-  def restoreOperation(operation: Operation): Either[Throwable, Unit]
-  def updatePlant(plant: Plant): Either[Throwable, Unit]
+  def removeOperation(id: OperationId): OperationCompensationResult
+  def restoreOperation(operation: Operation): OperationCompensationResult
+  def updatePlant(plant: Plant): UpdatePlantResult
 
 object PlantJournal:
   def make(using store: PlantJournalStore^, idGenerator: IdGenerator^, clock: Clock^): PlantJournal^{store, idGenerator, clock}
@@ -172,7 +197,7 @@ type Substrate = readonly SubstratePart[] & { readonly brand: "Substrate" };
 
 interface PlantDetails {
   readonly species: Species;
-  readonly nickname: Nickname | null;
+  readonly maybeNickname: Nickname | null;
   readonly location: Location;
   readonly substrate: Substrate;
   readonly status: PlantStatus;
@@ -187,13 +212,13 @@ interface CareOperationDetails {
   readonly kind: "care";
   readonly actions: ReadonlySet<ActionType>;
   readonly moisture: MoistureLevel;
-  readonly notes: Note | null;
+  readonly maybeNote: Note | null;
 }
 
 interface RepotOperationDetails {
   readonly kind: "repot";
   readonly substrate: Substrate;
-  readonly notes: Note | null;
+  readonly maybeNote: Note | null;
 }
 
 type OperationDetails = CareOperationDetails | RepotOperationDetails;
@@ -225,15 +250,19 @@ interface JournalCorruption {
   readonly reason: Error;
 }
 
-type JournalReadResult<A> =
-  | { readonly kind: "read"; readonly value: A }
-  | { readonly kind: "recordMissing" }
+type GetPlantsResult =
+  | { readonly kind: "read"; readonly plants: readonly Plant[] }
+  | { readonly kind: "corrupted"; readonly details: readonly [JournalCorruption, ...JournalCorruption[]] }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
+type GetOperationsResult =
+  | { readonly kind: "read"; readonly operations: readonly Operation[] }
   | { readonly kind: "corrupted"; readonly details: readonly [JournalCorruption, ...JournalCorruption[]] }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 interface JournalClient {
-  getPlants(): Promise<JournalReadResult<readonly Plant[]>>;
-  getOperations(plantId: PlantId): Promise<JournalReadResult<readonly Operation[]>>;
+  getPlants(): Promise<GetPlantsResult>;
+  getOperations(plantId: PlantId): Promise<GetOperationsResult>;
   logOperation(plantId: PlantId, op: OperationDetails): Promise<LogOperationResult>;
   editOperation(id: OperationId, details: OperationDetails): Promise<EditOperationResult>;
 }
@@ -256,8 +285,8 @@ interface JournalClient {
 - Attempting to change an operation between care and repot reports an operation-type mismatch without changing the journal.
 - Stored operation timestamps and care/repot details round-trip, with a relational discriminator and variant-specific JSON payload. Database constraints reject malformed JSON payloads and unknown discriminators; store reads report schema-accepted malformed timestamps, required fields, enum values, and substrates as attributed corruption rather than valid domain values, accumulating independent failures within and across rows.
 - Collection reads validate every persisted row before visibility filtering and report every corruption together, with each cause attributed to its plant or operation identifier; valid archived plants remain hidden, while malformed status data is never silently omitted.
-- A missing plant or operation is reported as `Left(RecordMissing)`, distinct from a successful single-record read.
-- Collection reads never report `RecordMissing`; an empty journal, including the operation log requested for an unknown plant, is `Right(Vector.empty)`.
+- A missing plant or operation is reported as `RecordMissing`, distinct from a successful single-record read.
+- Collection reads never report `RecordMissing`; an empty journal, including the operation log requested for an unknown plant, is `Read(Vector.empty)`.
 - Database access failures are reported separately from stored-data corruption.
 - First run is pre-populated: a one-time, idempotent import script loads every plant (attributes, substrate mix, full operation history) from the household spreadsheet, retired plants archived.
 
