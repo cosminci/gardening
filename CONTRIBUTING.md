@@ -49,6 +49,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 ## Scala composition
 
+- Trait methods return explicit result ADTs, never `Either`. Adapt those results to `Either` only inside a concrete implementation when dependent steps need composition.
 - Keep business orchestration visible in the public service method. Similar workflows should have visibly similar structure; do not hide their ordering or compensation inside helpers.
 - Give each helper one responsibility and return the narrowest neutral type that describes it. A persistence or domain-step helper must not construct the caller's public result ADT.
 - Adapt boundary ADTs to `Either` when several dependent steps need composition. Do not wrap a single result in `Either` only to unwrap it immediately.

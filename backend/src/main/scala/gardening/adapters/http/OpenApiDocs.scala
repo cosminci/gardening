@@ -1,14 +1,14 @@
 package gardening.adapters.http
 
 import sttp.apispec.openapi.circe.yaml.*
-import sttp.tapir.AnyEndpoint
-import sttp.tapir.docs.openapi.OpenAPIDocsInterpreter
+import sttp.tapir.docs.openapi.{OpenAPIDocsInterpreter, OpenAPIDocsOptions}
 
 object OpenApiDocs:
 
-  private val endpoints: List[AnyEndpoint] = List(HealthApi.endpoint)
+  private val endpoints = HealthApi.endpoint :: JournalApi.publicEndpoints
+  private val options   = OpenAPIDocsOptions.default.copy(markOptionsAsNullable = true)
 
   val yaml: String =
-    OpenAPIDocsInterpreter()
+    OpenAPIDocsInterpreter(options)
       .toOpenAPI(endpoints, title = "Gardening API", version = "0.1.0")
       .toYaml

@@ -1,6 +1,6 @@
 package gardening.adapters.persistence
 
-import gardening.domain.PlantId
+import gardening.domain.{GetPlantsResult, PlantId}
 import munit.FunSuite
 import org.flywaydb.core.Flyway
 
@@ -17,8 +17,8 @@ class SqliteSeamIntegrationTest extends FunSuite:
       seedPlant(connection.dataSource)
 
       SqlitePlantJournalStore.make(connection.transactor).getPlants match
-        case Right(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
-        case other         => fail(s"expected Right, got $other")
+        case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
+        case other                        => fail(s"expected Read, got $other")
     finally connection.close()
 
   test("should retain file-backed data after closing and reopening the database"):
@@ -33,8 +33,8 @@ class SqliteSeamIntegrationTest extends FunSuite:
       val reopenedConnection = Sqlite.connect(SqliteLocation.File(path.toString))
       try
         SqlitePlantJournalStore.make(reopenedConnection.transactor).getPlants match
-          case Right(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
-          case other         => fail(s"expected Right, got $other")
+          case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
+          case other                        => fail(s"expected Read, got $other")
       finally reopenedConnection.close()
     finally Files.delete(path)
 

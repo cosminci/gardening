@@ -118,8 +118,25 @@ enum JournalRecord:
 
 final case class JournalCorruption(record: JournalRecord, reason: Throwable)
 
-enum JournalReadFailure:
+enum GetPlantResult:
+  case Read(plant: Plant)
   case RecordMissing
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
+enum GetPlantsResult:
+  case Read(plants: Vector[Plant])
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
+enum GetOperationResult:
+  case Read(operation: Operation)
+  case RecordMissing
+  case Corrupted(details: NonEmptyList[JournalCorruption])
+  case ReadFailed(reason: Throwable)
+
+enum GetOperationsResult:
+  case Read(operations: Vector[Operation])
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
@@ -133,3 +150,11 @@ enum EditOperationResult:
   case OperationTypeMismatch
   case Corrupted(details: NonEmptyList[JournalCorruption])
   case EditFailed(reason: Throwable)
+
+enum OperationCompensationResult:
+  case Compensated
+  case CompensationFailed(reason: Throwable)
+
+enum UpdatePlantResult:
+  case Updated
+  case UpdateFailed(reason: Throwable)

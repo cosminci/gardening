@@ -1,6 +1,5 @@
 package gardening.adapters.persistence
 
-import cats.syntax.either.*
 import cats.syntax.option.*
 import gardening.domain.*
 import io.github.iltotore.iron.autoRefine
@@ -25,7 +24,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
   test("should return no plants when none have been seeded"):
     withStore: (_, store) =>
-      assertEquals(store.getPlants, Vector.empty.asRight)
+      assertEquals(store.getPlants, GetPlantsResult.Read(Vector.empty))
 
   test("should return an active plant with its persisted substrate"):
     withStore: (dataSource, store) =>
@@ -37,12 +36,12 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       store.getPlants match
-        case Right(Vector(plant)) =>
+        case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.id, PlantId("p1"))
           assertEquals(plant.details.maybeNickname, Nickname("Fig").some)
           assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
-          assertEquals(store.getPlant(PlantId("p1")), plant.asRight)
-          assertEquals(store.getPlant(PlantId("missing")), JournalReadFailure.RecordMissing.asLeft)
+          assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(plant))
+          assertEquals(store.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
         case other => fail(s"expected one plant, got $other")
 
   test("should exclude archived plants"):
@@ -51,8 +50,8 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "archived-1", status = PlantStatus.Archived)
 
       store.getPlants match
-        case Right(plants) => assertEquals(plants.map(_.id), Vector(PlantId("active-1")))
-        case other         => fail(s"expected Right, got $other")
+        case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("active-1")))
+        case other                        => fail(s"expected Read, got $other")
 
   test("should report every corrupted plant row"):
     withStore: (dataSource, store) =>
@@ -69,7 +68,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       updatePlantSubstrate(dataSource, id = "invalid-share", substrate = "Perlite:0")
 
       store.getPlants match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetPlantsResult.Corrupted(details) =>
           val expected: Set[(JournalRecord, String)] = Set(
             JournalRecord.Plant(PlantId("duplicate-components")) -> "invalid stored substrate: DuplicateComponent",
             JournalRecord.Plant(PlantId("unknown-component"))    -> "invalid stored substrate: unknown component: Unknown",
@@ -81,7 +80,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         case other => fail(s"expected Corrupted, got $other")
 
       store.getPlant(PlantId("duplicate-components")) match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetPlantResult.Corrupted(details) =>
           assertEquals(
             details.toList.map(detail => detail.record -> detail.reason.getMessage),
             List(JournalRecord.Plant(PlantId("duplicate-components")) -> "invalid stored substrate: DuplicateComponent")
@@ -96,9 +95,9 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
 
       assertEquals(readOperationKind(dataSource, operation.id.value), "Care")
-      assertEquals(store.getOperations(PlantId("p1")), Vector(operation).asRight)
+      assertEquals(store.getOperations(PlantId("p1")), GetOperationsResult.Read(Vector(operation)))
       store.getPlants match
-        case Right(Vector(plant)) =>
+        case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
@@ -113,7 +112,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       assertEquals(store.addOperation(observation), LogOperationResult.Logged(observation.id))
-      assertEquals(store.getOperations(PlantId("p1")), Vector(observation).asRight)
+      assertEquals(store.getOperations(PlantId("p1")), GetOperationsResult.Read(Vector(observation)))
 
   test("should persist a repot without changing the plant"):
     withStore: (dataSource, store) =>
@@ -131,9 +130,9 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
       assertEquals(readOperationKind(dataSource, operation.id.value), "Repot")
-      assertEquals(store.getOperation(operation.id), operation.asRight)
+      assertEquals(store.getOperation(operation.id), GetOperationResult.Read(operation))
       store.getPlants match
-        case Right(Vector(plant)) =>
+        case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
@@ -178,14 +177,14 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         )
       )
 
-      assertEquals(store.updatePlant(updatedPlant), ().asRight)
-      assertEquals(store.getPlant(updatedPlant.id), updatedPlant.asRight)
-      assertEquals(store.getPlants, Vector.empty.asRight)
+      assertEquals(store.updatePlant(updatedPlant), UpdatePlantResult.Updated)
+      assertEquals(store.getPlant(updatedPlant.id), GetPlantResult.Read(updatedPlant))
+      assertEquals(store.getPlants, GetPlantsResult.Read(Vector.empty))
 
   test("should return no operation for an unknown id"):
     withStore: (_, store) =>
-      assertEquals(store.getOperation(OperationId("missing")), JournalReadFailure.RecordMissing.asLeft)
-      assertEquals(store.getOperations(PlantId("missing")), Vector.empty.asRight)
+      assertEquals(store.getOperation(OperationId("missing")), GetOperationResult.RecordMissing)
+      assertEquals(store.getOperations(PlantId("missing")), GetOperationsResult.Read(Vector.empty))
 
   test("should report every corrupted operation row"):
     withStore: (dataSource, store) =>
@@ -207,7 +206,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       updateOperationPayload(dataSource, id = "o2", payload = """{"moisture":"Wet","note":null}""")
 
       store.getOperations(PlantId("p1")) match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetOperationsResult.Corrupted(details) =>
           val expected: Set[(JournalRecord, String)] = Set(
             JournalRecord.Operation(OperationId("o1")) -> "invalid stored substrate: DuplicateComponent",
             JournalRecord.Operation(OperationId("o2")) -> "invalid stored operation payload: Missing required field"
@@ -217,7 +216,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         case other => fail(s"expected Corrupted, got $other")
 
       store.getOperation(repot.id) match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetOperationResult.Corrupted(details) =>
           assertEquals(
             details.toList.map(detail => detail.record -> detail.reason.getMessage),
             List(JournalRecord.Operation(OperationId("o1")) -> "invalid stored substrate: DuplicateComponent")
@@ -225,7 +224,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         case other => fail(s"expected Corrupted, got $other")
 
       store.getOperation(careOperation.id) match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetOperationResult.Corrupted(details) =>
           assertEquals(
             details.toList.map(detail => detail.record -> detail.reason.getMessage),
             List(JournalRecord.Operation(OperationId("o2")) -> "invalid stored operation payload: Missing required field")
@@ -253,7 +252,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       store.getOperations(PlantId("p1")) match
-        case Left(JournalReadFailure.Corrupted(details)) =>
+        case GetOperationsResult.Corrupted(details) =>
           val expected: Set[(JournalRecord, String)] = Set(
             JournalRecord.Operation(OperationId("invalid-care"))  -> "invalid stored operation date: tomorrow",
             JournalRecord.Operation(OperationId("invalid-care"))  -> "invalid stored operation payload: invalid action: Unknown",
@@ -280,7 +279,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
       store.getPlants match
-        case Right(Vector(plant)) =>
+        case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
@@ -292,23 +291,22 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(original), LogOperationResult.Logged(original.id))
       assertEquals(store.updateOperation(original.id, amended), EditOperationResult.Edited(original.copy(details = amended)))
 
-      assertEquals(store.restoreOperation(original), ().asRight)
-      assertEquals(store.getOperation(original.id), original.asRight)
-      assertEquals(store.removeOperation(original.id), ().asRight)
-      assertEquals(store.getOperation(original.id), JournalReadFailure.RecordMissing.asLeft)
-      assertEquals(store.removeOperation(original.id), ().asRight)
+      assertEquals(store.restoreOperation(original), OperationCompensationResult.Compensated)
+      assertEquals(store.getOperation(original.id), GetOperationResult.Read(original))
+      assertEquals(store.removeOperation(original.id), OperationCompensationResult.Compensated)
+      assertEquals(store.getOperation(original.id), GetOperationResult.RecordMissing)
+      assertEquals(store.removeOperation(original.id), OperationCompensationResult.Compensated)
 
   test("should report missing compensation targets"):
     withStore: (_, store) =>
       val missing = Operation(OperationId("missing"), PlantId("p1"), date, care)
-      assertEquals(
-        store.restoreOperation(missing).left.map(_.getMessage),
-        "operation not found while restoring: missing".asLeft
-      )
-      assertEquals(
-        store.updatePlant(plant(id = PlantId("missing"))).left.map(_.getMessage),
-        "plant not found while updating: missing".asLeft
-      )
+      store.restoreOperation(missing) match
+        case OperationCompensationResult.CompensationFailed(reason) =>
+          assertEquals(reason.getMessage, "operation not found while restoring: missing")
+        case other => fail(s"expected CompensationFailed, got $other")
+      store.updatePlant(plant(id = PlantId("missing"))) match
+        case UpdatePlantResult.UpdateFailed(reason) => assertEquals(reason.getMessage, "plant not found while updating: missing")
+        case other                                  => fail(s"expected UpdateFailed, got $other")
 
   test("should report corrupted operation metadata after an edit"):
     withStore: (dataSource, store) =>
@@ -350,7 +348,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
       store.getPlants match
-        case Right(Vector(plant)) =>
+        case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
@@ -364,9 +362,12 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       readOnlyStore.updateOperation(operation.id, care) match
         case EditOperationResult.EditFailed(_) => ()
         case other                             => fail(s"expected EditFailed, got $other")
-      assert(readOnlyStore.removeOperation(operation.id).isLeft)
-      assert(readOnlyStore.restoreOperation(operation).isLeft)
-      assert(readOnlyStore.updatePlant(plant()).isLeft)
+      List(readOnlyStore.removeOperation(operation.id), readOnlyStore.restoreOperation(operation)).foreach:
+        case OperationCompensationResult.CompensationFailed(_) => ()
+        case other                                             => fail(s"expected CompensationFailed, got $other")
+      readOnlyStore.updatePlant(plant()) match
+        case UpdatePlantResult.UpdateFailed(_) => ()
+        case other                             => fail(s"expected UpdateFailed, got $other")
 
   test("should return read failures when the journal schema is unavailable"):
     val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
@@ -374,12 +375,16 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       val store = SqlitePlantJournalStore.make(connection.transactor)
       List(
         store.getPlants,
-        store.getPlant(PlantId("p1")),
-        store.getOperations(PlantId("p1")),
-        store.getOperation(OperationId("o1"))
+        store.getOperations(PlantId("p1"))
       ).foreach:
-        case Left(JournalReadFailure.ReadFailed(_)) => ()
-        case other                                  => fail(s"expected ReadFailed, got $other")
+        case GetPlantsResult.ReadFailed(_) | GetOperationsResult.ReadFailed(_) => ()
+        case other                                                             => fail(s"expected ReadFailed, got $other")
+      store.getPlant(PlantId("p1")) match
+        case GetPlantResult.ReadFailed(_) => ()
+        case other                        => fail(s"expected ReadFailed, got $other")
+      store.getOperation(OperationId("o1")) match
+        case GetOperationResult.ReadFailed(_) => ()
+        case other                            => fail(s"expected ReadFailed, got $other")
     finally connection.close()
 
   private def withStore(test: (DataSource, PlantJournalStore) => Unit): Unit =
