@@ -1,5 +1,6 @@
 package gardening.domain
 
+import cats.data.NonEmptyList
 import cats.syntax.either.*
 import monocle.syntax.all.*
 
@@ -9,8 +10,8 @@ import java.util.concurrent.locks.ReentrantLock
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
-  def getPlants: Either[JournalReadFailure, Vector[Plant]]
-  def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]]
+  def getPlants: GetPlantsResult
+  def getOperations(plantId: PlantId): GetOperationsResult
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
 
@@ -22,11 +23,9 @@ object PlantJournal:
   private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^, clock: Clock^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
 
-    override def getPlants: Either[JournalReadFailure, Vector[Plant]] =
-      store.getPlants
+    override def getPlants: GetPlantsResult = store.getPlants
 
-    override def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]] =
-      store.getOperations(plantId)
+    override def getOperations(plantId: PlantId): GetOperationsResult = store.getOperations(plantId)
 
     override def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
       val operation = Operation(OperationId(idGen.nextId()), plantId, clock.now(), op)
@@ -40,11 +39,12 @@ object PlantJournal:
 
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = operationMutex.exclusively:
       store.getOperation(id) match
-        case Left(JournalReadFailure.Corrupted(corruptions))           => EditOperationResult.Corrupted(corruptions)
-        case Left(JournalReadFailure.ReadFailed(reason))               => EditOperationResult.EditFailed(reason)
-        case Left(JournalReadFailure.RecordMissing)                    => EditOperationResult.OperationMissing
-        case Right(operation) if !sameType(operation.details, details) => EditOperationResult.OperationTypeMismatch
-        case Right(operation)                                          =>
+        case GetOperationResult.Corrupted(corruptions)                                   => EditOperationResult.Corrupted(corruptions)
+        case GetOperationResult.ReadFailed(reason)                                       => EditOperationResult.EditFailed(reason)
+        case GetOperationResult.RecordMissing                                            => EditOperationResult.OperationMissing
+        case GetOperationResult.Read(operation) if !sameType(operation.details, details) =>
+          EditOperationResult.OperationTypeMismatch
+        case GetOperationResult.Read(operation) =>
           store.updateOperation(id, details) match
             case res @ EditOperationResult.Edited(edited) =>
               updatePlantIfOperationIsLatestRepot(edited)
@@ -63,7 +63,7 @@ object PlantJournal:
         case repot: OperationDetails.Repot =>
           for
             plant   <- readPlant(operation.plantId)
-            updated <- store.updatePlant(plant.focus(_.details.substrate).replace(repot.substrate)).leftMap(PlantUpdateInterruption.Failed.apply)
+            updated <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
     private def updatePlantIfOperationIsLatestRepot(operation: Operation) =
@@ -74,18 +74,28 @@ object PlantJournal:
             operations <- readOperations(operation.plantId)
             _          <- isLatestRepot(operation, operations.filterNot(_.id.value.equals(operation.id.value))).orSkip
             plant      <- readPlant(operation.plantId)
-            updated    <- store.updatePlant(plant.focus(_.details.substrate).replace(repot.substrate)).leftMap(PlantUpdateInterruption.Failed.apply)
+            updated    <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
     private def readOperations(plantId: PlantId) =
-      store
-        .getOperations(plantId)
-        .leftMap(failure => PlantUpdateInterruption.Failed(readFailure("cannot read operations after editing repot", failure)))
+      store.getOperations(plantId) match
+        case GetOperationsResult.Read(operations)   => operations.asRight
+        case GetOperationsResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
+        case GetOperationsResult.Corrupted(details) =>
+          PlantUpdateInterruption.Failed(readFailure("cannot read operations after editing repot", details)).asLeft
 
     private def readPlant(plantId: PlantId) =
-      store
-        .getPlant(plantId)
-        .leftMap(failure => PlantUpdateInterruption.Failed(readFailure("cannot read plant after repot", failure)))
+      store.getPlant(plantId) match
+        case GetPlantResult.Read(plant)        => plant.asRight
+        case GetPlantResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
+        case GetPlantResult.RecordMissing      => PlantUpdateInterruption.Failed(RuntimeException("cannot read plant after repot")).asLeft
+        case GetPlantResult.Corrupted(details) =>
+          PlantUpdateInterruption.Failed(readFailure("cannot read plant after repot", details)).asLeft
+
+    private def updatePlant(plant: Plant) =
+      store.updatePlant(plant) match
+        case UpdatePlantResult.Updated              => ().asRight
+        case UpdatePlantResult.UpdateFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
 
     private def isLatestRepot(operation: Operation, others: Vector[Operation]) =
       others.forall: other =>
@@ -93,22 +103,19 @@ object PlantJournal:
           case _: OperationDetails.Repot => operation.date.isAfter(other.date)
           case _                         => true
 
-    private def readFailure(context: String, result: JournalReadFailure) =
-      result match
-        case JournalReadFailure.ReadFailed(reason) => reason
-        case JournalReadFailure.RecordMissing      => RuntimeException(context)
-        case JournalReadFailure.Corrupted(details) =>
-          val reasons = details.map(_.reason)
-          RuntimeException(context, reasons.head).tap(error => reasons.tail.foreach(error.addSuppressed))
+    private def readFailure(context: String, details: NonEmptyList[JournalCorruption]) =
+      val reasons = details.map(_.reason)
+      RuntimeException(context, reasons.head).tap(error => reasons.tail.foreach(error.addSuppressed))
 
     extension (result: Either[PlantUpdateInterruption, Unit])
-      private def compensateWith(compensationResult: => Either[Throwable, Unit]): Either[Throwable, Unit] =
+      private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =
         result match
           case Right(_) | Left(PlantUpdateInterruption.NotLatestRepot) => ().asRight
           case Left(PlantUpdateInterruption.Failed(primary))           =>
-            compensationResult.leftMap: compensation =>
-              RuntimeException("repot persistence and compensation failed", primary).tap(_.addSuppressed(compensation))
-            .flatMap(_ => primary.asLeft)
+            compensationResult match
+              case OperationCompensationResult.Compensated                      => primary.asLeft
+              case OperationCompensationResult.CompensationFailed(compensation) =>
+                RuntimeException("repot persistence and compensation failed", primary).tap(_.addSuppressed(compensation)).asLeft
 
     extension (condition: Boolean)
       private def orSkip: Either[PlantUpdateInterruption, Unit] =

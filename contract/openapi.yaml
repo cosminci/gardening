@@ -14,8 +14,161 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /plants:
+    get:
+      summary: List active plants
+      operationId: getPlants
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plant'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /plants/{plantId}/operations:
+    get:
+      summary: List a plant's operations
+      operationId: getPlantsPlantidOperations
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Operation'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Log a plant operation
+      operationId: postPlantsPlantidOperations
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationDetails'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoggedOperation'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /operations/{operationId}:
+    put:
+      summary: Edit a plant operation
+      operationId: putOperationsOperationid
+      parameters:
+      - name: operationId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationDetails'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   schemas:
+    ActionType:
+      title: ActionType
+      type: string
+      enum:
+      - fertilized
+      - noAction
+      - pesticide
+      - pruned
+      - watered
+    ApiError:
+      title: ApiError
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+    Care:
+      title: Care
+      type: object
+      required:
+      - actions
+      - moisture
+      - notes
+      - kind
+      properties:
+        actions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ActionType'
+        moisture:
+          $ref: '#/components/schemas/MoistureLevel'
+        notes:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+          const: care
     HealthResponse:
       title: HealthResponse
       type: object
@@ -27,3 +180,135 @@ components:
           type: string
         version:
           type: string
+    LoggedOperation:
+      title: LoggedOperation
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    MoistureLevel:
+      title: MoistureLevel
+      type: string
+      enum:
+      - dry
+      - moderateMinus
+      - moderatePlus
+      - noReading
+      - wet
+    Operation:
+      title: Operation
+      type: object
+      required:
+      - id
+      - plantId
+      - date
+      - details
+      properties:
+        id:
+          type: string
+        plantId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        details:
+          $ref: '#/components/schemas/OperationDetails'
+    OperationDetails:
+      title: OperationDetails
+      oneOf:
+      - $ref: '#/components/schemas/Care'
+      - $ref: '#/components/schemas/Repot'
+      discriminator:
+        propertyName: kind
+        mapping:
+          care: '#/components/schemas/Care'
+          repot: '#/components/schemas/Repot'
+    Plant:
+      title: Plant
+      type: object
+      required:
+      - id
+      - details
+      properties:
+        id:
+          type: string
+        details:
+          $ref: '#/components/schemas/PlantDetails'
+    PlantDetails:
+      title: PlantDetails
+      type: object
+      required:
+      - species
+      - nickname
+      - location
+      - substrate
+      - status
+      properties:
+        species:
+          type: string
+        nickname:
+          type:
+          - string
+          - 'null'
+        location:
+          type: string
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
+        status:
+          $ref: '#/components/schemas/PlantStatus'
+    PlantStatus:
+      title: PlantStatus
+      type: string
+      enum:
+      - active
+      - archived
+    Repot:
+      title: Repot
+      type: object
+      required:
+      - substrate
+      - notes
+      - kind
+      properties:
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
+        notes:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+          const: repot
+    SubstrateComponent:
+      title: SubstrateComponent
+      type: string
+      enum:
+      - kekkilaEricaceous
+      - kekkilaUniversal
+      - leca
+      - perlite
+      - pineBark
+      - sand3to5
+      - sand4to8
+    SubstratePart:
+      title: SubstratePart
+      type: object
+      required:
+      - component
+      - share
+      properties:
+        component:
+          $ref: '#/components/schemas/SubstrateComponent'
+        share:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100

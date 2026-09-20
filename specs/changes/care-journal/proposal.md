@@ -124,6 +124,15 @@ Persistence keeps common operation metadata relational: a constrained `kind` col
 
 `PlantJournal` captures its store, identifier generator, and clock, making their authority explicit in the journal value's type and preventing it from escaping a shorter-lived capability scope.
 
+## HTTP
+
+- `GET /plants` returns active plants; `GET /plants/{plantId}/operations` returns that plant's operations.
+- `POST /plants/{plantId}/operations` accepts care or repot details and returns the backend-generated operation identifier with `201 Created`.
+- `PUT /operations/{operationId}` accepts care or repot details and returns the edited operation. A missing operation is `404 Not Found`; attempting to change its variant is `409 Conflict`.
+- Wire operation details are discriminated by a lower-camel-case `kind`; enum values use the lower-camel-case names documented by the frontend model. Invalid variants, enum values, percentages, or substrate mixes are `400 Bad Request`.
+- Journal read, logging, corruption, and persistence failures are `500 Internal Server Error` without exposing internal exception details.
+- The Tapir endpoint definitions are the source of the generated OpenAPI contract.
+
 ## Frontend
 
 Hexagonal, like the backend:

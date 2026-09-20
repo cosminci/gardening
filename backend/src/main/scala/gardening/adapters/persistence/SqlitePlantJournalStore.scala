@@ -9,7 +9,6 @@ import com.augustnagro.magnum.*
 import gardening.adapters.persistence.StoredOperationPayload.*
 import gardening.domain.*
 import gardening.domain.EditOperationResult.*
-import gardening.domain.JournalReadFailure.*
 import gardening.domain.LogOperationResult.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
@@ -24,24 +23,23 @@ object SqlitePlantJournalStore:
 
   private class LiveSqlitePlantJournalStore(transactor: Transactor) extends PlantJournalStore:
 
-    override def getPlants: Either[JournalReadFailure, Vector[Plant]] =
+    override def getPlants: GetPlantsResult =
       try
         connect(transactor)(selectPlants.query[PlantRow].run())
           .traverse(toPlant)
           .map(_.filter(_.details.status === PlantStatus.Active))
-          .leftMap(JournalReadFailure.Corrupted.apply)
-          .toEither
-      catch case error: SqlException => ReadFailed(error).asLeft
+          .fold(GetPlantsResult.Corrupted.apply, GetPlantsResult.Read.apply)
+      catch case error: SqlException => GetPlantsResult.ReadFailed(error)
 
     private def selectPlants: Frag =
       sql"select id, species, nickname, location, substrate, status from plant"
 
-    override def getPlant(id: PlantId): Either[JournalReadFailure, Plant] =
+    override def getPlant(id: PlantId): GetPlantResult =
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
-          case None      => RecordMissing.asLeft
-          case Some(row) => toPlant(row).leftMap(JournalReadFailure.Corrupted.apply).toEither
-      catch case error: SqlException => ReadFailed(error).asLeft
+          case None      => GetPlantResult.RecordMissing
+          case Some(row) => toPlant(row).fold(GetPlantResult.Corrupted.apply, GetPlantResult.Read.apply)
+      catch case error: SqlException => GetPlantResult.ReadFailed(error)
 
     private def selectPlant(id: String): Frag =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
@@ -59,34 +57,25 @@ object SqlitePlantJournalStore:
       // $COVERAGE-ON$
 
       (substrateResult, statusResult).mapN: (substrate, status) =>
-        Plant(
-          PlantId(row.id),
-          PlantDetails(
-            Species(row.species),
-            row.nickname.map(Nickname.apply),
-            Location(row.location),
-            substrate,
-            status
-          )
-        )
+        val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
+        Plant(PlantId(row.id), details)
 
-    override def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]] =
+    override def getOperations(plantId: PlantId): GetOperationsResult =
       try
         connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run())
           .traverse(toOperation)
-          .leftMap(JournalReadFailure.Corrupted.apply)
-          .toEither
-      catch case error: SqlException => ReadFailed(error).asLeft
+          .fold(GetOperationsResult.Corrupted.apply, GetOperationsResult.Read.apply)
+      catch case error: SqlException => GetOperationsResult.ReadFailed(error)
 
     private def selectOperationsForPlant(plantId: String): Frag =
       sql"select id, plant_id, date, kind, payload from operation where plant_id = $plantId"
 
-    override def getOperation(id: OperationId): Either[JournalReadFailure, Operation] =
+    override def getOperation(id: OperationId): GetOperationResult =
       try
         connect(transactor)(selectOperation(id.value).query[OperationRow].run().headOption) match
-          case None      => RecordMissing.asLeft
-          case Some(row) => toOperation(row).leftMap(JournalReadFailure.Corrupted.apply).toEither
-      catch case error: SqlException => ReadFailed(error).asLeft
+          case None      => GetOperationResult.RecordMissing
+          case Some(row) => toOperation(row).fold(GetOperationResult.Corrupted.apply, GetOperationResult.Read.apply)
+      catch case error: SqlException => GetOperationResult.ReadFailed(error)
 
     private def selectOperation(id: String): Frag =
       sql"select id, plant_id, date, kind, payload from operation where id = $id"
@@ -115,33 +104,33 @@ object SqlitePlantJournalStore:
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
         transact(transactor):
-          updateOperationRow(id.value, details)
+          val queryResult = updateOperationRow(id.value, details)
             .query[OperationRow]
             .run()
             .headOption
-            .fold[EditOperationResult](OperationMissing): row =>
-              toOperation(row).fold(EditOperationResult.Corrupted.apply, Edited.apply)
+          queryResult.fold[EditOperationResult](OperationMissing): row =>
+            toOperation(row).fold(EditOperationResult.Corrupted.apply, Edited.apply)
       catch case e: SqlException => EditFailed(e)
 
-    override def removeOperation(id: OperationId): Either[Throwable, Unit] =
-      try transact(transactor)(sql"delete from operation where id = ${id.value}".update.run()).pipe(_ => ().asRight)
-      catch case error: SqlException => error.asLeft
+    override def removeOperation(id: OperationId): OperationCompensationResult =
+      try transact(transactor)(sql"delete from operation where id = ${id.value}".update.run()).pipe(_ => OperationCompensationResult.Compensated)
+      catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
 
-    override def restoreOperation(operation: Operation): Either[Throwable, Unit] =
+    override def restoreOperation(operation: Operation): OperationCompensationResult =
       try
         val kind    = StoredOperationPayload.kind(operation.details)
         val payload = StoredOperationPayload.encode(operation.details)
         transact(transactor)(sql"update operation set kind = $kind, payload = $payload where id = ${operation.id.value}".update.run()) match
-          case 1 => ().asRight
-          case _ => RuntimeException(s"operation not found while restoring: ${operation.id.value}").asLeft
-      catch case error: SqlException => error.asLeft
+          case 1 => OperationCompensationResult.Compensated
+          case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
+      catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
 
-    override def updatePlant(plant: Plant): Either[Throwable, Unit] =
+    override def updatePlant(plant: Plant): UpdatePlantResult =
       try
         transact(transactor)(updatePlantRow(plant).update.run()) match
-          case 1 => ().asRight
-          case _ => RuntimeException(s"plant not found while updating: ${plant.id.value}").asLeft
-      catch case error: SqlException => error.asLeft
+          case 1 => UpdatePlantResult.Updated
+          case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
+      catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
 
     private def updatePlantRow(plant: Plant): Frag =
       val details = plant.details

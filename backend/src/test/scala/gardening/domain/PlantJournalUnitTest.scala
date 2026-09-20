@@ -1,7 +1,6 @@
 package gardening.domain
 
 import cats.data.NonEmptyList
-import cats.syntax.either.*
 import cats.syntax.option.*
 import io.github.iltotore.iron.*
 
@@ -49,25 +48,34 @@ class PlantJournalUnitTest extends munit.FunSuite:
   ): PlantJournal^ =
     PlantJournal.make(using store, idGen, clock)
 
-  test("should preserve every store outcome when reading the journal"):
-    val corruptions = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt row")))
-    val readFailure = RuntimeException("store down")
+  test("should return plants and operation history while preserving read failures"):
+    val plantCorruptions     = NonEmptyList.one(JournalCorruption(JournalRecord.Plant(PlantId("p1")), RuntimeException("corrupt plant")))
+    val operationCorruptions = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt operation")))
+    val readFailure          = RuntimeException("store down")
 
     assertEquals(
-      buildJournal(StoreStub(getPlantsResult = Vector(plant).asRight)).getPlants,
-      Vector(plant).asRight
+      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))).getPlants,
+      GetPlantsResult.Read(Vector(plant))
     )
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = Vector(operation).asRight)).getOperations(PlantId("p1")),
-      Vector(operation).asRight
+      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Corrupted(plantCorruptions))).getPlants,
+      GetPlantsResult.Corrupted(plantCorruptions)
     )
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = JournalReadFailure.Corrupted(corruptions).asLeft)).getOperations(PlantId("p1")),
-      JournalReadFailure.Corrupted(corruptions).asLeft
+      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.ReadFailed(readFailure))).getPlants,
+      GetPlantsResult.ReadFailed(readFailure)
     )
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = JournalReadFailure.ReadFailed(readFailure).asLeft)).getOperations(PlantId("p1")),
-      JournalReadFailure.ReadFailed(readFailure).asLeft
+      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Read(Vector(operation)))).getOperations(PlantId("p1")),
+      GetOperationsResult.Read(Vector(operation))
+    )
+    assertEquals(
+      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Corrupted(operationCorruptions))).getOperations(PlantId("p1")),
+      GetOperationsResult.Corrupted(operationCorruptions)
+    )
+    assertEquals(
+      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(readFailure))).getOperations(PlantId("p1")),
+      GetOperationsResult.ReadFailed(readFailure)
     )
 
   test("should assign the backend timestamp when recording care"):
@@ -80,7 +88,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
   test("should update a plant after recording the latest repot"):
     val newSubstrate = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
-    val store        = StoreStub(getOperationsResult = JournalReadFailure.ReadFailed(RuntimeException("must not read history")).asLeft)
+    val store        = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("must not read history")))
 
     assertEquals(buildJournal(store).logOperation(PlantId("p1"), newRepot), LogOperationResult.Logged(OperationId("id-1")))
     assertEquals(store.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)))
@@ -122,11 +130,18 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
 
   test("should remove a recorded repot whenever its plant cannot reflect it"):
-    val readFailure   = RuntimeException("read failed")
-    val updateFailure = RuntimeException("update failed")
-    val missingPlant  = StoreStub(getPlantResult = JournalReadFailure.RecordMissing.asLeft)
-    val unreadable    = StoreStub(getPlantResult = JournalReadFailure.ReadFailed(readFailure).asLeft)
-    val notUpdated    = StoreStub(updatePlantResult = updateFailure.asLeft)
+    val readFailure     = RuntimeException("read failed")
+    val updateFailure   = RuntimeException("update failed")
+    val firstCorruption = RuntimeException("invalid substrate")
+    val nextCorruption  = RuntimeException("invalid status")
+    val corruptions     = NonEmptyList.of(
+      JournalCorruption(JournalRecord.Plant(PlantId("p1")), firstCorruption),
+      JournalCorruption(JournalRecord.Plant(PlantId("p1")), nextCorruption)
+    )
+    val missingPlant = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
+    val unreadable   = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val corrupted    = StoreStub(getPlantResult = GetPlantResult.Corrupted(corruptions))
+    val notUpdated   = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
     buildJournal(missingPlant).logOperation(PlantId("p1"), repot) match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
@@ -137,6 +152,12 @@ class PlantJournalUnitTest extends munit.FunSuite:
       LogOperationResult.LoggingFailed(readFailure)
     )
     assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
+    buildJournal(corrupted).logOperation(PlantId("p1"), repot) match
+      case LogOperationResult.LoggingFailed(reason) =>
+        assertEquals(reason.getCause, firstCorruption)
+        assertEquals(reason.getSuppressed.toList, List(nextCorruption))
+      case other => fail(s"expected LoggingFailed, got $other")
+    assertEquals(corrupted.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(
       buildJournal(notUpdated).logOperation(PlantId("p1"), repot),
       LogOperationResult.LoggingFailed(updateFailure)
@@ -146,7 +167,10 @@ class PlantJournalUnitTest extends munit.FunSuite:
   test("should report both failures when removing a recorded repot also fails"):
     val updateFailure = RuntimeException("update failed")
     val removeFailure = RuntimeException("remove failed")
-    val store         = StoreStub(updatePlantResult = updateFailure.asLeft, removeOperationResult = removeFailure.asLeft)
+    val store         = StoreStub(
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
+      removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
+    )
 
     buildJournal(store).logOperation(PlantId("p1"), repot) match
       case LogOperationResult.LoggingFailed(reason) =>
@@ -169,8 +193,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = Vector(existingRepot, existingCare).asRight,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot, existingCare)),
       updateOperationResult = editResult
     )
 
@@ -183,8 +207,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val amended    = OperationDetails.Repot(substrate, maybeNote = none)
     val editResult = EditOperationResult.Edited(olderRepot.copy(details = amended))
     val store      = StoreStub(
-      getOperationResult = olderRepot.asRight,
-      getOperationsResult = Vector(olderRepot, newerRepot).asRight,
+      getOperationResult = GetOperationResult.Read(olderRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(olderRepot, newerRepot)),
       updateOperationResult = editResult
     )
 
@@ -204,26 +228,26 @@ class PlantJournalUnitTest extends munit.FunSuite:
       JournalCorruption(JournalRecord.Operation(OperationId("o2")), secondCorruption)
     )
     val unreadableHistory = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = JournalReadFailure.ReadFailed(historyFailure).asLeft,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.ReadFailed(historyFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val corruptedHistory = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = JournalReadFailure.Corrupted(corruptions).asLeft,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Corrupted(corruptions),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val unreadablePlant = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = Vector(existingRepot).asRight,
-      getPlantResult = JournalReadFailure.ReadFailed(plantFailure).asLeft,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
+      getPlantResult = GetPlantResult.ReadFailed(plantFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val plantNotUpdated = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = Vector(existingRepot).asRight,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
-      updatePlantResult = updateFailure.asLeft
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
     )
 
     assertEquals(
@@ -251,8 +275,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val cause         = RuntimeException("store down")
     val store         = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = Vector(existingRepot).asRight,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
       updateOperationResult = EditOperationResult.EditFailed(cause)
     )
 
@@ -264,11 +288,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val updateFailure  = RuntimeException("update failed")
     val restoreFailure = RuntimeException("restore failed")
     val store          = StoreStub(
-      getOperationResult = existingRepot.asRight,
-      getOperationsResult = Vector(existingRepot).asRight,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
-      updatePlantResult = updateFailure.asLeft,
-      restoreOperationResult = restoreFailure.asLeft
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
+      restoreOperationResult = OperationCompensationResult.CompensationFailed(restoreFailure)
     )
 
     buildJournal(store).editOperation(existingRepot.id, repot) match
@@ -288,9 +312,9 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val corruptions  = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt row")))
     val readFailure  = RuntimeException("store down")
     val typeMismatch = StoreStub()
-    val missing      = StoreStub(getOperationResult = JournalReadFailure.RecordMissing.asLeft)
-    val corrupted    = StoreStub(getOperationResult = JournalReadFailure.Corrupted(corruptions).asLeft)
-    val unreadable   = StoreStub(getOperationResult = JournalReadFailure.ReadFailed(readFailure).asLeft)
+    val missing      = StoreStub(getOperationResult = GetOperationResult.RecordMissing)
+    val corrupted    = StoreStub(getOperationResult = GetOperationResult.Corrupted(corruptions))
+    val unreadable   = StoreStub(getOperationResult = GetOperationResult.ReadFailed(readFailure))
 
     assertEquals(buildJournal(typeMismatch).editOperation(operation.id, repot), EditOperationResult.OperationTypeMismatch)
     assertEquals(buildJournal(missing).editOperation(OperationId("nope"), care), EditOperationResult.OperationMissing)
@@ -306,15 +330,15 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(buildJournal(store).editOperation(operation.id, care), EditOperationResult.EditFailed(cause))
 
   final private case class StoreStub(
-      getPlantResult: Either[JournalReadFailure, Plant] = plant.asRight,
-      getPlantsResult: Either[JournalReadFailure, Vector[Plant]] = Vector.empty.asRight,
-      getOperationsResult: Either[JournalReadFailure, Vector[Operation]] = Vector.empty.asRight,
-      getOperationResult: Either[JournalReadFailure, Operation] = operation.asRight,
+      getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
+      getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
+      getOperationsResult: GetOperationsResult = GetOperationsResult.Read(Vector.empty),
+      getOperationResult: GetOperationResult = GetOperationResult.Read(operation),
       addOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("id-1")),
       updateOperationResult: EditOperationResult = EditOperationResult.Edited(operation),
-      removeOperationResult: Either[Throwable, Unit] = ().asRight,
-      restoreOperationResult: Either[Throwable, Unit] = ().asRight,
-      updatePlantResult: Either[Throwable, Unit] = ().asRight
+      removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
+      restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
+      updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated
   ) extends PlantJournalStore:
     val recordedOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
     val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = new AtomicReference(Vector.empty)
@@ -322,17 +346,17 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val restoredOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
     val updatedPlants: AtomicReference[Vector[Plant]]                               = new AtomicReference(Vector.empty)
 
-    override def getPlant(id: PlantId): Either[JournalReadFailure, Plant]                       = getPlantResult
-    override def getPlants: Either[JournalReadFailure, Vector[Plant]]                           = getPlantsResult
-    override def getOperations(plantId: PlantId): Either[JournalReadFailure, Vector[Operation]] = getOperationsResult
-    override def getOperation(id: OperationId): Either[JournalReadFailure, Operation]           = getOperationResult
-    override def addOperation(operation: Operation): LogOperationResult                         =
+    override def getPlant(id: PlantId): GetPlantResult                  = getPlantResult
+    override def getPlants: GetPlantsResult                             = getPlantsResult
+    override def getOperations(plantId: PlantId): GetOperationsResult   = getOperationsResult
+    override def getOperation(id: OperationId): GetOperationResult      = getOperationResult
+    override def addOperation(operation: Operation): LogOperationResult =
       recordedOperations.updateAndGet(_ :+ operation).pipe(_ => addOperationResult)
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       updatedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => updateOperationResult)
-    override def removeOperation(id: OperationId): Either[Throwable, Unit] =
+    override def removeOperation(id: OperationId): OperationCompensationResult =
       removedOperations.updateAndGet(_ :+ id).pipe(_ => removeOperationResult)
-    override def restoreOperation(operation: Operation): Either[Throwable, Unit] =
+    override def restoreOperation(operation: Operation): OperationCompensationResult =
       restoredOperations.updateAndGet(_ :+ operation).pipe(_ => restoreOperationResult)
-    override def updatePlant(plant: Plant): Either[Throwable, Unit] =
+    override def updatePlant(plant: Plant): UpdatePlantResult =
       updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
