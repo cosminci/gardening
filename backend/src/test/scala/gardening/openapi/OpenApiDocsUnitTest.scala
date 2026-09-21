@@ -1,5 +1,6 @@
 package gardening.openapi
 
+import cats.syntax.either._
 import gardening.adapters.http.OpenApiDocs
 import io.circe.yaml.parser.parse
 
@@ -31,23 +32,10 @@ class OpenApiDocsUnitTest extends munit.FunSuite:
     assertEquals(responseCodes(paths, "/plants", "get"), Set("200", "default"))
     assertEquals(responseCodes(paths, "/plants/{plantId}/operations", "get"), Set("200", "default"))
     assertEquals(responseCodes(paths, "/plants/{plantId}/operations", "post"), Set("201", "400", "default"))
-    assertEquals(
-      responseCodes(paths, "/operations/{operationId}", "put"),
-      Set("200", "400", "404", "409", "500")
-    )
-    assertEquals(
-      paths
-        .downField("/operations/{operationId}")
-        .downField("put")
-        .downField("responses")
-        .downField("500")
-        .downField("content")
-        .downField("application/json")
-        .downField("schema")
-        .downField("$ref")
-        .as[String],
-      Right("#/components/schemas/ApiError")
-    )
+    assertEquals(responseCodes(paths, "/operations/{operationId}", "put"), Set("200", "400", "404", "409", "500"))
+    val serverErrors = paths.downField("/operations/{operationId}").downField("put").downField("responses").downField("500")
+    val errorSchema  = serverErrors.downField("content").downField("application/json").downField("schema").downField("$ref").as[String]
+    assertEquals(errorSchema, "#/components/schemas/ApiError".asRight)
 
   private def responseCodes(paths: io.circe.ACursor, path: String, method: String): Set[String] =
     paths.downField(path).downField(method).downField("responses").keys.fold(fail(s"$method $path responses missing"))(_.toSet)
