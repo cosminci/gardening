@@ -1,11 +1,17 @@
 package gardening.adapters.persistence
 
 import cats.syntax.eq.*
+import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
 import gardening.domain.EditOperationResult.*
 import gardening.domain.LogOperationResult.*
+import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
+import io.circe.parser.decode
+import io.circe.syntax.*
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
@@ -37,7 +43,7 @@ object SqlitePlantJournalStore:
 
     private def toPlant(row: PlantRow) =
       for
-        substrate <- decodeSubstrate(row.substrate)
+        substrate <- decode[Substrate](row.substrate).leftMap(invalidSubstrate)
         // The schema check constrains every stored status to a PlantStatus name.
         // $COVERAGE-OFF$
         status <- PlantStatus.values
@@ -70,7 +76,7 @@ object SqlitePlantJournalStore:
     private def toOperation(row: OperationRow) =
       for
         date    <- Try(Instant.parse(row.date)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: ${row.date}"))
-        details <- row.payload.decodeStoredOperation(row.kind)
+        details <- decodeOperationDetails(row.kind, row.payload)
       yield Operation(OperationId(row.id), PlantId(row.plantId), date, details)
 
     override def addOperation(operation: Operation): LogOperationResult =
@@ -80,8 +86,7 @@ object SqlitePlantJournalStore:
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation): Frag =
-      val operationKind = storedOperationKind(operation.details)
-      val payload       = encodeStoredOperation(operation.details)
+      val (operationKind, payload) = encodeOperationDetails(operation.details)
       sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $operationKind, $payload)"
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
@@ -101,8 +106,7 @@ object SqlitePlantJournalStore:
 
     override def restoreOperation(operation: Operation): OperationCompensationResult =
       try
-        val operationKind = storedOperationKind(operation.details)
-        val payload       = encodeStoredOperation(operation.details)
+        val (operationKind, payload) = encodeOperationDetails(operation.details)
         transact(transactor)(
           sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()
         ) match
@@ -200,14 +204,99 @@ object SqlitePlantJournalStore:
            set species = ${details.species.value},
                nickname = ${details.maybeNickname.map(_.value)},
                location = ${details.location.value},
-               substrate = ${encodeSubstrate(details.substrate).noSpaces},
+               substrate = ${details.substrate.asJson.noSpaces},
                status = ${details.status.toString}
            where id = ${plant.id.value}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails): Frag =
-      val operationKind = storedOperationKind(details)
-      val payload       = encodeStoredOperation(details)
+      val (operationKind, payload) = encodeOperationDetails(details)
       sql"update operation set kind = $operationKind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
+
+    private def encodeOperationDetails(details: OperationDetails) =
+      details match
+        case care: OperationDetails.Care   => "Care"  -> care.asJson.noSpaces
+        case repot: OperationDetails.Repot => "Repot" -> repot.asJson.noSpaces
+
+    private def decodeOperationDetails(kind: String, payload: String): Either[Throwable, OperationDetails] =
+      kind match
+        case "Care"  => decode[OperationDetails.Care](payload).leftMap(invalidOperationPayload)
+        case "Repot" => decode[OperationDetails.Repot](payload).leftMap(invalidOperationPayload)
+        // The schema check rejects operation kinds other than Care and Repot.
+        // $COVERAGE-OFF$
+        case _ => invalidOperationPayload(DecodingFailure("unknown operation kind", ops = Nil)).asLeft
+        // $COVERAGE-ON$
+
+    private def invalidOperationPayload(reason: io.circe.Error) =
+      RuntimeException(s"invalid stored operation payload: ${reason.getMessage}", reason)
+
+    private def invalidSubstrate(reason: io.circe.Error) =
+      RuntimeException(s"invalid stored substrate: ${reason.getMessage}", reason)
+
+    private given Codec[Note] = Codec.from(
+      Decoder.decodeString.map(Note.apply),
+      Encoder.encodeString.contramap(_.value)
+    )
+
+    private given Codec[SubstrateComponentId] = Codec.from(
+      Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid component id: $value")),
+      Encoder.encodeString.contramap(_.value.toString)
+    )
+
+    private given Codec[PesticideId] = Codec.from(
+      Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
+      Encoder.encodeString.contramap(_.value.toString)
+    )
+
+    private given Codec[Percentage] = Codec.from(
+      Decoder.decodeInt.emap(value =>
+        value
+          .refineOption[Interval.Closed[1, 100]]
+          .toRight(s"invalid share: $value")
+      ),
+      Encoder.encodeInt.contramap(value => value: Int)
+    )
+
+    private given Codec[ActionType] = Codec.from(
+      Decoder.decodeString.emap(value => ActionType.values.find(_.toString.equals(value)).toRight(s"invalid action: $value")),
+      Encoder.encodeString.contramap(_.toString)
+    )
+
+    private given Codec[MoistureLevel] = Codec.from(
+      Decoder.decodeString.emap(value => MoistureLevel.values.find(_.toString.equals(value)).toRight(s"invalid moisture: $value")),
+      Encoder.encodeString.contramap(_.toString)
+    )
+
+    private given Decoder[SubstratePart] =
+      Decoder.forProduct2("component", "share")(SubstratePart.apply)
+
+    private given Encoder[SubstratePart] =
+      Encoder.forProduct2("component", "share")(part => (part.componentId, part.share))
+
+    private given Decoder[Substrate] =
+      Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).leftMap(_.toString))
+
+    private given Encoder[Substrate] =
+      Encoder.encodeList[SubstratePart].contramap(_.parts)
+
+    private given Decoder[OperationDetails.Care] =
+      Decoder.forProduct4("actions", "pesticides", "moisture", "note"):
+        (actions: List[ActionType], pesticides: List[PesticideId], moisture: MoistureLevel, note: Option[Note]) =>
+          OperationDetails.Care(actions.toSet, pesticides.toSet, moisture, note)
+
+    private given Encoder[OperationDetails.Care] =
+      Encoder.forProduct4("actions", "pesticides", "moisture", "note"): care =>
+        (
+          care.actions.toList.sortBy(_.toString),
+          care.pesticides.toList.sortBy(_.value.toString),
+          care.moisture,
+          care.maybeNote
+        )
+
+    private given Decoder[OperationDetails.Repot] =
+      Decoder.forProduct2("substrate", "note")(OperationDetails.Repot.apply)
+
+    private given Encoder[OperationDetails.Repot] =
+      Encoder.forProduct2("substrate", "note")(repot => (repot.substrate, repot.maybeNote))
 
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)
       derives DbCodec

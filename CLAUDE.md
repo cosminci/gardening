@@ -22,5 +22,7 @@ All product changes go through the SDD skill (classify → spec → tests → im
 
 - Do not weaken a gate to make it pass: no lowering coverage thresholds, no `// scalafix:off`, no `eslint-disable`, no widening a formatter/scalafix/coverage exclusion to dodge a finding. If code is hard to test or lint, that is a design signal — fix the design, or move genuine glue into an existing imperative-shell exclusion — never relax the gate (see DESIGN-PRINCIPLES.md §6).
 - Do not introduce an effect system (Cats Effect, ZIO). The backend is direct-style on Loom; capabilities are injected with `using`.
+- Do not create catch-all utility classes, objects, or files named after vague implementation concepts such as `Helpers`, `Queries`, `StoredValues`, or `Payload`. Put logic in the concrete adapter or service that owns it behind an existing port; if no owner exists, identify the missing abstraction instead of inventing a miscellaneous container.
+- At serialization boundaries, prefer declarative library codecs/typeclasses owned privately by the concrete adapter over hand-written `encodeX`/`decodeX` function families.
 - Do not commit secrets. Publishing reads a `write:packages` GitHub PAT as a Dagger Secret (`--token=env:GITHUB_PERSONAL_PAT`); never embed or print it (see [ci/specs/operational.md](ci/specs/operational.md)).
 - Do not delete or move `plants/`, `guides/`, `shopping-list.md`, or `GARDEN-GUIDE.md` — they are the import source for a later feature.

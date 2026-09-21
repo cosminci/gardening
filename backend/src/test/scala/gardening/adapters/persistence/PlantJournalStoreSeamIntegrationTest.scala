@@ -63,10 +63,10 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       val allPlants = intercept[DatabaseCorruption](store.getPlants)
-      assertEquals(allPlants.err.getMessage, "invalid stored substrate: DuplicateComponent")
+      assertEquals(allPlants.err.getMessage, "invalid stored substrate: DecodingFailure at : DuplicateComponent")
 
       val plant = intercept[DatabaseCorruption](store.getPlant(PlantId("duplicate-components")))
-      assertEquals(plant.err.getMessage, "invalid stored substrate: DuplicateComponent")
+      assertEquals(plant.err.getMessage, "invalid stored substrate: DecodingFailure at : DuplicateComponent")
 
   test("should round-trip a care operation without changing plant substrate"):
     withStore: (dataSource, store) =>
@@ -193,10 +193,24 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       val operations = intercept[DatabaseCorruption](store.getOperations(PlantId("p1")))
-      assertEquals(operations.err.getMessage, "invalid stored substrate: DuplicateComponent")
+      assertEquals(operations.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
 
       val operation = intercept[DatabaseCorruption](store.getOperation(repot.id))
-      assertEquals(operation.err.getMessage, "invalid stored substrate: DuplicateComponent")
+      assertEquals(operation.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
+
+      val careOperation = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
+      assertEquals(store.addOperation(careOperation), LogOperationResult.Logged(careOperation.id))
+      updateOperationPayload(
+        dataSource,
+        id = careOperation.id.value,
+        payload = """{"actions":["Unknown"],"pesticides":[],"moisture":"Wet","note":null}"""
+      )
+
+      val invalidCare = intercept[DatabaseCorruption](store.getOperation(careOperation.id))
+      assertEquals(
+        invalidCare.err.getMessage,
+        "invalid stored operation payload: DecodingFailure at .actions[0]: invalid action: Unknown"
+      )
 
   test("should amend a repot without changing the plant"):
     withStore: (dataSource, store) =>
