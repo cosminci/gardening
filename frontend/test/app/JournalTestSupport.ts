@@ -1,9 +1,12 @@
 import type {
   ActionType,
+  EditOperationResult,
   GetOperationsResult,
   GetPlantsResult,
   JournalClient,
+  LogOperationResult,
   Operation,
+  OperationDetails,
   Plant,
 } from "../../src/domain/Journal";
 import {
@@ -72,21 +75,40 @@ export const repot = (id: string, date: string): Operation => ({
 export const buildJournal = ({
   getPlantsResult = { kind: "read", plants: [] },
   getOperationsByPlantId = {},
+  logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
+  editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  logged = [],
+  edited = [],
 }: {
   getPlantsResult?: GetPlantsResult;
-  getOperationsByPlantId?: Readonly<Record<string, GetOperationsResult>>;
+  getOperationsByPlantId?: Readonly<
+    Record<string, readonly [GetOperationsResult, ...GetOperationsResult[]]>
+  >;
+  logOperationResult?: LogOperationResult;
+  editOperationResult?: EditOperationResult;
+  logged?: { plantId: string; details: OperationDetails }[];
+  edited?: { operationId: string; details: OperationDetails }[];
 } = {}): JournalClient => {
+  const operationReads = new Map<string, number>();
+
   return {
     getPlants: () => Promise.resolve(getPlantsResult),
     getOperations: (id) => {
-      const result = getOperationsByPlantId[id];
-      return result === undefined
-        ? Promise.reject(new Error(`missing getOperations response for ${id}`))
-        : Promise.resolve(result);
+      const results = getOperationsByPlantId[id];
+      if (results === undefined)
+        return Promise.reject(new Error(`missing getOperations response for ${id}`));
+
+      const read = operationReads.get(id) ?? 0;
+      operationReads.set(id, read + 1);
+      return Promise.resolve(results[Math.min(read, results.length - 1)]!);
     },
-    logOperation: () =>
-      Promise.resolve({ kind: "loggingFailed", reason: new Error("unexpected write") }),
-    editOperation: () =>
-      Promise.resolve({ kind: "editFailed", reason: new Error("unexpected write") }),
+    logOperation: (id, details) => {
+      logged.push({ plantId: id, details });
+      return Promise.resolve(logOperationResult);
+    },
+    editOperation: (id, details) => {
+      edited.push({ operationId: id, details });
+      return Promise.resolve(editOperationResult);
+    },
   };
 };

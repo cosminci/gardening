@@ -14,8 +14,8 @@ describe("browsing the journal", () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [monstera(), ficus()] },
       getOperationsByPlantId: {
-        p1: { kind: "read", operations },
-        p2: { kind: "read", operations: [] },
+        p1: [{ kind: "read", operations }],
+        p2: [{ kind: "read", operations: [] }],
       },
     });
 
@@ -28,11 +28,11 @@ describe("browsing the journal", () => {
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
     expect(renderedOperations[0]).toHaveTextContent(
-      "2026-02-02CareMoistureModerate +ActionsNone recorded",
+      "2026-02-02EditCareMoistureModerate +ActionsNone recorded",
     );
-    expect(renderedOperations[1]).toHaveTextContent("2026-03-03RepotSubstratePerlite 100%");
+    expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
     expect(renderedOperations[2]).toHaveTextContent(
-      "2026-04-05CareMoistureWetActionsWateredNoteRecovered",
+      "2026-04-05EditCareMoistureWetActionsWateredNoteRecovered",
     );
     expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
       "datetime",
@@ -51,7 +51,7 @@ describe("browsing the journal", () => {
   it("should identify a journal containing one active plant", async () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: { kind: "read", operations: [] } },
+      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
     });
 
     render(() => <App journal={journal} />);
@@ -73,7 +73,7 @@ describe("browsing the journal", () => {
     const reason = new Error("private details");
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: { kind: "readFailed", reason } },
+      getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
     render(() => <App journal={journal} />);
@@ -112,12 +112,14 @@ describe("browsing the journal", () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
       getOperationsByPlantId: {
-        p1: {
-          kind: "corrupted",
-          details: [
-            { record: { kind: "operation", id: operation.id }, reason: new Error("corrupt") },
-          ],
-        },
+        p1: [
+          {
+            kind: "corrupted",
+            details: [
+              { record: { kind: "operation", id: operation.id }, reason: new Error("corrupt") },
+            ],
+          },
+        ],
       },
     });
 

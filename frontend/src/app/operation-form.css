@@ -1,0 +1,44 @@
+.operation-form {
+  display: grid;
+  gap: 1.15rem;
+  min-height: 100%;
+  padding: 2rem;
+}
+
+.operation-form__header {
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.operation-form__header h2 {
+  margin-bottom: 0.35rem;
+  font-size: 2rem;
+  letter-spacing: -0.025em;
+}
+
+.operation-form__header p:last-child {
+  margin-bottom: 0.8rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.operation-form [role="alert"] {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
+.operation-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 28rem) {
+  .operation-form {
+    padding: 1.25rem;
+  }
+}
