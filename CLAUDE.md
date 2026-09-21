@@ -24,5 +24,6 @@ All product changes go through the SDD skill (classify → spec → tests → im
 - Do not introduce an effect system (Cats Effect, ZIO). The backend is direct-style on Loom; capabilities are injected with `using`.
 - Do not create catch-all utility classes, objects, or files named after vague implementation concepts such as `Helpers`, `Queries`, `StoredValues`, or `Payload`. Put logic in the concrete adapter or service that owns it behind an existing port; if no owner exists, identify the missing abstraction instead of inventing a miscellaneous container.
 - At serialization boundaries, prefer declarative library codecs/typeclasses owned privately by the concrete adapter over hand-written `encodeX`/`decodeX` function families.
+- Keep behavioral test suites one-to-one with real runtime classes, objects, or traits. Extend the owning type's existing suite instead of creating feature-bucket suites that have no runtime counterpart.
 - Do not commit secrets. Publishing reads a `write:packages` GitHub PAT as a Dagger Secret (`--token=env:GITHUB_PERSONAL_PAT`); never embed or print it (see [ci/specs/operational.md](ci/specs/operational.md)).
 - Do not delete or move `plants/`, `guides/`, `shopping-list.md`, or `GARDEN-GUIDE.md` — they are the import source for a later feature.

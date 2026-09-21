@@ -14,7 +14,9 @@ import javax.sql.DataSource
 
 class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
-  private val date = Instant.parse("2026-01-01T00:00:00Z")
+  private val date        = Instant.parse("2026-01-01T00:00:00Z")
+  private val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
+  private val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
 
   private val care = OperationDetails.Care(
     actions = Set(ActionType.Watered, ActionType.Fertilized),
@@ -300,10 +302,92 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
           assertEquals(plant.details.substrate.parts, List(SubstratePart(TestNomenclatureIds.Perlite, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
-  test("should report an edit failure when the database is read-only"):
+  test("should seed, add, and edit substrate components"):
+    withStore: (_, store) =>
+      store.getSubstrateComponents match
+        case CatalogReadResult.Read(components) =>
+          assertEquals(
+            components.map(_.data.name.value),
+            Vector(
+              "Kekkila universal peat",
+              "Kekkila ericaceous peat",
+              "Perlite",
+              "Pine bark",
+              "Sand 3-5 mm",
+              "Sand 4-8 mm",
+              "LECA"
+            )
+          )
+        case other => fail(s"expected Read, got $other")
+
+      val added = SubstrateComponent(
+        componentId,
+        SubstrateComponentData(NomenclatureName("Pumice"), NomenclatureInfo("porous").some)
+      )
+      assertEquals(store.addSubstrateComponent(added), CatalogAddResult.Added(added))
+      store.getSubstrateComponents match
+        case CatalogReadResult.Read(components) =>
+          assertEquals(components.lastOption.map(_.data), added.data.some)
+        case other => fail(s"expected Read, got $other")
+      val editedData = SubstrateComponentData(NomenclatureName("Fine pumice"), none)
+      assertEquals(
+        store.editSubstrateComponent(componentId, editedData),
+        CatalogEditResult.Edited(added.copy(data = editedData))
+      )
+      assertEquals(
+        store.editSubstrateComponent(SubstrateComponentId(UUID.randomUUID()), editedData),
+        CatalogEditResult.RecordMissing
+      )
+      store.getSubstrateComponents match
+        case CatalogReadResult.Read(components) =>
+          assertEquals(components.lastOption.map(_.data), editedData.some)
+        case other => fail(s"expected Read, got $other")
+
+  test("should seed, add, and edit pesticides"):
+    withStore: (_, store) =>
+      store.getPesticides match
+        case CatalogReadResult.Read(pesticides) =>
+          assertEquals(
+            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType.value, pesticide.data.maybeInfo.map(_.value))),
+            Vector(
+              ("ORTIVA TOP", "Fungicide", "1ml/L".some),
+              ("SWITCH 62.5 WG", "Fungicide", none),
+              ("VERTAB", "Insecticide", "0.8ml/L".some),
+              ("SIMFONIA", "Insecticide", "organic".some),
+              ("SPRUZIT AF Neudorff", "Insecticide", none),
+              ("MOSPILAN 20SG", "Insecticide", none),
+              ("Neem oil + Catille soap", "Insecticide", "5ml:5ml:1L".some),
+              ("H2O2", "Treatment", none)
+            )
+          )
+        case other => fail(s"expected Read, got $other")
+
+      val added = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), none))
+      assertEquals(store.addPesticide(added), CatalogAddResult.Added(added))
+      val editedData = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType("Treatment"), NomenclatureInfo("2g/L").some)
+      assertEquals(store.editPesticide(pesticideId, editedData), CatalogEditResult.Edited(added.copy(data = editedData)))
+      assertEquals(
+        store.editPesticide(PesticideId(UUID.randomUUID()), editedData),
+        CatalogEditResult.RecordMissing
+      )
+
+  test("should fail when stored catalog identifiers are corrupt"):
+    withStore: (dataSource, store) =>
+      execute(dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Perlite'")
+      execute(dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'H2O2'")
+
+      assertEquals(
+        intercept[DatabaseCorruption](store.getSubstrateComponents).err.getMessage,
+        "invalid substrate component id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      )
+      assertEquals(intercept[DatabaseCorruption](store.getPesticides).err.getMessage, "invalid pesticide id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+  test("should report write failures when the database is read-only"):
     withStore: (dataSource, store) =>
       seedPlant(dataSource, id = "p1")
       val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+      val component = SubstrateComponent(componentId, SubstrateComponentData(NomenclatureName("Pumice"), none))
+      val pesticide = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), none))
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
       val readOnlyStore = SqlitePlantJournalStore.make(Transactor(dataSource, connectionConfig = makeReadOnly))
 
@@ -316,6 +400,18 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       readOnlyStore.updatePlant(plant()) match
         case UpdatePlantResult.UpdateFailed(_) => ()
         case other                             => fail(s"expected UpdateFailed, got $other")
+      readOnlyStore.addSubstrateComponent(component) match
+        case CatalogAddResult.AddFailed(_) => ()
+        case other                         => fail(s"expected AddFailed, got $other")
+      readOnlyStore.editSubstrateComponent(TestNomenclatureIds.Perlite, component.data) match
+        case CatalogEditResult.EditFailed(_) => ()
+        case other                           => fail(s"expected EditFailed, got $other")
+      readOnlyStore.addPesticide(pesticide) match
+        case CatalogAddResult.AddFailed(_) => ()
+        case other                         => fail(s"expected AddFailed, got $other")
+      readOnlyStore.editPesticide(pesticideId, pesticide.data) match
+        case CatalogEditResult.EditFailed(_) => ()
+        case other                           => fail(s"expected EditFailed, got $other")
 
   test("should return read failures when the journal schema is unavailable"):
     val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
@@ -333,6 +429,12 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       store.getOperation(OperationId("o1")) match
         case GetOperationResult.ReadFailed(_) => ()
         case other                            => fail(s"expected ReadFailed, got $other")
+      store.getSubstrateComponents match
+        case CatalogReadResult.ReadFailed(_) => ()
+        case other                           => fail(s"expected ReadFailed, got $other")
+      store.getPesticides match
+        case CatalogReadResult.ReadFailed(_) => ()
+        case other                           => fail(s"expected ReadFailed, got $other")
     finally connection.close()
 
   private def withStore(test: (DataSource, PlantJournalStore) => Unit): Unit =
