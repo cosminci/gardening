@@ -1,0 +1,89 @@
+import type {
+  GetOperationsResult,
+  GetPlantsResult,
+  JournalClient,
+  Operation,
+  Plant,
+} from "../../src/domain/Journal";
+import {
+  instant,
+  location,
+  nickname,
+  note,
+  operationId,
+  percentage,
+  plantId,
+  species,
+  substrate,
+} from "../../src/domain/Journal";
+
+export const ficus = (): Plant => ({
+  id: plantId("p1"),
+  details: {
+    species: species("Ficus lyrata"),
+    maybeNickname: nickname("Fern"),
+    location: location("Balcony"),
+    substrate: substrate([{ component: "perlite", share: percentage(100) }]),
+    status: "active",
+  },
+});
+
+export const monstera = (): Plant => ({
+  id: plantId("p2"),
+  details: {
+    species: species("Monstera deliciosa"),
+    maybeNickname: null,
+    location: location("Kitchen"),
+    substrate: substrate([{ component: "pineBark", share: percentage(40) }]),
+    status: "active",
+  },
+});
+
+export const care = (
+  id: string,
+  date: string,
+  moisture: "dry" | "moderatePlus" | "wet",
+  maybeNote: string | null = null,
+): Operation => ({
+  id: operationId(id),
+  plantId: plantId("p1"),
+  date: instant(date),
+  details: {
+    kind: "care",
+    actions: new Set(["watered"]),
+    moisture,
+    maybeNote: maybeNote === null ? null : note(maybeNote),
+  },
+});
+
+export const repot = (id: string, date: string): Operation => ({
+  id: operationId(id),
+  plantId: plantId("p1"),
+  date: instant(date),
+  details: {
+    kind: "repot",
+    substrate: substrate([{ component: "perlite", share: percentage(100) }]),
+    maybeNote: null,
+  },
+});
+
+export const buildJournal = ({
+  getPlantsResult = { kind: "read", plants: [] },
+  getOperationsResults = [{ kind: "read", operations: [] }],
+}: {
+  getPlantsResult?: GetPlantsResult;
+  getOperationsResults?: GetOperationsResult[];
+} = {}): JournalClient => {
+  let operationRead = 0;
+  return {
+    getPlants: () => Promise.resolve(getPlantsResult),
+    getOperations: () =>
+      Promise.resolve(
+        getOperationsResults[Math.min(operationRead++, getOperationsResults.length - 1)]!,
+      ),
+    logOperation: () =>
+      Promise.resolve({ kind: "loggingFailed", reason: new Error("unexpected write") }),
+    editOperation: () =>
+      Promise.resolve({ kind: "editFailed", reason: new Error("unexpected write") }),
+  };
+};
