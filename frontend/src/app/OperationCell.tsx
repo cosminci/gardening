@@ -1,22 +1,22 @@
 import { Show } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  ActionType,
-  MoistureLevel,
-  Operation,
-  OperationDetails,
-  Substrate,
-} from "../domain/Journal";
+import type { Operation, OperationDetails } from "../domain/Journal";
+import { actionLabels, formatSubstrate, moistureLabels } from "./JournalLabels";
+import { editOperationControlId } from "./OperationControlIds";
 
 interface OperationCellProps {
   readonly operation: Operation;
+  readonly position: number;
+  readonly onEdit: () => void;
 }
 
 export const OperationCell: Component<OperationCellProps> = (props) => {
+  const date = () => formatLocalDate(props.operation.date);
+
   return (
     <li class={`operation operation--${props.operation.details.kind}`}>
       <div class="operation__header">
-        <time dateTime={props.operation.date}>{formatLocalDate(props.operation.date)}</time>
+        <time dateTime={props.operation.date}>{date()}</time>
         <span class="operation__kind">
           {props.operation.details.kind === "care" ? "Care" : "Repot"}
         </span>
@@ -32,6 +32,17 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
           )}
         </Show>
       </dl>
+      <button
+        id={editOperationControlId(props.operation.id)}
+        class="text-action"
+        type="button"
+        aria-label={`Edit ${props.operation.details.kind} operation ${String(props.position)} from ${date()}`}
+        onClick={() => {
+          props.onEdit();
+        }}
+      >
+        Edit
+      </button>
     </li>
   );
 };
@@ -68,30 +79,3 @@ const formatLocalDate = (value: string) => {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-
-export const formatSubstrate = (value: Substrate) =>
-  value.map((part) => `${componentLabels[part.component]} ${String(part.share)}%`).join(", ");
-
-const actionLabels: Record<ActionType, string> = {
-  watered: "Watered",
-  fertilized: "Fertilized",
-  pesticide: "Insecticide / H2O2",
-  pruned: "Pruned",
-  noAction: "None",
-};
-const moistureLabels: Record<MoistureLevel, string> = {
-  wet: "Wet",
-  moderatePlus: "Moderate +",
-  moderateMinus: "Moderate -",
-  dry: "Dry",
-  noReading: "N/A",
-};
-const componentLabels = {
-  kekkilaUniversal: "Kekkila universal peat",
-  kekkilaEricaceous: "Kekkila ericaceous peat",
-  perlite: "Perlite",
-  pineBark: "Pine bark",
-  sand3to5: "Sand 3-5 mm",
-  sand4to8: "Sand 4-8 mm",
-  leca: "LECA",
-} as const;

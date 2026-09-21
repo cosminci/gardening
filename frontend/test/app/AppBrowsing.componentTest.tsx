@@ -14,8 +14,8 @@ describe("browsing the journal", () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [monstera(), ficus()] },
       getOperationsByPlantId: {
-        p1: { kind: "read", operations },
-        p2: { kind: "read", operations: [] },
+        p1: [{ kind: "read", operations }],
+        p2: [{ kind: "read", operations: [] }],
       },
     });
 
@@ -51,7 +51,7 @@ describe("browsing the journal", () => {
   it("should identify a journal containing one active plant", async () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: { kind: "read", operations: [] } },
+      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
     });
 
     render(() => <App journal={journal} />);
@@ -73,7 +73,7 @@ describe("browsing the journal", () => {
     const reason = new Error("private details");
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: { kind: "readFailed", reason } },
+      getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
     render(() => <App journal={journal} />);
@@ -112,12 +112,14 @@ describe("browsing the journal", () => {
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
       getOperationsByPlantId: {
-        p1: {
-          kind: "corrupted",
-          details: [
-            { record: { kind: "operation", id: operation.id }, reason: new Error("corrupt") },
-          ],
-        },
+        p1: [
+          {
+            kind: "corrupted",
+            details: [
+              { record: { kind: "operation", id: operation.id }, reason: new Error("corrupt") },
+            ],
+          },
+        ],
       },
     });
 

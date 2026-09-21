@@ -1,17 +1,21 @@
 import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
 import type { Operation, Plant } from "../domain/Journal";
-import { OperationCell, formatSubstrate } from "./OperationCell";
+import { formatSubstrate, plantDisplayName } from "./JournalLabels";
+import { logOperationControlId } from "./OperationControlIds";
+import { OperationCell } from "./OperationCell";
 import "./plant-card.css";
 import "./plant-history.css";
 
 interface PlantCardProps {
   readonly plant: Plant;
   readonly operations: readonly Operation[];
+  readonly onLog: () => void;
+  readonly onEdit: (operation: Operation) => void;
 }
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
-  const name = () => props.plant.details.maybeNickname ?? props.plant.details.species;
+  const name = () => plantDisplayName(props.plant);
   const recentOperations = () =>
     [...props.operations]
       .sort((first, second) => Date.parse(first.date) - Date.parse(second.date))
@@ -42,10 +46,30 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
       >
         <ol class="operation-list" aria-label="Recent operations" role="list">
           <For each={recentOperations()}>
-            {(operation) => <OperationCell operation={operation} />}
+            {(operation, index) => (
+              <OperationCell
+                operation={operation}
+                position={index() + 1}
+                onEdit={() => {
+                  props.onEdit(operation);
+                }}
+              />
+            )}
           </For>
         </ol>
       </Show>
+      <button
+        id={logOperationControlId(props.plant.id)}
+        class="add-operation"
+        type="button"
+        aria-label={`Log operation for ${name()}`}
+        title={`Add operation for ${name()}`}
+        onClick={() => {
+          props.onLog();
+        }}
+      >
+        <span aria-hidden="true">+</span>
+      </button>
     </article>
   );
 };

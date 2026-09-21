@@ -1,0 +1,148 @@
+import { Show, createSignal } from "solid-js";
+import type { Component } from "solid-js";
+import type { ActionType, OperationDetails } from "../domain/Journal";
+import { note, percentage, substrate } from "../domain/Journal";
+import { CareFields } from "./CareFields";
+import { SubstrateFields } from "./SubstrateFields";
+import type { SubstratePartInput } from "./SubstrateFields";
+import "./form-fields.css";
+import "./operation-form.css";
+
+interface OperationFormProps {
+  readonly initial: OperationDetails | undefined;
+  readonly onSubmit: (details: OperationDetails) => Promise<void>;
+  readonly onCancel: () => void;
+}
+
+export const OperationForm: Component<OperationFormProps> = (props) => {
+  const [kind, setKind] = createSignal(props.initial?.kind ?? "care");
+  const [actions, setActions] = createSignal(
+    props.initial?.kind === "care" ? new Set(props.initial.actions) : new Set<ActionType>(),
+  );
+  const [moisture, setMoisture] = createSignal(
+    props.initial?.kind === "care" ? props.initial.moisture : "noReading",
+  );
+  const [parts, setParts] = createSignal<SubstratePartInput[]>(
+    props.initial?.kind === "repot"
+      ? props.initial.substrate.map((part) => ({ component: part.component, share: part.share }))
+      : [{ component: "perlite", share: 100 }],
+  );
+  const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
+  const [validationError, setValidationError] = createSignal<string>();
+  const [submitting, setSubmitting] = createSignal(false);
+
+  const toggleAction = (action: ActionType, checked: boolean) =>
+    setActions((current) => {
+      const updated = new Set(current);
+      if (checked && action === "noAction") return new Set(["noAction"]);
+      if (checked) {
+        updated.delete("noAction");
+        updated.add(action);
+      } else updated.delete(action);
+      return updated;
+    });
+
+  const submit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const error = kind() === "repot" ? validateSubstrate(parts()) : undefined;
+    setValidationError(error);
+    if (error !== undefined) return;
+
+    const maybeNote = notes().trim() === "" ? null : note(notes().trim());
+    const details: OperationDetails =
+      kind() === "care"
+        ? { kind: "care", actions: actions(), moisture: moisture(), maybeNote }
+        : {
+            kind: "repot",
+            substrate: substrate(
+              parts().map((part) => ({ component: part.component, share: percentage(part.share) })),
+            ),
+            maybeNote,
+          };
+    setSubmitting(true);
+    try {
+      await props.onSubmit(details);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form
+      class="operation-form"
+      aria-label={props.initial === undefined ? "Log operation" : "Edit operation"}
+      onSubmit={(event) => void submit(event)}
+    >
+      <header class="operation-form__header">
+        <div>
+          <p class="eyebrow">{props.initial === undefined ? "New journal entry" : "Amend entry"}</p>
+          <h2>{props.initial === undefined ? "Log plant care" : "Edit operation"}</h2>
+          <p>Record what changed while the details are still fresh.</p>
+        </div>
+      </header>
+
+      <label class="field">
+        <span>Operation type</span>
+        <select
+          aria-label="Operation type"
+          disabled={props.initial !== undefined}
+          value={kind()}
+          onChange={(event) => setKind(event.currentTarget.value as OperationDetails["kind"])}
+        >
+          <option value="care">Care</option>
+          <option value="repot">Repot</option>
+        </select>
+      </label>
+
+      <Show
+        when={kind() === "care"}
+        fallback={<SubstrateFields parts={parts()} onChange={setParts} />}
+      >
+        <CareFields
+          actions={actions()}
+          moisture={moisture()}
+          onActionChange={toggleAction}
+          onMoistureChange={setMoisture}
+        />
+      </Show>
+
+      <label class="field">
+        <span>Notes</span>
+        <textarea
+          aria-label="Notes"
+          placeholder="Optional observations, quantities, or follow-up…"
+          rows="4"
+          value={notes()}
+          onInput={(event) => {
+            setNotes(event.currentTarget.value);
+          }}
+        />
+      </label>
+      <Show when={validationError()}>{(error) => <p role="alert">{error()}</p>}</Show>
+      <footer class="operation-form__actions">
+        <button
+          class="secondary-action"
+          type="button"
+          onClick={() => {
+            props.onCancel();
+          }}
+        >
+          Cancel
+        </button>
+        <button class="primary-action" type="submit" disabled={submitting()}>
+          {submitting() ? "Saving…" : "Save operation"}
+        </button>
+      </footer>
+    </form>
+  );
+};
+
+const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
+  if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
+    return "Each substrate share must be a whole number from 1 to 100%.";
+  if (new Set(parts.map((part) => part.component)).size !== parts.length)
+    return "Each substrate component can only be used once.";
+  if (parts.reduce((total, part) => total + part.share, 0) > 100)
+    return "Substrate shares cannot total more than 100%.";
+  return undefined;
+};

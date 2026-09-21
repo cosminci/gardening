@@ -1,6 +1,6 @@
 .plant-card {
   display: grid;
-  grid-template-columns: minmax(13rem, 1.3fr) minmax(0, 3fr);
+  grid-template-columns: minmax(13rem, 1.3fr) minmax(0, 3fr) 3.25rem;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 1rem;
@@ -51,12 +51,35 @@
   margin: 0;
 }
 
+.add-operation {
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--line);
+  color: var(--leaf);
+  background: #f8f6ee;
+  font-size: 1.35rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.add-operation:hover {
+  color: #fff;
+  background: var(--leaf);
+}
+
 @media (max-width: 46rem) {
   .plant-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 3rem;
   }
 
   .plant-summary {
     border-right: 0;
+  }
+
+  .add-operation {
+    grid-column: 2;
+    grid-row: 1;
   }
 }

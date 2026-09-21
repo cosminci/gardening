@@ -1,0 +1,31 @@
+.sheet-layer {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+}
+
+.sheet-layer__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(18 38 31 / 42%);
+  backdrop-filter: blur(2px);
+}
+
+.sheet {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(31rem, 100%);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--paper);
+  box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
+}
+
+.inline-alert {
+  margin: 0 2rem 2rem;
+  padding: 0.75rem;
+  border-radius: 0.55rem;
+  color: var(--danger);
+  background: #fae9e5;
+}

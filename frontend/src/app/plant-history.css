@@ -66,6 +66,10 @@
   margin: 0;
 }
 
+.operation .text-action {
+  margin-top: auto;
+}
+
 .operation + .operation {
   border-left: 1px solid var(--line);
 }
