@@ -14,7 +14,10 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
   const date = () => formatLocalDate(props.operation.date);
 
   return (
-    <li class={`operation operation--${props.operation.details.kind}`}>
+    <li
+      class={`operation operation--${props.operation.details.kind}`}
+      style={{ "view-transition-name": `journal-operation-${props.operation.id}` }}
+    >
       <div class="operation__header">
         <time dateTime={props.operation.date}>{date()}</time>
         <button

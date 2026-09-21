@@ -42,22 +42,10 @@ main {
 
 .masthead {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 1rem;
   margin-bottom: 2rem;
-}
-
-.brand-mark {
-  display: grid;
-  width: 3.25rem;
-  height: 3.25rem;
-  place-items: center;
-  border-radius: 1rem 1rem 1rem 0;
-  color: #fff;
-  background: var(--leaf-dark);
-  font-family: Georgia, serif;
-  font-size: 1.65rem;
 }
 
 .eyebrow {
@@ -138,7 +126,7 @@ h1 {
   }
 
   .masthead {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 1fr;
   }
 
   .masthead__summary,

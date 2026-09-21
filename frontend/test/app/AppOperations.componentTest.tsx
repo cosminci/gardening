@@ -1,12 +1,22 @@
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/app/App";
 import type { OperationDetails } from "../../src/domain/Journal";
 import { note, operationId, percentage, substrate } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, repot } from "./JournalTestSupport";
 
+afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
+
 describe("changing the journal", () => {
   it("should log care and refresh the plant's operation history", async () => {
+    const startViewTransition = vi.fn((update: () => void) => {
+      update();
+      return { updateCallbackDone: Promise.resolve() } as ViewTransition;
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: startViewTransition,
+    });
     const logged: { plantId: string; details: OperationDetails }[] = [];
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
@@ -38,6 +48,7 @@ describe("changing the journal", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Log operation for Fern" })).toHaveFocus();
     });
+    expect(startViewTransition).toHaveBeenCalledOnce();
     expect(logged).toEqual([
       {
         plantId: "p1",

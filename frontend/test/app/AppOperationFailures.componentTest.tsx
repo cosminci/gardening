@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/app/App";
 import { operationId } from "../../src/domain/Journal";
 import { buildJournal, ficus } from "./JournalTestSupport";
+
+afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
 describe("operation failures", () => {
   it("should report a logging failure without showing its reason", async () => {
@@ -66,6 +68,11 @@ describe("operation failures", () => {
   });
 
   it("should not close a new form when an earlier save completes", async () => {
+    const startViewTransition = vi.fn();
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: startViewTransition,
+    });
     let finishSaving: (result: {
       kind: "logged";
       id: ReturnType<typeof operationId>;
@@ -101,5 +108,6 @@ describe("operation failures", () => {
       expect(plantReads).toBe(2);
       expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
     });
+    expect(startViewTransition).not.toHaveBeenCalled();
   });
 });

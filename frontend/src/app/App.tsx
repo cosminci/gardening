@@ -2,6 +2,7 @@ import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type { JournalClient, Operation, OperationDetails, Plant } from "../domain/Journal";
 import { JournalHeader } from "./JournalHeader";
+import { displayJournalUpdate } from "./JournalTransition";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
@@ -24,7 +25,7 @@ export const App: Component<AppProps> = (props) => {
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
 
-  const loadJournal = async () => {
+  const loadJournal = async (animate = false) => {
     const journal = props.journal;
     const plantsResult = await journal.getPlants();
     if (plantsResult.kind !== "read") {
@@ -47,8 +48,11 @@ export const App: Component<AppProps> = (props) => {
         return;
       }
     loaded.sort((first, second) => name(first.plant).localeCompare(name(second.plant)));
-    setHistories(loaded);
-    setView("loaded");
+    const display = () => {
+      setHistories(loaded);
+      setView("loaded");
+    };
+    await displayJournalUpdate(animate && formTarget() === undefined, display);
   };
 
   const saveOperation = async (target: OperationTarget, details: OperationDetails) => {
@@ -81,7 +85,7 @@ export const App: Component<AppProps> = (props) => {
       setFormTarget(undefined);
       setSaveError(undefined);
     }
-    await loadJournal().catch(() => {
+    await loadJournal(target.kind === "log").catch(() => {
       setView("failed");
     });
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
