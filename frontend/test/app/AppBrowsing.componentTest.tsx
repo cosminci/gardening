@@ -28,11 +28,11 @@ describe("browsing the journal", () => {
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
     expect(renderedOperations[0]).toHaveTextContent(
-      "2026-02-02CareMoistureModerate +ActionsNone recorded",
+      "2026-02-02EditCareMoistureModerate +ActionsNone recorded",
     );
-    expect(renderedOperations[1]).toHaveTextContent("2026-03-03RepotSubstratePerlite 100%");
+    expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
     expect(renderedOperations[2]).toHaveTextContent(
-      "2026-04-05CareMoistureWetActionsWateredNoteRecovered",
+      "2026-04-05EditCareMoistureWetActionsWateredNoteRecovered",
     );
     expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
       "datetime",

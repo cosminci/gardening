@@ -23,12 +23,28 @@
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
 }
 
 .operation__header time {
+  margin-right: auto;
   font-weight: 750;
+}
+
+.operation__edit {
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  color: var(--leaf);
+  background: #fff;
+  font-size: 0.62rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.operation__edit:hover {
+  border-color: var(--leaf);
+  background: var(--sage);
 }
 
 .operation__kind {
@@ -64,10 +80,6 @@
 .operation__details dd {
   min-width: 0;
   margin: 0;
-}
-
-.operation .text-action {
-  margin-top: auto;
 }
 
 .operation + .operation {

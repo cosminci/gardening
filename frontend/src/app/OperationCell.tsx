@@ -17,6 +17,17 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
     <li class={`operation operation--${props.operation.details.kind}`}>
       <div class="operation__header">
         <time dateTime={props.operation.date}>{date()}</time>
+        <button
+          id={editOperationControlId(props.operation.id)}
+          class="operation__edit"
+          type="button"
+          aria-label={`Edit ${props.operation.details.kind} operation ${String(props.position)} from ${date()}`}
+          onClick={() => {
+            props.onEdit();
+          }}
+        >
+          Edit
+        </button>
         <span class="operation__kind">
           {props.operation.details.kind === "care" ? "Care" : "Repot"}
         </span>
@@ -32,17 +43,6 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
           )}
         </Show>
       </dl>
-      <button
-        id={editOperationControlId(props.operation.id)}
-        class="text-action"
-        type="button"
-        aria-label={`Edit ${props.operation.details.kind} operation ${String(props.position)} from ${date()}`}
-        onClick={() => {
-          props.onEdit();
-        }}
-      >
-        Edit
-      </button>
     </li>
   );
 };
