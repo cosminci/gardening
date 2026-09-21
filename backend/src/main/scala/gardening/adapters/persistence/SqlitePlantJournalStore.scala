@@ -6,7 +6,6 @@ import cats.syntax.either.*
 import cats.syntax.eq.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
-import gardening.adapters.persistence.StoredOperationPayload.*
 import gardening.domain.*
 import gardening.domain.EditOperationResult.*
 import gardening.domain.LogOperationResult.*
@@ -94,9 +93,9 @@ object SqlitePlantJournalStore:
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation): Frag =
-      val kind    = StoredOperationPayload.kind(operation.details)
-      val payload = StoredOperationPayload.encode(operation.details)
-      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $kind, $payload)"
+      val operationKind = kind(operation.details)
+      val payload       = encode(operation.details)
+      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $operationKind, $payload)"
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
@@ -115,9 +114,11 @@ object SqlitePlantJournalStore:
 
     override def restoreOperation(operation: Operation): OperationCompensationResult =
       try
-        val kind    = StoredOperationPayload.kind(operation.details)
-        val payload = StoredOperationPayload.encode(operation.details)
-        transact(transactor)(sql"update operation set kind = $kind, payload = $payload where id = ${operation.id.value}".update.run()) match
+        val operationKind = kind(operation.details)
+        val payload       = encode(operation.details)
+        transact(transactor)(
+          sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()
+        ) match
           case 1 => OperationCompensationResult.Compensated
           case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
@@ -210,9 +211,9 @@ object SqlitePlantJournalStore:
            where id = ${plant.id.value}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails): Frag =
-      val kind    = StoredOperationPayload.kind(details)
-      val payload = StoredOperationPayload.encode(details)
-      sql"update operation set kind = $kind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
+      val operationKind = kind(details)
+      val payload       = encode(details)
+      sql"update operation set kind = $operationKind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
 
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)
       derives DbCodec

@@ -1,6 +1,5 @@
 package gardening.adapters.persistence
 
-import gardening.adapters.persistence.StoredOperationPayload.*
 import io.circe.Json
 
 class StoredOperationPayloadUnitTest extends munit.FunSuite:

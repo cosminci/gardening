@@ -1,4 +1,4 @@
-package gardening.adapters.persistence
+package gardening.adapters
 
 import cats.data.ValidatedNel
 import cats.syntax.apply.*
@@ -12,7 +12,7 @@ import io.circe.parser.parse
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
 
-private[persistence] object StoredOperationPayload:
+package object persistence:
 
   def kind(details: OperationDetails): String =
     details match
@@ -36,14 +36,12 @@ private[persistence] object StoredOperationPayload:
     ).noSpaces
 
   def encodeSubstrate(substrate: Substrate): Json =
-    Json.arr(
-      substrate.parts.map(part =>
-        Json.obj(
-          "component" -> Json.fromString(part.componentId.value.toString),
-          "share"     -> Json.fromInt(part.share)
-        )
-      )*
-    )
+    def buildPartJson(part: SubstratePart) =
+      Json.obj(
+        "component" -> Json.fromString(part.componentId.value.toString),
+        "share"     -> Json.fromInt(part.share)
+      )
+    Json.arr(substrate.parts.map(part => buildPartJson(part))*)
 
   def decodeSubstrate(encoded: String): Either[Throwable, Substrate] =
     // SQLite's json_valid constraint prevents this parse failure for persisted plants.
