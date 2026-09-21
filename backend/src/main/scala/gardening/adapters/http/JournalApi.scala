@@ -17,12 +17,11 @@ import java.time.Instant
 import scala.deriving.Mirror
 import scala.util.Try
 
-final private case class ApiError(message: String) derives Codec.AsObject
 final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object JournalApi:
 
-  private val journalEndpoint   = endpoint.errorOut(statusCode.and(jsonBody[ApiError]))
+  private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
   private val getPlantsEndpoint =
     journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
 
@@ -34,7 +33,8 @@ object JournalApi:
       .out(statusCode(StatusCode.Created)).out(jsonBody[LoggedOperation]).summary("Log a plant operation")
 
   private val editOperationEndpoint =
-    journalEndpoint.put.in("operations" / path[String]("operationId")).in(jsonBody[OperationDetails])
+    endpoint.put.in("operations" / path[String]("operationId")).in(jsonBody[OperationDetails])
+      .errorOut(JournalError.edit)
       .out(jsonBody[Operation]).summary("Edit a plant operation")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
@@ -63,11 +63,11 @@ object JournalApi:
           case EditOperationResult.Edited(operation) =>
             operation.asRight
           case EditOperationResult.OperationMissing =>
-            (StatusCode.NotFound, ApiError("operation not found")).asLeft
+            JournalError.operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch =>
-            (StatusCode.Conflict, ApiError("operation type cannot be changed")).asLeft
+            JournalError.operationTypeMismatch.asLeft
           case EditOperationResult.Corrupted(_) | EditOperationResult.EditFailed(_) =>
-            (StatusCode.InternalServerError, ApiError("operation could not be edited")).asLeft
+            JournalError.editFailed.asLeft
     )
 
   private given circeConfiguration: CirceConfiguration =
