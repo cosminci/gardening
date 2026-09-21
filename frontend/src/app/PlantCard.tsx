@@ -36,11 +36,11 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         when={recentOperations().length > 0}
         fallback={
           <p class="empty-history">
-            <span>No operations yet.</span> Add the first care entry.
+            <span>No operations yet.</span>
           </p>
         }
       >
-        <ol class="operation-list">
+        <ol class="operation-list" aria-label="Recent operations" role="list">
           <For each={recentOperations()}>
             {(operation) => <OperationCell operation={operation} />}
           </For>

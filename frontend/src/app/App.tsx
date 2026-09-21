@@ -41,11 +41,16 @@ export const App: Component<AppProps> = (props) => {
         setView("failed");
         return;
       }
+    loaded.sort((first, second) => plantName(first.plant).localeCompare(plantName(second.plant)));
     setHistories(loaded);
     setView("loaded");
   };
 
-  onMount(() => void loadJournal());
+  onMount(() => {
+    void loadJournal().catch(() => {
+      setView("failed");
+    });
+  });
 
   return (
     <main>
@@ -85,3 +90,5 @@ export const App: Component<AppProps> = (props) => {
     </main>
   );
 };
+
+const plantName = (plant: Plant) => plant.details.maybeNickname ?? plant.details.species;

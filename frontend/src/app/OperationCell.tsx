@@ -16,7 +16,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
   return (
     <li class={`operation operation--${props.operation.details.kind}`}>
       <div class="operation__header">
-        <time dateTime={props.operation.date}>{props.operation.date.slice(0, 10)}</time>
+        <time dateTime={props.operation.date}>{formatLocalDate(props.operation.date)}</time>
         <span class="operation__kind">
           {props.operation.details.kind === "care" ? "Care" : "Repot"}
         </span>
@@ -59,6 +59,14 @@ const renderDetails = (details: OperationDetails) => {
         </>
       );
   }
+};
+
+const formatLocalDate = (value: string) => {
+  const date = new Date(value);
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 export const formatSubstrate = (value: Substrate) =>

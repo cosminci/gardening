@@ -71,18 +71,19 @@ export const repot = (id: string, date: string): Operation => ({
 
 export const buildJournal = ({
   getPlantsResult = { kind: "read", plants: [] },
-  getOperationsResults = [{ kind: "read", operations: [] }],
+  getOperationsByPlantId = {},
 }: {
   getPlantsResult?: GetPlantsResult;
-  getOperationsResults?: GetOperationsResult[];
+  getOperationsByPlantId?: Readonly<Record<string, GetOperationsResult>>;
 } = {}): JournalClient => {
-  let operationRead = 0;
   return {
     getPlants: () => Promise.resolve(getPlantsResult),
-    getOperations: () =>
-      Promise.resolve(
-        getOperationsResults[Math.min(operationRead++, getOperationsResults.length - 1)]!,
-      ),
+    getOperations: (id) => {
+      const result = getOperationsByPlantId[id];
+      return result === undefined
+        ? Promise.reject(new Error(`missing getOperations response for ${id}`))
+        : Promise.resolve(result);
+    },
     logOperation: () =>
       Promise.resolve({ kind: "loggingFailed", reason: new Error("unexpected write") }),
     editOperation: () =>
