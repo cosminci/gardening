@@ -68,6 +68,13 @@ select:disabled {
   position: relative;
 }
 
+.choice-with-info {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .choice input {
   position: absolute;
   opacity: 0;
@@ -97,11 +104,78 @@ select:disabled {
   outline-offset: 2px;
 }
 
+.info-control {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.info-control__trigger {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--leaf);
+  background: #fff;
+  font-family: Georgia, serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.info-control__trigger:hover,
+.info-control__trigger:focus-visible {
+  border-color: var(--leaf);
+  background: var(--sage);
+}
+
+.info-control__content {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  right: 0;
+  width: max-content;
+  max-width: min(20rem, 78vw);
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  visibility: hidden;
+  opacity: 0;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(14 37 28 / 16%);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.4;
+  pointer-events: auto;
+  white-space: pre-wrap;
+  transition: opacity 120ms ease;
+}
+
+.info-control:hover .info-control__content,
+.info-control:focus-within .info-control__content {
+  visibility: visible;
+  opacity: 1;
+}
+
 .substrate-row {
   display: grid;
   grid-template-columns: 1fr 5rem 2.4rem;
   align-items: end;
   gap: 0.5rem;
+}
+
+.substrate-component {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  align-items: end;
+  gap: 0.35rem;
+}
+
+.substrate-component .info-control {
+  min-height: 2.7rem;
 }
 
 .add-component {

@@ -15,8 +15,8 @@ import type {
 } from "../domain/Journal";
 import { editOperationControlId, logOperationControlId } from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
-import { PesticideCatalogForm } from "./PesticideCatalogForm";
-import { SubstrateCatalogForm } from "./SubstrateCatalogForm";
+import { PesticideCatalog, PesticideCatalogEditor } from "./PesticideCatalog";
+import { SubstrateCatalog, SubstrateCatalogEditor } from "./SubstrateCatalog";
 import "./catalog-form.css";
 import "./sheet.css";
 
@@ -50,9 +50,14 @@ interface OperationSheetProps {
   readonly onCancel: () => void;
 }
 
+type CatalogEditor =
+  | { readonly kind: "substrate"; readonly component: SubstrateComponent | undefined }
+  | { readonly kind: "pesticide"; readonly pesticide: Pesticide | undefined };
+
 export const OperationSheet: Component<OperationSheetProps> = (props) => {
   let dialog!: HTMLElement;
   const [catalog, setCatalog] = createSignal<"substrate" | "pesticide">();
+  const [editor, setEditor] = createSignal<CatalogEditor>();
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
@@ -60,7 +65,23 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   const closeCatalog = () => {
     const controlId =
       catalog() === "substrate" ? "manage-substrate-components" : "manage-pesticides";
+    setEditor(undefined);
     setCatalog(undefined);
+    queueMicrotask(() => {
+      document.getElementById(controlId)?.focus();
+    });
+  };
+
+  const closeEditor = (current: CatalogEditor) => {
+    const controlId =
+      current.kind === "substrate"
+        ? current.component === undefined
+          ? "add-substrate-component"
+          : `edit-substrate-component-${current.component.id}`
+        : current.pesticide === undefined
+          ? "add-pesticide"
+          : `edit-pesticide-${current.pesticide.id}`;
+    setEditor(undefined);
     queueMicrotask(() => {
       document.getElementById(controlId)?.focus();
     });
@@ -68,9 +89,32 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
-    if (catalog() === undefined) props.onCancel();
+    const currentEditor = editor();
+    if (currentEditor !== undefined) closeEditor(currentEditor);
+    else if (catalog() === undefined) props.onCancel();
     else closeCatalog();
   };
+
+  const editorContent = (current: CatalogEditor) =>
+    current.kind === "substrate" ? (
+      <SubstrateCatalogEditor
+        component={current.component}
+        onAdd={props.onAddSubstrateComponent}
+        onEdit={props.onEditSubstrateComponent}
+        onClose={() => {
+          closeEditor(current);
+        }}
+      />
+    ) : (
+      <PesticideCatalogEditor
+        pesticide={current.pesticide}
+        onAdd={props.onAddPesticide}
+        onEdit={props.onEditPesticide}
+        onClose={() => {
+          closeEditor(current);
+        }}
+      />
+    );
 
   onMount(() => {
     background.forEach((element) => {
@@ -89,7 +133,13 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   });
 
   return (
-    <div class="sheet-layer" classList={{ "sheet-layer--managing": catalog() !== undefined }}>
+    <div
+      class="sheet-layer"
+      classList={{
+        "sheet-layer--managing": catalog() !== undefined,
+        "sheet-layer--editing-catalog": editor() !== undefined,
+      }}
+    >
       <div class="sheet-layer__scrim" aria-hidden="true" />
       <aside
         ref={(element) => {
@@ -98,7 +148,6 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
         class="sheet sheet--operation"
         aria-label="Operation editor"
         aria-modal={catalog() === undefined ? "true" : undefined}
-        inert={catalog() !== undefined}
         role="dialog"
         tabIndex="-1"
       >
@@ -107,6 +156,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           onSubmit={props.onSubmit}
+          inactive={catalog() !== undefined}
           onManageSubstrateComponents={() => {
             setCatalog("substrate");
           }}
@@ -126,29 +176,53 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
       <Show when={catalog()}>
         <aside
           class="sheet sheet--catalog"
-          aria-label="Catalog manager"
-          aria-modal="true"
+          aria-label={catalog() === "substrate" ? "Substrate catalog" : "Pesticide catalog"}
+          aria-modal={editor() === undefined ? "true" : undefined}
           role="dialog"
         >
           <Switch>
             <Match when={catalog() === "substrate"}>
-              <SubstrateCatalogForm
+              <SubstrateCatalog
                 components={props.substrateComponents}
-                onAdd={props.onAddSubstrateComponent}
-                onEdit={props.onEditSubstrateComponent}
+                inactive={editor() !== undefined}
+                onAdd={() => {
+                  setEditor({ kind: "substrate", component: undefined });
+                }}
+                onEdit={(component) => {
+                  setEditor({ kind: "substrate", component });
+                }}
                 onClose={closeCatalog}
               />
             </Match>
             <Match when={catalog() === "pesticide"}>
-              <PesticideCatalogForm
+              <PesticideCatalog
                 pesticides={props.pesticides}
-                onAdd={props.onAddPesticide}
-                onEdit={props.onEditPesticide}
+                inactive={editor() !== undefined}
+                onAdd={() => {
+                  setEditor({ kind: "pesticide", pesticide: undefined });
+                }}
+                onEdit={(pesticide) => {
+                  setEditor({ kind: "pesticide", pesticide });
+                }}
                 onClose={closeCatalog}
               />
             </Match>
           </Switch>
         </aside>
+      </Show>
+      <Show keyed when={editor()}>
+        {(current) => (
+          <aside
+            class="sheet sheet--catalog-editor"
+            aria-label={
+              current.kind === "substrate" ? "Substrate component editor" : "Pesticide editor"
+            }
+            aria-modal="true"
+            role="dialog"
+          >
+            {editorContent(current)}
+          </aside>
+        )}
       </Show>
     </div>
   );

@@ -59,11 +59,16 @@ button {
 
 .icon-action {
   display: grid;
+  width: 2.7rem;
   height: 2.7rem;
   place-items: center;
   color: var(--muted);
   background: #eeeee8;
   font-size: 1.15rem;
+}
+
+.sheet-collapse {
+  flex: 0 0 auto;
 }
 
 .icon-action:disabled {

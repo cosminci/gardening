@@ -8,7 +8,6 @@ import {
   operationId,
   percentage,
   pesticideId,
-  pesticideType,
   plantId,
   substrate,
   substrateComponentId,
@@ -106,13 +105,13 @@ describe("HttpJournalClient writes", () => {
         jsonResponse(
           {
             id: pesticide,
-            data: { name: "Neem oil", type: "organic", info: "Dilute first" },
+            data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
           },
           201,
         ),
         jsonResponse({
           id: pesticide,
-          data: { name: "Neem", type: "organic", info: null },
+          data: { name: "Neem", type: "insecticide", info: null },
         }),
       ],
       requests,
@@ -137,19 +136,19 @@ describe("HttpJournalClient writes", () => {
     await expect(
       journal.addPesticide({
         name: nomenclatureName("Neem oil"),
-        pesticideType: pesticideType("organic"),
+        pesticideType: "insecticide",
         maybeInfo: nomenclatureInfo("Dilute first"),
       }),
     ).resolves.toMatchObject({ kind: "added", entry: { id: pesticide } });
     await expect(
       journal.editPesticide(pesticide, {
         name: nomenclatureName("Neem"),
-        pesticideType: pesticideType("organic"),
+        pesticideType: "insecticide",
         maybeInfo: null,
       }),
     ).resolves.toMatchObject({
       kind: "edited",
-      entry: { data: { name: "Neem", pesticideType: "organic", maybeInfo: null } },
+      entry: { data: { name: "Neem", pesticideType: "insecticide", maybeInfo: null } },
     });
 
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
@@ -170,12 +169,12 @@ describe("HttpJournalClient writes", () => {
     });
     await expect(requests[2]!.json()).resolves.toEqual({
       name: "Neem oil",
-      type: "organic",
+      type: "insecticide",
       info: "Dilute first",
     });
     await expect(requests[3]!.json()).resolves.toEqual({
       name: "Neem",
-      type: "organic",
+      type: "insecticide",
       info: null,
     });
   });

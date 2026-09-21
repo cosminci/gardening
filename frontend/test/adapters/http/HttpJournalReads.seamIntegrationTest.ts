@@ -6,7 +6,6 @@ import {
   nomenclatureName,
   percentage,
   pesticideId,
-  pesticideType,
   plantId,
   substrate,
   substrateComponentId,
@@ -149,7 +148,7 @@ describe("HttpJournalClient reads", () => {
         jsonResponse([
           {
             id: "00000000-0000-4000-8001-000000000003",
-            data: { name: "Neem oil", type: "organic", info: null },
+            data: { name: "Neem oil", type: "insecticide", info: null },
           },
         ]),
       ],
@@ -176,7 +175,7 @@ describe("HttpJournalClient reads", () => {
           id: pesticideId("00000000-0000-4000-8001-000000000003"),
           data: {
             name: nomenclatureName("Neem oil"),
-            pesticideType: pesticideType("organic"),
+            pesticideType: "insecticide",
             maybeInfo: null,
           },
         },

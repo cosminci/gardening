@@ -22,7 +22,7 @@ describe("operation failures", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The operation could not be saved.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse operation editor" }));
     expect(screen.queryByRole("form", { name: "Log operation" })).not.toBeInTheDocument();
   });
 

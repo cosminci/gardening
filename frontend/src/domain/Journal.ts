@@ -12,7 +12,6 @@ export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
 export type NomenclatureName = Brand<string, "NomenclatureName">;
 export type NomenclatureInfo = Brand<string, "NomenclatureInfo">;
-export type PesticideType = Brand<string, "PesticideType">;
 
 export const plantId = (value: string): PlantId => value as PlantId;
 export const operationId = (value: string): OperationId => value as OperationId;
@@ -27,7 +26,9 @@ export const substrateComponentId = (value: string): SubstrateComponentId =>
 export const pesticideId = (value: string): PesticideId => value as PesticideId;
 export const nomenclatureName = (value: string): NomenclatureName => value as NomenclatureName;
 export const nomenclatureInfo = (value: string): NomenclatureInfo => value as NomenclatureInfo;
-export const pesticideType = (value: string): PesticideType => value as PesticideType;
+
+export const pesticideTypes = ["fungicide", "insecticide", "treatment"] as const;
+export type PesticideType = (typeof pesticideTypes)[number];
 
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];

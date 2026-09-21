@@ -1,4 +1,4 @@
-import { For, Index } from "solid-js";
+import { For, Index, Show } from "solid-js";
 import type { Component } from "solid-js";
 import type { SubstrateComponent, SubstrateComponentId } from "../domain/Journal";
 import { substrateComponentLabel } from "./JournalLabels";
@@ -26,6 +26,8 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
     props.components.find(
       (component) => !props.parts.some((part) => part.component === component.id),
     );
+  const selectedComponent = (id: SubstrateComponentId) =>
+    props.components.find((component) => component.id === id);
 
   return (
     <fieldset class="field-group">
@@ -33,26 +35,55 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
       <Index each={props.parts}>
         {(part, index) => (
           <div class="substrate-row">
-            <label class="field">
-              <span>Component</span>
-              <select
-                aria-label={`Component ${String(index + 1)}`}
-                value={part().component}
-                onChange={(event) => {
-                  updatePart(index, {
-                    component: event.currentTarget.value as SubstrateComponentId,
-                  });
-                }}
-              >
-                <For each={props.components}>
-                  {(component) => (
-                    <option value={component.id}>
-                      {substrateComponentLabel(component.id, props.components)}
-                    </option>
-                  )}
-                </For>
-              </select>
-            </label>
+            <div class="substrate-component">
+              <label class="field">
+                <span>Component</span>
+                <select
+                  aria-label={`Component ${String(index + 1)}`}
+                  value={part().component}
+                  onChange={(event) => {
+                    updatePart(index, {
+                      component: event.currentTarget.value as SubstrateComponentId,
+                    });
+                  }}
+                >
+                  <For each={props.components}>
+                    {(component) => (
+                      <option value={component.id}>
+                        {substrateComponentLabel(component.id, props.components)}
+                      </option>
+                    )}
+                  </For>
+                </select>
+              </label>
+              <Show when={selectedComponent(part().component)}>
+                {(component) => (
+                  <span class="info-control">
+                    <button
+                      class="info-control__trigger"
+                      type="button"
+                      aria-label={`Information about ${component().data.name}`}
+                      aria-describedby={`substrate-info-${String(index)}-${component().id}`}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.stopPropagation();
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    >
+                      i
+                    </button>
+                    <span
+                      id={`substrate-info-${String(index)}-${component().id}`}
+                      class="info-control__content"
+                      role="tooltip"
+                    >
+                      {component().data.maybeInfo ?? "No notes."}
+                    </span>
+                  </span>
+                )}
+              </Show>
+            </div>
             <label class="field field--share">
               <span>Share</span>
               <input

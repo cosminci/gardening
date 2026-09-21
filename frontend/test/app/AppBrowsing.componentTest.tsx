@@ -1,7 +1,7 @@
 import { render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
-import { nomenclatureName, pesticideId, pesticideType } from "../../src/domain/Journal";
+import { nomenclatureName, pesticideId } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, monstera, repot } from "./JournalTestSupport";
 
 describe("browsing the journal", () => {
@@ -33,7 +33,7 @@ describe("browsing the journal", () => {
             id: neemId,
             data: {
               name: nomenclatureName("Neem oil"),
-              pesticideType: pesticideType("organic"),
+              pesticideType: "insecticide",
               maybeInfo: null,
             },
           },

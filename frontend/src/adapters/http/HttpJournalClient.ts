@@ -26,7 +26,6 @@ import {
   note,
   operationId,
   pesticideId,
-  pesticideType,
   percentage,
   plantId,
   substrateComponentId,
@@ -253,7 +252,7 @@ const toPesticide = (value: Wire["Pesticide"]): Pesticide => ({
   id: pesticideId(value.id),
   data: {
     name: nomenclatureName(value.data.name),
-    pesticideType: pesticideType(value.data.type),
+    pesticideType: value.data.type,
     maybeInfo: value.data.info === null ? null : nomenclatureInfo(value.data.info),
   },
 });

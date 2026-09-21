@@ -22,7 +22,8 @@
   box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
 }
 
-.sheet--operation {
+.sheet--operation,
+.sheet--catalog {
   transition: transform 180ms ease;
 }
 
@@ -32,6 +33,18 @@
 
 .sheet--catalog {
   z-index: 1;
+}
+
+.sheet-layer--editing-catalog .sheet--operation {
+  transform: translateX(-62rem);
+}
+
+.sheet-layer--editing-catalog .sheet--catalog {
+  transform: translateX(-31rem);
+}
+
+.sheet--catalog-editor {
+  z-index: 2;
 }
 
 .inline-alert {
@@ -45,5 +58,11 @@
 @media (max-width: 62rem) {
   .sheet-layer--managing .sheet--operation {
     transform: translateX(-100%);
+    visibility: hidden;
+  }
+
+  .sheet-layer--editing-catalog .sheet--catalog {
+    transform: translateX(-100%);
+    visibility: hidden;
   }
 }

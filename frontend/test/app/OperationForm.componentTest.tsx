@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { OperationForm } from "../../src/app/OperationForm";
 import type { OperationDetails, Pesticide, SubstrateComponent } from "../../src/domain/Journal";
 import {
+  nomenclatureInfo,
   nomenclatureName,
   percentage,
   pesticideId,
-  pesticideType,
   substrate,
   substrateComponentId,
 } from "../../src/domain/Journal";
@@ -15,7 +15,13 @@ import { care, repot } from "./JournalTestSupport";
 const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
 const pineBarkId = substrateComponentId("00000000-0000-4000-8000-000000000004");
 const substrateComponents: readonly SubstrateComponent[] = [
-  { id: perliteId, data: { name: nomenclatureName("Perlite"), maybeInfo: null } },
+  {
+    id: perliteId,
+    data: {
+      name: nomenclatureName("Perlite"),
+      maybeInfo: nomenclatureInfo("Improves drainage.\nUse up to 30%."),
+    },
+  },
   { id: pineBarkId, data: { name: nomenclatureName("Pine bark"), maybeInfo: null } },
 ];
 const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
@@ -25,22 +31,22 @@ const pesticides: readonly Pesticide[] = [
     id: neemId,
     data: {
       name: nomenclatureName("Neem oil"),
-      pesticideType: pesticideType("organic"),
-      maybeInfo: null,
+      pesticideType: "insecticide",
+      maybeInfo: nomenclatureInfo("Dilute before use.\nApply weekly."),
     },
   },
   {
     id: soapId,
     data: {
       name: nomenclatureName("Insecticidal soap"),
-      pesticideType: pesticideType("soap"),
+      pesticideType: "insecticide",
       maybeInfo: null,
     },
   },
 ];
 
 describe("OperationForm", () => {
-  it("should preserve care details, omit None, and allow cancellation", () => {
+  it("should preserve care details, omit None, and allow collapsing", () => {
     let cancelled = false;
     render(() => (
       <OperationForm
@@ -68,7 +74,7 @@ describe("OperationForm", () => {
     expect(watered).toBeChecked();
     fireEvent.click(watered);
     expect(watered).not.toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse operation editor" }));
     expect(cancelled).toBe(true);
   });
 
@@ -89,6 +95,15 @@ describe("OperationForm", () => {
       />
     ));
 
+    expect(screen.getByRole("tooltip", { name: /Improves drainage/ })).toHaveTextContent(
+      "Improves drainage. Use up to 30%.",
+    );
+    const substrateInfo = screen.getByRole("button", { name: "Information about Perlite" });
+    substrateInfo.focus();
+    fireEvent.keyDown(substrateInfo, { key: "Enter" });
+    expect(substrateInfo).toHaveFocus();
+    fireEvent.keyDown(substrateInfo, { key: "Escape" });
+    expect(substrateInfo).not.toHaveFocus();
     const share = screen.getByRole("spinbutton", { name: "Component 1 share" });
     share.focus();
     fireEvent.input(share, { target: { value: "0" } });
@@ -104,6 +119,13 @@ describe("OperationForm", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Component 2" }), {
       target: { value: perliteId },
     });
+    const perliteInfoControls = screen.getAllByRole("button", {
+      name: "Information about Perlite",
+    });
+    expect(perliteInfoControls[0]).not.toHaveAttribute(
+      "aria-describedby",
+      perliteInfoControls[1]?.getAttribute("aria-describedby"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Each substrate component can only be used once.",
@@ -155,6 +177,15 @@ describe("OperationForm", () => {
 
     expect(screen.queryByRole("checkbox", { name: "Neem oil" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Pesticide" }));
+    expect(
+      screen.getByRole("tooltip", { name: /Insecticide.*Dilute before use/ }),
+    ).toHaveTextContent("Insecticide Dilute before use. Apply weekly.");
+    const pesticideInfo = screen.getByRole("button", { name: "Information about Neem oil" });
+    pesticideInfo.focus();
+    fireEvent.keyDown(pesticideInfo, { key: "Enter" });
+    expect(pesticideInfo).toHaveFocus();
+    fireEvent.keyDown(pesticideInfo, { key: "Escape" });
+    expect(pesticideInfo).not.toHaveFocus();
     fireEvent.click(screen.getByRole("checkbox", { name: "Neem oil" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Insecticidal soap" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Neem oil" }));

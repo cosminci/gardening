@@ -3,6 +3,7 @@ import type {
   MoistureLevel,
   Pesticide,
   PesticideId,
+  PesticideType,
   Plant,
   Substrate,
   SubstrateComponent,
@@ -26,6 +27,12 @@ export const moistureLabels: Record<MoistureLevel, string> = {
   moderateMinus: "Moderate -",
   dry: "Dry",
   noReading: "N/A",
+};
+
+export const pesticideTypeLabels: Record<PesticideType, string> = {
+  fungicide: "Fungicide",
+  insecticide: "Insecticide",
+  treatment: "Treatment",
 };
 
 export const substrateComponentLabel = (

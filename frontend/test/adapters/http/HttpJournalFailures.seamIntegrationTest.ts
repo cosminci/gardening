@@ -4,7 +4,6 @@ import {
   nomenclatureName,
   operationId,
   pesticideId,
-  pesticideType,
   plantId,
   substrateComponentId,
 } from "../../../src/domain/Journal";
@@ -41,7 +40,7 @@ describe("HttpJournalClient failures", () => {
     const componentData = { name: nomenclatureName("Perlite"), maybeInfo: null };
     const pesticideData = {
       name: nomenclatureName("Neem"),
-      pesticideType: pesticideType("organic"),
+      pesticideType: "insecticide" as const,
       maybeInfo: null,
     };
 

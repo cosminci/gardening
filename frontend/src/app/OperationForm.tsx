@@ -21,6 +21,7 @@ interface OperationFormProps {
   readonly onSubmit: (details: OperationDetails) => Promise<void>;
   readonly onManageSubstrateComponents: () => void;
   readonly onManagePesticides: () => void;
+  readonly inactive?: boolean;
   readonly onCancel: () => void;
 }
 
@@ -109,71 +110,74 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
           <h2>{props.initial === undefined ? "Log plant care" : "Edit operation"}</h2>
           <p>Record what changed while the details are still fresh.</p>
         </div>
-      </header>
-
-      <label class="field">
-        <span>Operation type</span>
-        <select
-          aria-label="Operation type"
-          disabled={props.initial !== undefined}
-          value={kind()}
-          onChange={(event) => setKind(event.currentTarget.value as OperationDetails["kind"])}
-        >
-          <option value="care">Care</option>
-          <option value="repot">Repot</option>
-        </select>
-      </label>
-
-      <Show
-        when={kind() === "care"}
-        fallback={
-          <SubstrateFields
-            parts={parts()}
-            components={props.substrateComponents}
-            onChange={setParts}
-            onManageComponents={props.onManageSubstrateComponents}
-          />
-        }
-      >
-        <CareFields
-          actions={actions()}
-          moisture={moisture()}
-          pesticides={props.pesticides}
-          selectedPesticides={selectedPesticides()}
-          onActionChange={toggleAction}
-          onMoistureChange={setMoisture}
-          onPesticideChange={togglePesticide}
-          onManagePesticides={props.onManagePesticides}
-        />
-      </Show>
-
-      <label class="field">
-        <span>Notes</span>
-        <textarea
-          aria-label="Notes"
-          placeholder="Optional observations, quantities, or follow-up…"
-          rows="4"
-          value={notes()}
-          onInput={(event) => {
-            setNotes(event.currentTarget.value);
-          }}
-        />
-      </label>
-      <Show when={validationError()}>{(error) => <p role="alert">{error()}</p>}</Show>
-      <footer class="operation-form__actions">
         <button
-          class="secondary-action"
+          class="icon-action sheet-collapse"
           type="button"
+          aria-label="Collapse operation editor"
           onClick={() => {
             props.onCancel();
           }}
         >
-          Cancel
+          <span aria-hidden="true">×</span>
         </button>
-        <button class="primary-action" type="submit" disabled={submitting()}>
-          {submitting() ? "Saving…" : "Save operation"}
-        </button>
-      </footer>
+      </header>
+
+      <div class="operation-form__body" inert={props.inactive}>
+        <label class="field">
+          <span>Operation type</span>
+          <select
+            aria-label="Operation type"
+            disabled={props.initial !== undefined}
+            value={kind()}
+            onChange={(event) => setKind(event.currentTarget.value as OperationDetails["kind"])}
+          >
+            <option value="care">Care</option>
+            <option value="repot">Repot</option>
+          </select>
+        </label>
+
+        <Show
+          when={kind() === "care"}
+          fallback={
+            <SubstrateFields
+              parts={parts()}
+              components={props.substrateComponents}
+              onChange={setParts}
+              onManageComponents={props.onManageSubstrateComponents}
+            />
+          }
+        >
+          <CareFields
+            actions={actions()}
+            moisture={moisture()}
+            pesticides={props.pesticides}
+            selectedPesticides={selectedPesticides()}
+            onActionChange={toggleAction}
+            onMoistureChange={setMoisture}
+            onPesticideChange={togglePesticide}
+            onManagePesticides={props.onManagePesticides}
+          />
+        </Show>
+
+        <label class="field">
+          <span>Notes</span>
+          <textarea
+            aria-label="Notes"
+            placeholder="Optional observations, quantities, or follow-up…"
+            rows="4"
+            value={notes()}
+            onInput={(event) => {
+              setNotes(event.currentTarget.value);
+            }}
+          />
+        </label>
+        <Show when={validationError()}>{(error) => <p role="alert">{error()}</p>}</Show>
+        <footer class="operation-form__actions">
+          <button class="primary-action" type="submit" disabled={submitting()}>
+            {submitting() ? "Saving…" : "Save operation"}
+          </button>
+        </footer>
+      </div>
     </form>
   );
 };

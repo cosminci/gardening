@@ -1,11 +1,22 @@
 .operation-form {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 1.15rem;
   min-height: 100%;
   padding: 2rem;
 }
 
+.operation-form__body {
+  display: grid;
+  align-content: start;
+  gap: 1.15rem;
+}
+
 .operation-form__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--line);
 }
@@ -30,7 +41,7 @@
 
 .operation-form__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 0.6rem;
   margin-top: auto;
   padding-top: 1rem;

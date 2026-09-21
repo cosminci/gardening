@@ -2,7 +2,7 @@ import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
 import type { ActionType, MoistureLevel, Pesticide, PesticideId } from "../domain/Journal";
 import { actionTypes, moistureLevels } from "../domain/Journal";
-import { actionLabels, moistureLabels } from "./JournalLabels";
+import { actionLabels, moistureLabels, pesticideTypeLabels } from "./JournalLabels";
 
 interface CareFieldsProps {
   readonly actions: ReadonlySet<ActionType>;
@@ -47,16 +47,42 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         <div class="choice-grid">
           <For each={props.pesticides}>
             {(pesticide) => (
-              <label class="choice">
-                <input
-                  type="checkbox"
-                  checked={props.selectedPesticides.has(pesticide.id)}
-                  onChange={(event) => {
-                    props.onPesticideChange(pesticide.id, event.currentTarget.checked);
-                  }}
-                />
-                <span>{pesticide.data.name}</span>
-              </label>
+              <div class="choice-with-info">
+                <label class="choice">
+                  <input
+                    type="checkbox"
+                    checked={props.selectedPesticides.has(pesticide.id)}
+                    onChange={(event) => {
+                      props.onPesticideChange(pesticide.id, event.currentTarget.checked);
+                    }}
+                  />
+                  <span>{pesticide.data.name}</span>
+                </label>
+                <span class="info-control">
+                  <button
+                    class="info-control__trigger"
+                    type="button"
+                    aria-label={`Information about ${pesticide.data.name}`}
+                    aria-describedby={`pesticide-info-${pesticide.id}`}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        event.currentTarget.blur();
+                      }
+                    }}
+                  >
+                    i
+                  </button>
+                  <span
+                    id={`pesticide-info-${pesticide.id}`}
+                    class="info-control__content"
+                    role="tooltip"
+                  >
+                    <strong>{pesticideTypeLabels[pesticide.data.pesticideType]}</strong>{" "}
+                    {pesticide.data.maybeInfo ?? "No notes."}
+                  </span>
+                </span>
+              </div>
             )}
           </For>
         </div>

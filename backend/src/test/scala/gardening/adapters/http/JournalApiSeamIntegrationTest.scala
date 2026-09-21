@@ -40,11 +40,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val componentId       = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
   private val pesticideId       = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
   private val componentData     = SubstrateComponentData(NomenclatureName("Pumice"), NomenclatureInfo("porous").some)
-  private val pesticideData     = PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), NomenclatureInfo("2g/L").some)
+  private val pesticideData     = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, NomenclatureInfo("2g/L").some)
   private val component         = SubstrateComponent(componentId, componentData)
   private val pesticide         = Pesticide(pesticideId, pesticideData)
   private val componentDataJson = """{"name":"Pumice","info":"porous"}"""
-  private val pesticideDataJson = """{"name":"Sulfur","type":"Fungicide","info":"2g/L"}"""
+  private val pesticideDataJson = """{"name":"Sulfur","type":"fungicide","info":"2g/L"}"""
   private val componentJson     = s"""{"id":"${componentId.value}","data":$componentDataJson}"""
   private val pesticideJson     = s"""{"id":"${pesticideId.value}","data":$pesticideDataJson}"""
   private val catalogReadError  = """{"message":"nomenclatures could not be read"}"""

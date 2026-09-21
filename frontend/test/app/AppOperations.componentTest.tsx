@@ -13,7 +13,6 @@ import {
   operationId,
   percentage,
   pesticideId,
-  pesticideType,
   substrate,
   substrateComponentId,
 } from "../../src/domain/Journal";
@@ -201,21 +200,28 @@ describe("changing the journal", () => {
       target: { value: "repot" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Name for Perlite" }), {
+    const catalog = screen.getByRole("dialog", { name: "Substrate catalog" });
+    expect(catalog).toBeInTheDocument();
+    expect(within(catalog).queryByRole("textbox")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
+    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toBeInTheDocument();
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Fine perlite" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save Perlite" }));
-    await screen.findByRole("button", { name: "Save Fine perlite" });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Substrate component editor" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(within(catalog).getByText("Fine perlite")).toBeInTheDocument();
     expect(screen.getByText("Fine perlite 100%")).toBeInTheDocument();
 
-    fireEvent.input(screen.getByRole("textbox", { name: "New substrate component name" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Add substrate component" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Pumice" },
     });
-    fireEvent.click(
-      within(screen.getByRole("form", { name: "Add substrate component" })).getByRole("button", {
-        name: "Add",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveTextContent("Pumice"),
     );
@@ -226,9 +232,9 @@ describe("changing the journal", () => {
         data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
       },
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Close substrate management" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse substrate catalog" }));
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Catalog manager" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Substrate catalog" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Manage" })).toHaveFocus();
     });
   });
@@ -267,7 +273,7 @@ describe("changing the journal", () => {
             id: neemId,
             data: {
               name: nomenclatureName("Neem oil"),
-              pesticideType: pesticideType("organic"),
+              pesticideType: "insecticide",
               maybeInfo: null,
             },
           },
@@ -275,7 +281,7 @@ describe("changing the journal", () => {
             id: pesticideId("00000000-0000-4000-8001-000000000006"),
             data: {
               name: nomenclatureName("Spinosad"),
-              pesticideType: pesticideType("organic"),
+              pesticideType: "insecticide",
               maybeInfo: null,
             },
           },
@@ -287,7 +293,7 @@ describe("changing the journal", () => {
           id: soapId,
           data: {
             name: nomenclatureName("Insecticidal soap"),
-            pesticideType: pesticideType("soap"),
+            pesticideType: "insecticide",
             maybeInfo: null,
           },
         },
@@ -298,7 +304,7 @@ describe("changing the journal", () => {
           id: neemId,
           data: {
             name: nomenclatureName("Neem concentrate"),
-            pesticideType: pesticideType("botanical"),
+            pesticideType: "treatment",
             maybeInfo: nomenclatureInfo("Dilute first"),
           },
         },
@@ -310,37 +316,42 @@ describe("changing the journal", () => {
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
+    const operation = screen.getByRole("dialog", { name: "Operation editor" });
+    fireEvent.input(within(operation).getByRole("textbox", { name: "Notes" }), {
+      target: { value: "Draft treatment notes" },
+    });
     fireEvent.click(screen.getByRole("checkbox", { name: "Pesticide" }));
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Name for Neem oil" }), {
+    const catalog = screen.getByRole("dialog", { name: "Pesticide catalog" });
+    expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", true);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Neem oil" }));
+    expect(catalog.querySelector(".catalog-form__body")).toHaveProperty("inert", true);
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Neem concentrate" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Type for Neem oil" }), {
-      target: { value: "botanical" },
+    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
+      target: { value: "treatment" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Info for Neem oil" }), {
+    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
       target: { value: "Dilute first" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save Neem oil" }));
-    await screen.findByRole("button", { name: "Save Neem concentrate" });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("button", { name: "Edit Neem concentrate" });
     expect(screen.getByText("Neem concentrate", { selector: "dd" })).toBeInTheDocument();
 
-    fireEvent.input(screen.getByRole("textbox", { name: "New pesticide name" }), {
+    fireEvent.click(screen.getByRole("button", { name: "Add pesticide" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Insecticidal soap" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "New pesticide type" }), {
-      target: { value: "soap" },
+    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
+      target: { value: "insecticide" },
     });
-    fireEvent.click(
-      within(screen.getByRole("form", { name: "Add pesticide" })).getByRole("button", {
-        name: "Add",
-      }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("checkbox", { name: "Insecticidal soap" })).toBeInTheDocument();
     expect(addedPesticides).toEqual([
       {
         name: nomenclatureName("Insecticidal soap"),
-        pesticideType: pesticideType("soap"),
+        pesticideType: "insecticide",
         maybeInfo: null,
       },
     ]);
@@ -349,15 +360,37 @@ describe("changing the journal", () => {
         id: neemId,
         data: {
           name: nomenclatureName("Neem concentrate"),
-          pesticideType: pesticideType("botanical"),
+          pesticideType: "treatment",
           maybeInfo: nomenclatureInfo("Dilute first"),
         },
       },
     ]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Catalog manager" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Pesticide catalog" })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse pesticide catalog" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Pesticide catalog" })).not.toBeInTheDocument();
       expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
     });
+    expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
+    expect(within(operation).getByRole("textbox", { name: "Notes" })).toHaveValue(
+      "Draft treatment notes",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Pesticide catalog" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Manage" })).toHaveFocus();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse operation editor" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

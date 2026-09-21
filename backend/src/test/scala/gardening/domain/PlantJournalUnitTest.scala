@@ -82,7 +82,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val store       = StoreStub()
     val journal     = buildJournal(store, idGen = () => ids.next())
     val component   = SubstrateComponentData(NomenclatureName("Pumice"), none)
-    val pesticide   = PesticideData(NomenclatureName("Soap"), PesticideType("Treatment"), none)
+    val pesticide   = PesticideData(NomenclatureName("Soap"), PesticideType.Treatment, none)
 
     assertEquals(journal.getSubstrateComponents, store.componentReadResult)
     assertEquals(journal.addSubstrateComponent(component), store.componentAddResult)
@@ -100,11 +100,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     val pesticides   = Vector(
       Pesticide(
         vertabId,
-        PesticideData(NomenclatureName("VERTAB"), PesticideType("Insecticide"), NomenclatureInfo("0.8ml/L").some)
+        PesticideData(NomenclatureName("VERTAB"), PesticideType.Insecticide, NomenclatureInfo("0.8ml/L").some)
       ),
       Pesticide(
         neemOilId,
-        PesticideData(NomenclatureName("Neem oil"), PesticideType("Insecticide"), none)
+        PesticideData(NomenclatureName("Neem oil"), PesticideType.Insecticide, none)
       )
     )
     val validStore = StoreStub(pesticideReadResult = CatalogReadResult.Read(pesticides))
@@ -388,7 +388,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
       pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(
         Pesticide(
           PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
-          PesticideData(NomenclatureName("Neem"), PesticideType("Treatment"), none)
+          PesticideData(NomenclatureName("Neem"), PesticideType.Treatment, none)
         )
       ),
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing

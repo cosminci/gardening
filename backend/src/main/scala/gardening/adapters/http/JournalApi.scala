@@ -160,7 +160,6 @@ object JournalApi:
   private given Codec[Note]                 = stringCodec(Note.apply, _.value)
   private given Codec[NomenclatureName]     = stringCodec(NomenclatureName.apply, _.value)
   private given Codec[NomenclatureInfo]     = stringCodec(NomenclatureInfo.apply, _.value)
-  private given Codec[PesticideType]        = stringCodec(PesticideType.apply, _.value)
   private given Codec[SubstrateComponentId] = Codec.from(
     Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value")),
     Encoder.encodeString.contramap(_.value.toString)
@@ -173,7 +172,7 @@ object JournalApi:
     Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value")),
     Encoder.encodeInt.contramap(value => value)
   )
-  private type JournalEnum = ActionType | MoistureLevel | PlantStatus
+  private type JournalEnum = ActionType | MoistureLevel | PesticideType | PlantStatus
   private inline given [A <: JournalEnum](using Mirror.SumOf[A]): Codec[A] = ConfiguredEnumCodec.derived
   private given Encoder[Set[ActionType]]                                   = Encoder.encodeList[ActionType].contramap(_.toList.sortBy(_.toString))
   private inline given productCodec[A](using Mirror.ProductOf[A]): Codec.AsObject[A] = ConfiguredCodec.derived
@@ -183,7 +182,7 @@ object JournalApi:
   )
   private given Codec.AsObject[OperationDetails] = ConfiguredCodec.derived
 
-  private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo | PesticideType
+  private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo
   private given [A <: WireText]: Schema[A] = Schema.string
   // Tapir requires inverse mappings for opaque schemas; OpenAPI generation only reads their constraints.
   // $COVERAGE-OFF$

@@ -201,9 +201,14 @@ export interface components {
         /** PesticideData */
         PesticideData: {
             name: string;
-            type: string;
+            type: components["schemas"]["PesticideType"];
             info: string | null;
         };
+        /**
+         * PesticideType
+         * @enum {string}
+         */
+        PesticideType: "fungicide" | "insecticide" | "treatment";
         /** Plant */
         Plant: {
             id: string;
