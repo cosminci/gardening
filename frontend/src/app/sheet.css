@@ -22,10 +22,28 @@
   box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
 }
 
+.sheet--operation {
+  transition: transform 180ms ease;
+}
+
+.sheet-layer--managing .sheet--operation {
+  transform: translateX(-31rem);
+}
+
+.sheet--catalog {
+  z-index: 1;
+}
+
 .inline-alert {
   margin: 0 2rem 2rem;
   padding: 0.75rem;
   border-radius: 0.55rem;
   color: var(--danger);
   background: #fae9e5;
+}
+
+@media (max-width: 62rem) {
+  .sheet-layer--managing .sheet--operation {
+    transform: translateX(-100%);
+  }
 }

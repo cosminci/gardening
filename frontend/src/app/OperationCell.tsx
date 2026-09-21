@@ -58,16 +58,17 @@ const renderDetails = (
   pesticides: readonly Pesticide[],
 ) => {
   switch (details.kind) {
-    case "care":
+    case "care": {
+      const actions = [...details.actions].filter((action) => action !== "noAction");
       return (
         <>
           <dt>Moisture</dt>
           <dd>{moistureLabels[details.moisture]}</dd>
           <dt>Actions</dt>
           <dd>
-            {details.actions.size === 0
+            {actions.length === 0
               ? "None recorded"
-              : [...details.actions].map((action) => actionLabels[action]).join(", ")}
+              : actions.map((action) => actionLabels[action]).join(", ")}
           </dd>
           <Show when={details.pesticides.size > 0}>
             <>
@@ -79,6 +80,7 @@ const renderDetails = (
           </Show>
         </>
       );
+    }
     case "repot":
       return (
         <>

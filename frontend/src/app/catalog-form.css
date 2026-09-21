@@ -1,0 +1,58 @@
+.catalog-form {
+  display: grid;
+  gap: 1rem;
+  min-height: 100%;
+  padding: 2rem;
+}
+
+.catalog-form__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.catalog-form__header h2 {
+  margin: 0.2rem 0 0.8rem;
+  font-size: 2rem;
+  letter-spacing: -0.025em;
+}
+
+.catalog-form__entries {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.catalog-form__entry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.catalog-form__entry--new {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.catalog-form [role="alert"] {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 28rem) {
+  .catalog-form {
+    padding: 1.25rem;
+  }
+
+  .catalog-form__entry {
+    grid-template-columns: 1fr;
+  }
+}

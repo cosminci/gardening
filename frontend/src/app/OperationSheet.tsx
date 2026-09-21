@@ -1,4 +1,4 @@
-import { Show, onCleanup, onMount } from "solid-js";
+import { Match, Show, Switch, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type {
   CatalogAddResult,
@@ -15,6 +15,9 @@ import type {
 } from "../domain/Journal";
 import { editOperationControlId, logOperationControlId } from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
+import { PesticideCatalogForm } from "./PesticideCatalogForm";
+import { SubstrateCatalogForm } from "./SubstrateCatalogForm";
+import "./catalog-form.css";
 import "./sheet.css";
 
 export type OperationTarget =
@@ -49,11 +52,24 @@ interface OperationSheetProps {
 
 export const OperationSheet: Component<OperationSheetProps> = (props) => {
   let dialog!: HTMLElement;
+  const [catalog, setCatalog] = createSignal<"substrate" | "pesticide">();
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
+
+  const closeCatalog = () => {
+    const controlId =
+      catalog() === "substrate" ? "manage-substrate-components" : "manage-pesticides";
+    setCatalog(undefined);
+    queueMicrotask(() => {
+      document.getElementById(controlId)?.focus();
+    });
+  };
+
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key === "Escape") props.onCancel();
+    if (event.key !== "Escape") return;
+    if (catalog() === undefined) props.onCancel();
+    else closeCatalog();
   };
 
   onMount(() => {
@@ -73,15 +89,16 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   });
 
   return (
-    <div class="sheet-layer">
+    <div class="sheet-layer" classList={{ "sheet-layer--managing": catalog() !== undefined }}>
       <div class="sheet-layer__scrim" aria-hidden="true" />
       <aside
         ref={(element) => {
           dialog = element;
         }}
-        class="sheet"
+        class="sheet sheet--operation"
         aria-label="Operation editor"
-        aria-modal="true"
+        aria-modal={catalog() === undefined ? "true" : undefined}
+        inert={catalog() !== undefined}
         role="dialog"
         tabIndex="-1"
       >
@@ -90,10 +107,12 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           onSubmit={props.onSubmit}
-          onAddSubstrateComponent={props.onAddSubstrateComponent}
-          onEditSubstrateComponent={props.onEditSubstrateComponent}
-          onAddPesticide={props.onAddPesticide}
-          onEditPesticide={props.onEditPesticide}
+          onManageSubstrateComponents={() => {
+            setCatalog("substrate");
+          }}
+          onManagePesticides={() => {
+            setCatalog("pesticide");
+          }}
           onCancel={props.onCancel}
         />
         <Show when={props.saveError}>
@@ -104,6 +123,33 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           )}
         </Show>
       </aside>
+      <Show when={catalog()}>
+        <aside
+          class="sheet sheet--catalog"
+          aria-label="Catalog manager"
+          aria-modal="true"
+          role="dialog"
+        >
+          <Switch>
+            <Match when={catalog() === "substrate"}>
+              <SubstrateCatalogForm
+                components={props.substrateComponents}
+                onAdd={props.onAddSubstrateComponent}
+                onEdit={props.onEditSubstrateComponent}
+                onClose={closeCatalog}
+              />
+            </Match>
+            <Match when={catalog() === "pesticide"}>
+              <PesticideCatalogForm
+                pesticides={props.pesticides}
+                onAdd={props.onAddPesticide}
+                onEdit={props.onEditPesticide}
+                onClose={closeCatalog}
+              />
+            </Match>
+          </Switch>
+        </aside>
+      </Show>
     </div>
   );
 };

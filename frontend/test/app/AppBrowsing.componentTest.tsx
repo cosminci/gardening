@@ -54,7 +54,7 @@ describe("browsing the journal", () => {
     );
     expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
     expect(renderedOperations[2]).toHaveTextContent(
-      "2026-04-05EditCareMoistureWetActionsWatered, Insecticide / H2O2PesticidesNeem oilNoteRecovered",
+      "2026-04-05EditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
     );
     expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
       "datetime",

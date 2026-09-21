@@ -8,7 +8,7 @@ plant-journal keeps the household's plants, current substrates, and dated care h
 
 ## Domain model
 
-A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. Substrate-components and Pesticides are editable Nomenclatures referenced by stable identifiers. Moisture-level and Action-type remain fixed English vocabularies; free text remains verbatim.
+A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. The controlled Substrate-component, Moisture-level, and Action-type vocabularies are fixed and English; free text remains verbatim.
 
 ```mermaid
 erDiagram
@@ -20,7 +20,6 @@ erDiagram
     SUBSTRATE ||--|{ SUBSTRATE_PART : contains
     SUBSTRATE_PART }o--|| SUBSTRATE_COMPONENT : selects
     CARE }o--o{ ACTION_TYPE : records
-    CARE }o--o{ PESTICIDE : selects
     CARE }o--|| MOISTURE_LEVEL : observes
 ```
 
@@ -32,15 +31,12 @@ erDiagram
 - Editing may change only kind-specific operation details. Editing the latest repot also updates current substrate; editing an older repot does not. A failed latest-repot substrate update restores the previous operation details.
 - Log and edit workflows are serialized so their synchronization and compensation steps cannot interleave.
 - Operations cannot be deleted by users because they record care that already happened.
-- Substrate-components and Pesticides can be added and edited but not deleted. Catalog entries retain stable identifiers when renamed or otherwise edited.
-- The browser loads both Nomenclatures with the journal, resolves stored identifiers to current names, and exposes catalog editing at each catalog's operation-form usage site. Pesticide choices are visible only while pesticide treatment is selected; deselecting that action clears its selections.
-- The browser orders plants for display and shows each plant's three latest operations from oldest to newest. After a successful operation log or edit, it reloads the journal from the backend.
+- The browser orders plants for display and shows each plant's three latest operations from oldest to newest. After a successful log or edit, it reloads the journal from the backend.
 
 ## Edge cases
 
 - An empty journal and an operation-list read for an unknown plant both return an empty collection.
 - A missing plant or operation in a single-record workflow is distinct from an empty collection.
-- Editing a missing Nomenclature item is reported as not found; other catalog failures are reported without presenting the mutation as successful.
 - Editing an operation as the other operation kind is rejected without changing the journal.
 - Independently malformed persisted rows are all reported together and attributed to their plant or operation identifiers.
 - Database-access failures are reported separately from stored-data corruption.
@@ -49,11 +45,10 @@ erDiagram
 ## Invariants
 
 - Every Substrate is non-empty, contains each Substrate-component at most once, assigns each part a share from 1 through 100, and has a total share no greater than 100.
-- Plants and operations reference Nomenclature items by stable UUID rather than by editable display values.
 - A Care operation carries no Substrate; a Repot operation always carries one.
 - An Operation's identifier, Plant, timestamp, and care-or-repot kind never change after logging.
 - When a Plant has repot operations, its current Substrate matches its latest repot after every successful log or edit.
-- Fixed controlled-vocabulary values are English; editable Nomenclature text and other free text are preserved verbatim.
+- Controlled-vocabulary values are English; free text is preserved verbatim.
 - Domain behavior depends on injected capabilities and never on HTTP, SQLite, clocks, or identifier implementations directly.
 
 ## Component architecture

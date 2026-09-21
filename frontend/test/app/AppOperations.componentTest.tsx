@@ -156,6 +156,8 @@ describe("changing the journal", () => {
     expect(document.activeElement).toBe(dialog);
     expect(header.inert).toBe(true);
     expect(journalRows.inert).toBe(true);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(current.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
 
     expect(current.queryByRole("dialog")).not.toBeInTheDocument();
@@ -198,7 +200,7 @@ describe("changing the journal", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Operation type" }), {
       target: { value: "repot" },
     });
-    fireEvent.click(screen.getByText("Manage substrate components"));
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
     fireEvent.input(screen.getByRole("textbox", { name: "Name for Perlite" }), {
       target: { value: "Fine perlite" },
     });
@@ -209,7 +211,11 @@ describe("changing the journal", () => {
     fireEvent.input(screen.getByRole("textbox", { name: "New substrate component name" }), {
       target: { value: "Pumice" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add substrate component" }));
+    fireEvent.click(
+      within(screen.getByRole("form", { name: "Add substrate component" })).getByRole("button", {
+        name: "Add",
+      }),
+    );
     await waitFor(() =>
       expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveTextContent("Pumice"),
     );
@@ -220,6 +226,11 @@ describe("changing the journal", () => {
         data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
       },
     ]);
+    fireEvent.click(screen.getByRole("button", { name: "Close substrate management" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Catalog manager" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Manage" })).toHaveFocus();
+    });
   });
 
   it("should add and edit pesticides from the care form", async () => {
@@ -299,8 +310,8 @@ describe("changing the journal", () => {
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Insecticide / H2O2" }));
-    fireEvent.click(screen.getByText("Manage pesticides"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Pesticide" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage" }));
     fireEvent.input(screen.getByRole("textbox", { name: "Name for Neem oil" }), {
       target: { value: "Neem concentrate" },
     });
@@ -320,7 +331,11 @@ describe("changing the journal", () => {
     fireEvent.input(screen.getByRole("textbox", { name: "New pesticide type" }), {
       target: { value: "soap" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add pesticide" }));
+    fireEvent.click(
+      within(screen.getByRole("form", { name: "Add pesticide" })).getByRole("button", {
+        name: "Add",
+      }),
+    );
     expect(await screen.findByRole("checkbox", { name: "Insecticidal soap" })).toBeInTheDocument();
     expect(addedPesticides).toEqual([
       {
@@ -339,5 +354,10 @@ describe("changing the journal", () => {
         },
       },
     ]);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Catalog manager" })).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
+    });
   });
 });

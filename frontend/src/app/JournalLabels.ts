@@ -15,7 +15,7 @@ export const plantDisplayName = (plant: Plant) =>
 export const actionLabels: Record<ActionType, string> = {
   watered: "Watered",
   fertilized: "Fertilized",
-  pesticide: "Insecticide / H2O2",
+  pesticide: "Pesticide",
   pruned: "Pruned",
   noAction: "None",
 };
