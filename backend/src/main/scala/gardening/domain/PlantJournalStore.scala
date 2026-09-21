@@ -10,3 +10,9 @@ trait PlantJournalStore:
   def removeOperation(id: OperationId): OperationCompensationResult
   def restoreOperation(operation: Operation): OperationCompensationResult
   def updatePlant(plant: Plant): UpdatePlantResult
+  def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
+  def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent]
+  def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent]
+  def getPesticides: CatalogReadResult[Pesticide]
+  def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide]
+  def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide]

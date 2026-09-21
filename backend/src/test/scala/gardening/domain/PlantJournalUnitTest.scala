@@ -1,12 +1,12 @@
 package gardening.domain
 
-import cats.data.NonEmptyList
 import cats.syntax.option.*
 import io.github.iltotore.iron.*
 
 import language.experimental.captureChecking
 
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.CountDownLatch
@@ -14,10 +14,16 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PlantJournalUnitTest extends munit.FunSuite:
 
-  private val date = Instant.parse("2026-01-01T00:00:00Z")
+  private val date       = Instant.parse("2026-01-01T00:00:00Z")
+  private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val pineBarkId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000004"))
+  private val sand3to5Id = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
+  private val lecaId     = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
+  private val vertabId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
+  private val neemOilId  = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
 
   private val substrate = Substrate
-    .of(List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+    .of(List(SubstratePart(perliteId, share = 100)))
     .getOrElse(fail("invalid test substrate"))
 
   private val plant = Plant(
@@ -33,6 +39,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
 
   private val care = OperationDetails.Care(
     actions = Set(ActionType.Watered),
+    pesticides = Set.empty,
     moisture = MoistureLevel.Wet,
     maybeNote = Note("dry").some
   )
@@ -49,17 +56,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     PlantJournal.make(using store, idGen, clock)
 
   test("should return plants and operation history while preserving read failures"):
-    val plantCorruptions     = NonEmptyList.one(JournalCorruption(JournalRecord.Plant(PlantId("p1")), RuntimeException("corrupt plant")))
-    val operationCorruptions = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt operation")))
-    val readFailure          = RuntimeException("store down")
+    val readFailure = RuntimeException("store down")
 
     assertEquals(
       buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))).getPlants,
       GetPlantsResult.Read(Vector(plant))
-    )
-    assertEquals(
-      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Corrupted(plantCorruptions))).getPlants,
-      GetPlantsResult.Corrupted(plantCorruptions)
     )
     assertEquals(
       buildJournal(StoreStub(getPlantsResult = GetPlantsResult.ReadFailed(readFailure))).getPlants,
@@ -70,13 +71,77 @@ class PlantJournalUnitTest extends munit.FunSuite:
       GetOperationsResult.Read(Vector(operation))
     )
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Corrupted(operationCorruptions))).getOperations(PlantId("p1")),
-      GetOperationsResult.Corrupted(operationCorruptions)
-    )
-    assertEquals(
       buildJournal(StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(readFailure))).getOperations(PlantId("p1")),
       GetOperationsResult.ReadFailed(readFailure)
     )
+
+  test("should assign catalog identifiers and delegate nomenclature operations"):
+    val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
+    val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
+    val ids         = Iterator(componentId.value.toString, pesticideId.value.toString)
+    val store       = StoreStub()
+    val journal     = buildJournal(store, idGen = () => ids.next())
+    val component   = SubstrateComponentData(NomenclatureName("Pumice"), none)
+    val pesticide   = PesticideData(NomenclatureName("Soap"), PesticideType("Treatment"), none)
+
+    assertEquals(journal.getSubstrateComponents, store.componentReadResult)
+    assertEquals(journal.addSubstrateComponent(component), store.componentAddResult)
+    assertEquals(journal.editSubstrateComponent(componentId, component), store.componentEditResult)
+    assertEquals(journal.getPesticides, store.pesticideReadResult)
+    assertEquals(journal.addPesticide(pesticide), store.pesticideAddResult)
+    assertEquals(journal.editPesticide(pesticideId, pesticide), store.pesticideEditResult)
+    assertEquals(store.addedComponents.get(), Vector(SubstrateComponent(componentId, component)))
+    assertEquals(store.editedComponents.get(), Vector(componentId -> component))
+    assertEquals(store.addedPesticides.get(), Vector(Pesticide(pesticideId, pesticide)))
+    assertEquals(store.editedPesticides.get(), Vector(pesticideId -> pesticide))
+
+  test("should validate catalog references before writing operations"):
+    val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
+    val pesticides   = Vector(
+      Pesticide(
+        vertabId,
+        PesticideData(NomenclatureName("VERTAB"), PesticideType("Insecticide"), NomenclatureInfo("0.8ml/L").some)
+      ),
+      Pesticide(
+        neemOilId,
+        PesticideData(NomenclatureName("Neem oil"), PesticideType("Insecticide"), none)
+      )
+    )
+    val validStore = StoreStub(pesticideReadResult = CatalogReadResult.Read(pesticides))
+    assertEquals(buildJournal(validStore).logOperation(plant.id, selectedCare), LogOperationResult.Logged(OperationId("id-1")))
+
+    val unknownPesticideStore = StoreStub()
+    buildJournal(unknownPesticideStore).logOperation(plant.id, selectedCare) match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(unknownPesticideStore.recordedOperations.get(), Vector.empty)
+
+    val readFailure          = RuntimeException("catalog unavailable")
+    val unreadablePesticides = StoreStub(pesticideReadResult = CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(
+      buildJournal(unreadablePesticides).logOperation(plant.id, selectedCare),
+      LogOperationResult.LoggingFailed(readFailure)
+    )
+
+    val unknownComponentStore = StoreStub(componentReadResult = CatalogReadResult.Read(Vector.empty))
+    val unknownComponents     = Substrate
+      .of(List(SubstratePart(perliteId, 50), SubstratePart(lecaId, 50)))
+      .getOrElse(fail("invalid test substrate"))
+    val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
+    buildJournal(unknownComponentStore).logOperation(plant.id, repotWithUnknownComponents) match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(unknownComponentStore.recordedOperations.get(), Vector.empty)
+
+    val unreadableComponents = StoreStub(componentReadResult = CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(buildJournal(unreadableComponents).logOperation(plant.id, repot), LogOperationResult.LoggingFailed(readFailure))
+
+    buildJournal(unknownPesticideStore).editOperation(operation.id, selectedCare) match
+      case EditOperationResult.EditFailed(reason) =>
+        assert(reason.getMessage.contains(vertabId.value.toString))
+        assert(reason.getMessage.contains(neemOilId.value.toString))
+      case other => fail(s"expected EditFailed, got $other")
+    assertEquals(unknownPesticideStore.updatedOperations.get(), Vector.empty)
 
   test("should assign the backend timestamp when recording care"):
     val store = StoreStub()
@@ -86,7 +151,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should update a plant after recording the latest repot"):
-    val newSubstrate = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val store        = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("must not read history")))
 
@@ -95,8 +160,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should finish concurrent repot logs in timestamp order"):
-    val firstSubstrate  = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
-    val secondSubstrate = Substrate.of(List(SubstratePart(SubstrateComponent.Sand3to5, share = 100))).getOrElse(fail("invalid test substrate"))
+    val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
     val firstClockCall  = CountDownLatch(1)
@@ -130,18 +195,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
 
   test("should remove a recorded repot whenever its plant cannot reflect it"):
-    val readFailure     = RuntimeException("read failed")
-    val updateFailure   = RuntimeException("update failed")
-    val firstCorruption = RuntimeException("invalid substrate")
-    val nextCorruption  = RuntimeException("invalid status")
-    val corruptions     = NonEmptyList.of(
-      JournalCorruption(JournalRecord.Plant(PlantId("p1")), firstCorruption),
-      JournalCorruption(JournalRecord.Plant(PlantId("p1")), nextCorruption)
-    )
-    val missingPlant = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
-    val unreadable   = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
-    val corrupted    = StoreStub(getPlantResult = GetPlantResult.Corrupted(corruptions))
-    val notUpdated   = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
+    val readFailure   = RuntimeException("read failed")
+    val updateFailure = RuntimeException("update failed")
+    val missingPlant  = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
+    val unreadable    = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val notUpdated    = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
     buildJournal(missingPlant).logOperation(PlantId("p1"), repot) match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
@@ -152,12 +210,6 @@ class PlantJournalUnitTest extends munit.FunSuite:
       LogOperationResult.LoggingFailed(readFailure)
     )
     assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
-    buildJournal(corrupted).logOperation(PlantId("p1"), repot) match
-      case LogOperationResult.LoggingFailed(reason) =>
-        assertEquals(reason.getCause, firstCorruption)
-        assertEquals(reason.getSuppressed.toList, List(nextCorruption))
-      case other => fail(s"expected LoggingFailed, got $other")
-    assertEquals(corrupted.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(
       buildJournal(notUpdated).logOperation(PlantId("p1"), repot),
       LogOperationResult.LoggingFailed(updateFailure)
@@ -189,7 +241,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
   test("should update a plant after amending the latest repot"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
-    val newSubstrate  = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
@@ -217,24 +269,13 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.restoredOperations.get(), Vector.empty)
 
   test("should restore an amended repot whenever plant synchronization cannot complete"):
-    val existingRepot    = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val historyFailure   = RuntimeException("history unavailable")
-    val plantFailure     = RuntimeException("plant unavailable")
-    val updateFailure    = RuntimeException("plant update failed")
-    val firstCorruption  = RuntimeException("first corruption")
-    val secondCorruption = RuntimeException("second corruption")
-    val corruptions      = NonEmptyList.of(
-      JournalCorruption(JournalRecord.Operation(OperationId("o1")), firstCorruption),
-      JournalCorruption(JournalRecord.Operation(OperationId("o2")), secondCorruption)
-    )
+    val existingRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val historyFailure    = RuntimeException("history unavailable")
+    val plantFailure      = RuntimeException("plant unavailable")
+    val updateFailure     = RuntimeException("plant update failed")
     val unreadableHistory = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
       getOperationsResult = GetOperationsResult.ReadFailed(historyFailure),
-      updateOperationResult = EditOperationResult.Edited(existingRepot)
-    )
-    val corruptedHistory = StoreStub(
-      getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Corrupted(corruptions),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val unreadablePlant = StoreStub(
@@ -254,11 +295,6 @@ class PlantJournalUnitTest extends munit.FunSuite:
       buildJournal(unreadableHistory).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(historyFailure)
     )
-    buildJournal(corruptedHistory).editOperation(existingRepot.id, repot) match
-      case EditOperationResult.EditFailed(reason) =>
-        assertEquals(reason.getCause, firstCorruption)
-        assertEquals(reason.getSuppressed.toList, List(secondCorruption))
-      case other => fail(s"expected EditFailed, got $other")
     assertEquals(
       buildJournal(unreadablePlant).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(plantFailure)
@@ -267,7 +303,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
       buildJournal(plantNotUpdated).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(updateFailure)
     )
-    List(unreadableHistory, corruptedHistory, unreadablePlant, plantNotUpdated).foreach: store =>
+    List(unreadableHistory, unreadablePlant, plantNotUpdated).foreach: store =>
       assertEquals(store.updatedOperations.get(), Vector(existingRepot.id -> repot))
       assertEquals(store.restoredOperations.get(), Vector(existingRepot))
 
@@ -309,18 +345,15 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should reject invalid edit requests before writing"):
-    val corruptions  = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt row")))
     val readFailure  = RuntimeException("store down")
     val typeMismatch = StoreStub()
     val missing      = StoreStub(getOperationResult = GetOperationResult.RecordMissing)
-    val corrupted    = StoreStub(getOperationResult = GetOperationResult.Corrupted(corruptions))
     val unreadable   = StoreStub(getOperationResult = GetOperationResult.ReadFailed(readFailure))
 
     assertEquals(buildJournal(typeMismatch).editOperation(operation.id, repot), EditOperationResult.OperationTypeMismatch)
     assertEquals(buildJournal(missing).editOperation(OperationId("nope"), care), EditOperationResult.OperationMissing)
-    assertEquals(buildJournal(corrupted).editOperation(operation.id, care), EditOperationResult.Corrupted(corruptions))
     assertEquals(buildJournal(unreadable).editOperation(operation.id, care), EditOperationResult.EditFailed(readFailure))
-    List(typeMismatch, missing, corrupted, unreadable).foreach: store =>
+    List(typeMismatch, missing, unreadable).foreach: store =>
       assertEquals(store.updatedOperations.get(), Vector.empty)
 
   test("should surface an edit failure from the store"):
@@ -338,13 +371,37 @@ class PlantJournalUnitTest extends munit.FunSuite:
       updateOperationResult: EditOperationResult = EditOperationResult.Edited(operation),
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
-      updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated
+      updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
+      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(
+        Vector(
+          perliteId,
+          pineBarkId,
+          sand3to5Id,
+          lecaId
+        ).map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
+      ),
+      componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(
+        SubstrateComponent(perliteId, SubstrateComponentData(NomenclatureName("Perlite"), none))
+      ),
+      componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
+      pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
+      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(
+        Pesticide(
+          PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
+          PesticideData(NomenclatureName("Neem"), PesticideType("Treatment"), none)
+        )
+      ),
+      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) extends PlantJournalStore:
-    val recordedOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
-    val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = new AtomicReference(Vector.empty)
-    val removedOperations: AtomicReference[Vector[OperationId]]                     = new AtomicReference(Vector.empty)
-    val restoredOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
-    val updatedPlants: AtomicReference[Vector[Plant]]                               = new AtomicReference(Vector.empty)
+    val recordedOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
+    val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]]               = new AtomicReference(Vector.empty)
+    val removedOperations: AtomicReference[Vector[OperationId]]                                   = new AtomicReference(Vector.empty)
+    val restoredOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
+    val updatedPlants: AtomicReference[Vector[Plant]]                                             = new AtomicReference(Vector.empty)
+    val addedComponents: AtomicReference[Vector[SubstrateComponent]]                              = new AtomicReference(Vector.empty)
+    val editedComponents: AtomicReference[Vector[(SubstrateComponentId, SubstrateComponentData)]] = new AtomicReference(Vector.empty)
+    val addedPesticides: AtomicReference[Vector[Pesticide]]                                       = new AtomicReference(Vector.empty)
+    val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
     override def getPlant(id: PlantId): GetPlantResult                  = getPlantResult
     override def getPlants: GetPlantsResult                             = getPlantsResult
@@ -360,3 +417,13 @@ class PlantJournalUnitTest extends munit.FunSuite:
       restoredOperations.updateAndGet(_ :+ operation).pipe(_ => restoreOperationResult)
     override def updatePlant(plant: Plant): UpdatePlantResult =
       updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
+    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                              = componentReadResult
+    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      addedComponents.updateAndGet(_ :+ component).pipe(_ => componentAddResult)
+    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
+      editedComponents.updateAndGet(_ :+ (id -> data)).pipe(_ => componentEditResult)
+    override def getPesticides: CatalogReadResult[Pesticide]                     = pesticideReadResult
+    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+      addedPesticides.updateAndGet(_ :+ pesticide).pipe(_ => pesticideAddResult)
+    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
+      editedPesticides.updateAndGet(_ :+ (id -> data)).pipe(_ => pesticideEditResult)

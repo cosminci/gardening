@@ -1,39 +1,54 @@
 package gardening.adapters.http
 
-import cats.data.NonEmptyList
 import cats.syntax.option.*
 import gardening.domain.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, UriContext, basicRequest}
-import sttp.model.StatusCode
+import sttp.model.{StatusCode, Uri}
 import sttp.tapir.server.stub.TapirStubInterpreter
 
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.util.chaining.*
 
 class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
-  private val date           = Instant.parse("2026-01-01T00:00:00Z")
-  private val species        = Species("Ficus lyrata")
-  private val nickname       = Nickname("Fern").some
-  private val location       = Location("Balcony")
-  private val substrate      = Substrate.of(List(SubstratePart(SubstrateComponent.Perlite, 100))).getOrElse(fail("invalid substrate"))
-  private val plant          = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
-  private val care           = OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), MoistureLevel.Wet, Note("dry").some)
+  private val date      = Instant.parse("2026-01-01T00:00:00Z")
+  private val species   = Species("Ficus lyrata")
+  private val nickname  = Nickname("Fern").some
+  private val location  = Location("Balcony")
+  private val perliteId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val substrate = Substrate.of(List(SubstratePart(perliteId, 100))).getOrElse(fail("invalid substrate"))
+  private val plant     = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
+  private val care      =
+    OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
   private val repot          = OperationDetails.Repot(substrate, Note("fresh").some)
   private val careOperation  = Operation(OperationId("care"), plant.id, date, care)
   private val repotOperation = Operation(OperationId("repot"), plant.id, date.plusSeconds(1), repot)
-  private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"moisture":"wet","notes":"dry"}"""
-  private val repotRequest   = """{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}"""
-  private val plantsJson     =
-    """[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"component":"perlite","share":100}],"status":"active"}}]"""
+  private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
+  private val repotRequest   =
+    """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
+  private val plantsJson =
+    """[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}}]"""
   private val operationsJson =
-    """[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}}]"""
+    """[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}]"""
   private val repotJson =
-    """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}}"""
+    """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
+  private val componentId       = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
+  private val pesticideId       = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
+  private val componentData     = SubstrateComponentData(NomenclatureName("Pumice"), NomenclatureInfo("porous").some)
+  private val pesticideData     = PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), NomenclatureInfo("2g/L").some)
+  private val component         = SubstrateComponent(componentId, componentData)
+  private val pesticide         = Pesticide(pesticideId, pesticideData)
+  private val componentDataJson = """{"name":"Pumice","info":"porous"}"""
+  private val pesticideDataJson = """{"name":"Sulfur","type":"Fungicide","info":"2g/L"}"""
+  private val componentJson     = s"""{"id":"${componentId.value}","data":$componentDataJson}"""
+  private val pesticideJson     = s"""{"id":"${pesticideId.value}","data":$pesticideDataJson}"""
+  private val catalogReadError  = """{"message":"nomenclatures could not be read"}"""
+  private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
 
   test("should return active plants and the requested plant's care history"):
     val requestedPlants = AtomicReference(Vector.empty[PlantId])
@@ -70,18 +85,18 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     val logged        = AtomicReference(Vector.empty[(PlantId, OperationDetails)])
     val journal       = buildJournal(loggedOperations = logged)
     val invalidBodies = List(
-      """{"kind":"care","actions":["misted"],"moisture":"wet","notes":null}""",
-      """{"kind":"repot","substrate":[{"component":"perlite","share":0}],"notes":null}""",
-      """{"kind":"repot","substrate":[{"component":"perlite","share":50},{"component":"perlite","share":50}],"notes":null}""",
-      """{"kind":"fertilize","actions":[],"moisture":"wet","notes":null}"""
+      """{"kind":"care","actions":["misted"],"pesticides":[],"moisture":"wet","notes":null}""",
+      """{"kind":"care","actions":[],"pesticides":["not-a-uuid"],"moisture":"wet","notes":null}""",
+      """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":0}],"notes":null}""",
+      """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":50},{"componentId":"00000000-0000-4000-8000-000000000003","share":50}],"notes":null}""",
+      """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
     invalidBodies.foreach(body => assertEquals(logOperation(body, journal).code, StatusCode.BadRequest))
     assertEquals(logged.get(), Vector.empty)
 
-  test("should hide corruption and storage failures returned by read operations"):
-    val corruption = JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("private details"))
-    val journal    = buildJournal(
-      getPlantsResult = GetPlantsResult.Corrupted(NonEmptyList.one(corruption)),
+  test("should hide storage failures returned by read operations"):
+    val journal = buildJournal(
+      getPlantsResult = GetPlantsResult.ReadFailed(RuntimeException("offline")),
       getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("offline"))
     )
 
@@ -105,13 +120,70 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     val response = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.OperationTypeMismatch))
     assertEquals(response.code -> jsonBody(response), StatusCode.Conflict -> json("""{"message":"operation type cannot be changed"}"""))
 
-  test("should hide corruption and storage failures returned when editing"):
-    val corruption = JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("private details"))
-    val corrupted  = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.Corrupted(NonEmptyList.one(corruption))))
-    val failed     = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
-    val expected   = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
-    assertEquals(corrupted.code -> jsonBody(corrupted), expected)
-    assertEquals(failed.code    -> jsonBody(failed), expected)
+  test("should hide storage failures returned when editing"):
+    val response = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
+    val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+
+  test("should list and add catalog records"):
+    val journal = buildJournal(
+      componentReadResult = CatalogReadResult.Read(Vector(component)),
+      componentAddResult = CatalogAddResult.Added(component),
+      pesticideReadResult = CatalogReadResult.Read(Vector(pesticide)),
+      pesticideAddResult = CatalogAddResult.Added(pesticide)
+    )
+
+    assertResponse(get("/substrate-components", journal), StatusCode.Ok, s"[$componentJson]")
+    assertResponse(post("/substrate-components", componentDataJson, journal), StatusCode.Created, componentJson)
+    assertResponse(get("/pesticides", journal), StatusCode.Ok, s"[$pesticideJson]")
+    assertResponse(post("/pesticides", pesticideDataJson, journal), StatusCode.Created, pesticideJson)
+
+  test("should edit catalog records and reject invalid or missing identifiers"):
+    val journal = buildJournal(
+      componentEditResult = CatalogEditResult.Edited(component),
+      pesticideEditResult = CatalogEditResult.Edited(pesticide)
+    )
+
+    assertResponse(put(s"/substrate-components/${componentId.value}", componentDataJson, journal), StatusCode.Ok, componentJson)
+    assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, journal), StatusCode.Ok, pesticideJson)
+    assertResponse(
+      put("/substrate-components/not-a-uuid", componentDataJson, journal),
+      StatusCode.BadRequest,
+      """{"message":"invalid nomenclature id"}"""
+    )
+    assertResponse(
+      put(s"/substrate-components/${componentId.value}", componentDataJson, buildJournal()),
+      StatusCode.NotFound,
+      """{"message":"nomenclature not found"}"""
+    )
+    assertResponse(
+      put("/pesticides/not-a-uuid", pesticideDataJson, journal),
+      StatusCode.BadRequest,
+      """{"message":"invalid nomenclature id"}"""
+    )
+    assertResponse(
+      put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildJournal()),
+      StatusCode.NotFound,
+      """{"message":"nomenclature not found"}"""
+    )
+
+  test("should hide catalog storage failures"):
+    val failure = RuntimeException("private details")
+    val journal = buildJournal(
+      componentReadResult = CatalogReadResult.ReadFailed(failure),
+      componentAddResult = CatalogAddResult.AddFailed(failure),
+      componentEditResult = CatalogEditResult.EditFailed(failure),
+      pesticideReadResult = CatalogReadResult.ReadFailed(failure),
+      pesticideAddResult = CatalogAddResult.AddFailed(failure),
+      pesticideEditResult = CatalogEditResult.EditFailed(failure)
+    )
+
+    assertResponse(get("/substrate-components", journal), StatusCode.InternalServerError, catalogReadError)
+    assertResponse(post("/substrate-components", componentDataJson, journal), StatusCode.InternalServerError, catalogWriteError)
+    assertResponse(put(s"/substrate-components/${componentId.value}", componentDataJson, journal), StatusCode.InternalServerError, catalogWriteError)
+    assertResponse(get("/pesticides", journal), StatusCode.InternalServerError, catalogReadError)
+    assertResponse(post("/pesticides", pesticideDataJson, journal), StatusCode.InternalServerError, catalogWriteError)
+    assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, journal), StatusCode.InternalServerError, catalogWriteError)
 
   private def getPlants(journal: PlantJournal) =
     basicRequest.get(uri"http://test/plants").send(backend(journal))
@@ -125,11 +197,23 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def editOperation(body: String, journal: PlantJournal) =
     basicRequest.put(uri"http://test/operations/${repotOperation.id.value}").body(body).contentType("application/json").send(backend(journal))
 
+  private def get(path: String, journal: PlantJournal) =
+    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backend(journal))
+
+  private def post(path: String, body: String, journal: PlantJournal) =
+    basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
+
+  private def put(path: String, body: String, journal: PlantJournal) =
+    basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
+
   private def backend(journal: PlantJournal) =
     TapirStubInterpreter(SttpBackendStub.synchronous).whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal)).backend()
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
+  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String): Unit =
+    assertEquals(response.code -> jsonBody(response), status -> json(body))
+
   private def buildJournal(
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(Vector.empty),
@@ -137,7 +221,13 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
       requestedPlants: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
       loggedOperations: AtomicReference[Vector[(PlantId, OperationDetails)]] = AtomicReference(Vector.empty),
-      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
+      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty),
+      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
+      componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
+      componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
+      pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
+      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
+      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) = new PlantJournal:
     override def getPlants: GetPlantsResult                           = getPlantsResult
     override def getOperations(plantId: PlantId): GetOperationsResult = requestedPlants.updateAndGet(_ :+ plantId).pipe(_ => getOperationsResult)
@@ -145,3 +235,10 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       loggedOperations.updateAndGet(_ :+ (plantId -> details)).pipe(_ => logOperationResult)
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
+    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = componentReadResult
+    override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] = componentAddResult
+    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
+      componentEditResult
+    override def getPesticides: CatalogReadResult[Pesticide]                                       = pesticideReadResult
+    override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]                    = pesticideAddResult
+    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] = pesticideEditResult

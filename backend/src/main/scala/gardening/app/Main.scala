@@ -22,6 +22,8 @@ object Main:
       val store     = SqlitePlantJournalStore.make(connection.transactor)
       val journal   = PlantJournal.make(using store, UuidIdGenerator, SystemClock)
       val endpoints =
-        List(HealthApi.serverEndpoint(version)) ++ JournalApi.serverEndpoints(using journal) ++ List(StaticSite.endpoint(staticDir))
+        List(HealthApi.serverEndpoint(version)) ++
+          JournalApi.serverEndpoints(using journal) ++
+          List(StaticSite.endpoint(staticDir))
       val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
     finally connection.close()

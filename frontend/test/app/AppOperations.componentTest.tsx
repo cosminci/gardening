@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-lib
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/app/App";
 import type { OperationDetails } from "../../src/domain/Journal";
-import { note, operationId, percentage, substrate } from "../../src/domain/Journal";
+import {
+  note,
+  operationId,
+  percentage,
+  seededSubstrateComponentIds,
+  substrate,
+} from "../../src/domain/Journal";
 import { buildJournal, care, ficus, repot } from "./JournalTestSupport";
 
 afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
@@ -55,6 +61,7 @@ describe("changing the journal", () => {
         details: {
           kind: "care",
           actions: new Set(["watered"]),
+          pesticides: new Set(),
           moisture: "wet",
           maybeNote: note("Recovered"),
         },
@@ -69,7 +76,9 @@ describe("changing the journal", () => {
       ...existing,
       details: {
         kind: "repot" as const,
-        substrate: substrate([{ component: "perlite", share: percentage(80) }]),
+        substrate: substrate([
+          { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
+        ]),
         maybeNote: note("Less perlite"),
       },
     };
@@ -107,7 +116,9 @@ describe("changing the journal", () => {
           operationId: "o1",
           details: {
             kind: "repot",
-            substrate: substrate([{ component: "perlite", share: percentage(80) }]),
+            substrate: substrate([
+              { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
+            ]),
             maybeNote: "Less perlite",
           },
         },

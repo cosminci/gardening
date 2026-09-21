@@ -1,11 +1,11 @@
 import { For, Index } from "solid-js";
 import type { Component } from "solid-js";
-import type { SubstrateComponent } from "../domain/Journal";
-import { substrateComponents } from "../domain/Journal";
-import { substrateComponentLabels } from "./JournalLabels";
+import type { SubstrateComponentId } from "../domain/Journal";
+import { seededSubstrateComponentIds, substrateComponents } from "../domain/Journal";
+import { substrateComponentLabel } from "./JournalLabels";
 
 export interface SubstratePartInput {
-  readonly component: SubstrateComponent;
+  readonly component: SubstrateComponentId;
   readonly share: number;
 }
 
@@ -34,13 +34,13 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
                 value={part().component}
                 onChange={(event) => {
                   updatePart(index, {
-                    component: event.currentTarget.value as SubstrateComponent,
+                    component: event.currentTarget.value as SubstrateComponentId,
                   });
                 }}
               >
                 <For each={substrateComponents}>
                   {(component) => (
-                    <option value={component}>{substrateComponentLabels[component]}</option>
+                    <option value={component}>{substrateComponentLabel(component)}</option>
                   )}
                 </For>
               </select>
@@ -63,7 +63,7 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
               class="icon-action"
               type="button"
               aria-label={`Remove component ${String(index + 1)}`}
-              title={`Remove ${substrateComponentLabels[part().component]}`}
+              title={`Remove ${substrateComponentLabel(part().component)}`}
               disabled={props.parts.length === 1}
               onClick={() => {
                 props.onChange(props.parts.filter((_, partIndex) => partIndex !== index));
@@ -79,7 +79,10 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
         type="button"
         aria-label="Add component"
         onClick={() => {
-          props.onChange([...props.parts, { component: "perlite", share: 1 }]);
+          props.onChange([
+            ...props.parts,
+            { component: seededSubstrateComponentIds.perlite, share: 1 },
+          ]);
         }}
       >
         + Add component

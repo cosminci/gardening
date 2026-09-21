@@ -13,6 +13,7 @@ val archUnitV = "1.5.0"
 val catsV     = "2.13.0"
 val circeV    = "0.14.16"
 val monocleV  = "3.3.0"
+val slf4jV    = "2.0.18"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
@@ -89,6 +90,7 @@ lazy val root = (project in file("."))
       "io.circe"                      %% "circe-core"                % circeV,
       "io.circe"                      %% "circe-parser"              % circeV,
       "dev.optics"                    %% "monocle-macro"             % monocleV,
+      "org.slf4j"                      % "slf4j-simple"               % slf4jV % Runtime,
       "com.tngtech.archunit"           % "archunit"                 % archUnitV % Test,
       "org.scalameta"                 %% "munit"                   % munitV % Test,
       "com.softwaremill.sttp.tapir"   %% "tapir-sttp-stub-server"  % tapirV % Test

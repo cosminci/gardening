@@ -7,6 +7,7 @@ import type {
   LogOperationResult,
   Operation,
   OperationDetails,
+  PesticideId,
   Plant,
 } from "../../src/domain/Journal";
 import {
@@ -17,6 +18,7 @@ import {
   operationId,
   percentage,
   plantId,
+  seededSubstrateComponentIds,
   species,
   substrate,
 } from "../../src/domain/Journal";
@@ -27,7 +29,9 @@ export const ficus = (): Plant => ({
     species: species("Ficus lyrata"),
     maybeNickname: nickname("Fern"),
     location: location("Balcony"),
-    substrate: substrate([{ component: "perlite", share: percentage(100) }]),
+    substrate: substrate([
+      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
+    ]),
     status: "active",
   },
 });
@@ -38,7 +42,9 @@ export const monstera = (): Plant => ({
     species: species("Monstera deliciosa"),
     maybeNickname: null,
     location: location("Kitchen"),
-    substrate: substrate([{ component: "pineBark", share: percentage(40) }]),
+    substrate: substrate([
+      { component: seededSubstrateComponentIds.pineBark, share: percentage(40) },
+    ]),
     status: "active",
   },
 });
@@ -49,6 +55,7 @@ export const care = (
   moisture: "dry" | "moderatePlus" | "wet",
   maybeNote: string | null = null,
   actions: ReadonlySet<ActionType> = new Set(["watered"]),
+  pesticides: ReadonlySet<PesticideId> = new Set(),
 ): Operation => ({
   id: operationId(id),
   plantId: plantId("p1"),
@@ -56,6 +63,7 @@ export const care = (
   details: {
     kind: "care",
     actions,
+    pesticides,
     moisture,
     maybeNote: maybeNote === null ? null : note(maybeNote),
   },
@@ -67,7 +75,9 @@ export const repot = (id: string, date: string): Operation => ({
   date: instant(date),
   details: {
     kind: "repot",
-    substrate: substrate([{ component: "perlite", share: percentage(100) }]),
+    substrate: substrate([
+      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
+    ]),
     maybeNote: null,
   },
 });

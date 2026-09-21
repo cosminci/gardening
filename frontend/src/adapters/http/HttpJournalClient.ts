@@ -16,8 +16,10 @@ import {
   nickname,
   note,
   operationId,
+  pesticideId,
   percentage,
   plantId,
+  substrateComponentId,
   species,
   substrate,
 } from "../../domain/Journal";
@@ -93,7 +95,7 @@ const toPlant = (value: Wire["Plant"]): Plant => ({
     location: location(value.details.location),
     substrate: substrate(
       value.details.substrate.map((part) => ({
-        component: part.component,
+        component: substrateComponentId(part.componentId),
         share: percentage(part.share),
       })),
     ),
@@ -110,6 +112,7 @@ const toOperation = (value: Wire["Operation"]): Operation => ({
       ? {
           kind: "care",
           actions: new Set(value.details.actions),
+          pesticides: new Set(value.details.pesticides.map(pesticideId)),
           moisture: value.details.moisture,
           maybeNote: value.details.notes === null ? null : note(value.details.notes),
         }
@@ -117,7 +120,7 @@ const toOperation = (value: Wire["Operation"]): Operation => ({
           kind: "repot",
           substrate: substrate(
             value.details.substrate.map((part) => ({
-              component: part.component,
+              component: substrateComponentId(part.componentId),
               share: percentage(part.share),
             })),
           ),
@@ -130,13 +133,14 @@ const toWireDetails = (details: OperationDetails): Wire["OperationDetails"] =>
     ? {
         kind: "care",
         actions: [...details.actions].sort(),
+        pesticides: [...details.pesticides].sort(),
         moisture: details.moisture,
         notes: details.maybeNote,
       }
     : {
         kind: "repot",
         substrate: details.substrate.map((part) => ({
-          component: part.component,
+          componentId: part.component,
           share: part.share,
         })),
         notes: details.maybeNote,

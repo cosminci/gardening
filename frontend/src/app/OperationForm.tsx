@@ -1,7 +1,7 @@
 import { Show, createSignal } from "solid-js";
 import type { Component } from "solid-js";
 import type { ActionType, OperationDetails } from "../domain/Journal";
-import { note, percentage, substrate } from "../domain/Journal";
+import { note, percentage, seededSubstrateComponentIds, substrate } from "../domain/Journal";
 import { CareFields } from "./CareFields";
 import { SubstrateFields } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
@@ -22,10 +22,11 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
   const [moisture, setMoisture] = createSignal(
     props.initial?.kind === "care" ? props.initial.moisture : "noReading",
   );
+  const pesticides = props.initial?.kind === "care" ? props.initial.pesticides : new Set<never>();
   const [parts, setParts] = createSignal<SubstratePartInput[]>(
     props.initial?.kind === "repot"
       ? props.initial.substrate.map((part) => ({ component: part.component, share: part.share }))
-      : [{ component: "perlite", share: 100 }],
+      : [{ component: seededSubstrateComponentIds.perlite, share: 100 }],
   );
   const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
   const [validationError, setValidationError] = createSignal<string>();
@@ -51,7 +52,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
     const maybeNote = notes().trim() === "" ? null : note(notes().trim());
     const details: OperationDetails =
       kind() === "care"
-        ? { kind: "care", actions: actions(), moisture: moisture(), maybeNote }
+        ? { kind: "care", actions: actions(), pesticides, moisture: moisture(), maybeNote }
         : {
             kind: "repot",
             substrate: substrate(
