@@ -318,7 +318,23 @@ export interface operations {
                     "text/plain": string;
                 };
             };
-            default: {
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
