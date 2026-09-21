@@ -48,7 +48,7 @@ class SqliteSeamIntegrationTest extends FunSuite:
         statement.setString(2, "Ficus lyrata")
         statement.setString(3, "Balcony")
         statement.setString(4, "Active")
-        statement.setString(5, s"""[{"component":"${gardening.domain.TestNomenclatureIds.Perlite.value}","share":100}]""")
+        statement.setString(5, """[{"component":"00000000-0000-4000-8000-000000000003","share":100}]""")
         val _ = statement.executeUpdate()
       finally statement.close()
     finally connection.close()

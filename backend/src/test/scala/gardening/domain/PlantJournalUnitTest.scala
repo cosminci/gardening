@@ -14,10 +14,16 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PlantJournalUnitTest extends munit.FunSuite:
 
-  private val date = Instant.parse("2026-01-01T00:00:00Z")
+  private val date       = Instant.parse("2026-01-01T00:00:00Z")
+  private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val pineBarkId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000004"))
+  private val sand3to5Id = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
+  private val lecaId     = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
+  private val vertabId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
+  private val neemOilId  = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
 
   private val substrate = Substrate
-    .of(List(SubstratePart(TestNomenclatureIds.Perlite, share = 100)))
+    .of(List(SubstratePart(perliteId, share = 100)))
     .getOrElse(fail("invalid test substrate"))
 
   private val plant = Plant(
@@ -90,14 +96,14 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.editedPesticides.get(), Vector(pesticideId -> pesticide))
 
   test("should validate catalog references before writing operations"):
-    val selectedCare = care.copy(pesticides = Set(TestNomenclatureIds.Vertab, TestNomenclatureIds.NeemOil))
+    val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
     val pesticides   = Vector(
       Pesticide(
-        TestNomenclatureIds.Vertab,
+        vertabId,
         PesticideData(NomenclatureName("VERTAB"), PesticideType("Insecticide"), NomenclatureInfo("0.8ml/L").some)
       ),
       Pesticide(
-        TestNomenclatureIds.NeemOil,
+        neemOilId,
         PesticideData(NomenclatureName("Neem oil"), PesticideType("Insecticide"), none)
       )
     )
@@ -119,7 +125,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
 
     val unknownComponentStore = StoreStub(componentReadResult = CatalogReadResult.Read(Vector.empty))
     val unknownComponents     = Substrate
-      .of(List(SubstratePart(TestNomenclatureIds.Perlite, 50), SubstratePart(TestNomenclatureIds.Leca, 50)))
+      .of(List(SubstratePart(perliteId, 50), SubstratePart(lecaId, 50)))
       .getOrElse(fail("invalid test substrate"))
     val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
     buildJournal(unknownComponentStore).logOperation(plant.id, repotWithUnknownComponents) match
@@ -132,8 +138,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
 
     buildJournal(unknownPesticideStore).editOperation(operation.id, selectedCare) match
       case EditOperationResult.EditFailed(reason) =>
-        assert(reason.getMessage.contains(TestNomenclatureIds.Vertab.value.toString))
-        assert(reason.getMessage.contains(TestNomenclatureIds.NeemOil.value.toString))
+        assert(reason.getMessage.contains(vertabId.value.toString))
+        assert(reason.getMessage.contains(neemOilId.value.toString))
       case other => fail(s"expected EditFailed, got $other")
     assertEquals(unknownPesticideStore.updatedOperations.get(), Vector.empty)
 
@@ -145,7 +151,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should update a plant after recording the latest repot"):
-    val newSubstrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val store        = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("must not read history")))
 
@@ -154,8 +160,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should finish concurrent repot logs in timestamp order"):
-    val firstSubstrate  = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
-    val secondSubstrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Sand3to5, share = 100))).getOrElse(fail("invalid test substrate"))
+    val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
     val firstClockCall  = CountDownLatch(1)
@@ -235,7 +241,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
   test("should update a plant after amending the latest repot"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
-    val newSubstrate  = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
@@ -368,14 +374,14 @@ class PlantJournalUnitTest extends munit.FunSuite:
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
       componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(
         Vector(
-          TestNomenclatureIds.Perlite,
-          TestNomenclatureIds.PineBark,
-          TestNomenclatureIds.Sand3to5,
-          TestNomenclatureIds.Leca
+          perliteId,
+          pineBarkId,
+          sand3to5Id,
+          lecaId
         ).map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
       ),
       componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(
-        SubstrateComponent(TestNomenclatureIds.Perlite, SubstrateComponentData(NomenclatureName("Perlite"), none))
+        SubstrateComponent(perliteId, SubstrateComponentData(NomenclatureName("Perlite"), none))
       ),
       componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
       pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),

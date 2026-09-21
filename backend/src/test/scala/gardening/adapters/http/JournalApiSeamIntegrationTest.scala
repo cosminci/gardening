@@ -20,7 +20,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val species   = Species("Ficus lyrata")
   private val nickname  = Nickname("Fern").some
   private val location  = Location("Balcony")
-  private val substrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Perlite, 100))).getOrElse(fail("invalid substrate"))
+  private val perliteId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val substrate = Substrate.of(List(SubstratePart(perliteId, 100))).getOrElse(fail("invalid substrate"))
   private val plant     = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
   private val care      =
     OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
