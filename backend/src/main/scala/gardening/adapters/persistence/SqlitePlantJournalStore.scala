@@ -43,7 +43,7 @@ object SqlitePlantJournalStore:
 
     private def toPlant(row: PlantRow): ValidatedNel[JournalCorruption, Plant] =
       val record          = JournalRecord.Plant(PlantId(row.id))
-      val substrateResult = StoredSubstrate.decodeString(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
+      val substrateResult = decodeSubstrate(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
 
       // The schema check constrains every stored status to a PlantStatus name.
       // $COVERAGE-OFF$
@@ -130,25 +130,74 @@ object SqlitePlantJournalStore:
       catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
-      SqliteCatalogQueries.getSubstrateComponents(transactor)
+      try
+        connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run())
+          .traverse(toComponent)
+          .fold(CatalogReadResult.ReadFailed.apply, CatalogReadResult.Read.apply)
+      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 
     override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
-      SqliteCatalogQueries.addSubstrateComponent(transactor, component)
+      try
+        val row = ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value))
+        transact(transactor):
+          sql"insert into substrate_component (id, name, info) values (${row.id}, ${row.name}, ${row.info})".update.run()
+        CatalogAddResult.Added(component)
+      catch case error: SqlException => CatalogAddResult.AddFailed(error)
 
     override def editSubstrateComponent(
         id: SubstrateComponentId,
         data: SubstrateComponentData
     ): CatalogEditResult[SubstrateComponent] =
-      SqliteCatalogQueries.editSubstrateComponent(transactor, id, data)
+      try
+        transact(transactor):
+          sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)}
+               where id = ${id.value.toString}""".update.run()
+        match
+          case 1 => CatalogEditResult.Edited(SubstrateComponent(id, data))
+          case _ => CatalogEditResult.RecordMissing
+      catch case error: SqlException => CatalogEditResult.EditFailed(error)
 
     override def getPesticides: CatalogReadResult[Pesticide] =
-      SqliteCatalogQueries.getPesticides(transactor)
+      try
+        connect(transactor)(sql"select id, name, type, info from pesticide order by rowid".query[PesticideRow].run())
+          .traverse(toPesticide)
+          .fold(CatalogReadResult.ReadFailed.apply, CatalogReadResult.Read.apply)
+      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 
     override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
-      SqliteCatalogQueries.addPesticide(transactor, pesticide)
+      try
+        val data = pesticide.data
+        transact(transactor):
+          sql"""insert into pesticide (id, name, type, info)
+               values (${pesticide.id.value.toString}, ${data.name.value}, ${data.pesticideType.value}, ${data.maybeInfo.map(
+              _.value
+            )})""".update.run()
+        CatalogAddResult.Added(pesticide)
+      catch case error: SqlException => CatalogAddResult.AddFailed(error)
 
     override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-      SqliteCatalogQueries.editPesticide(transactor, id, data)
+      try
+        transact(transactor):
+          sql"""update pesticide set name = ${data.name.value}, type = ${data.pesticideType.value}, info = ${data.maybeInfo.map(_.value)}
+               where id = ${id.value.toString}""".update.run()
+        match
+          case 1 => CatalogEditResult.Edited(Pesticide(id, data))
+          case _ => CatalogEditResult.RecordMissing
+      catch case error: SqlException => CatalogEditResult.EditFailed(error)
+
+    private def toComponent(row: ComponentRow): Either[Throwable, SubstrateComponent] =
+      SubstrateComponentId
+        .parse(row.id)
+        .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
+        .map: id =>
+          SubstrateComponent(id, SubstrateComponentData(NomenclatureName(row.name), row.info.map(NomenclatureInfo.apply)))
+
+    private def toPesticide(row: PesticideRow): Either[Throwable, Pesticide] =
+      PesticideId
+        .parse(row.id)
+        .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
+        .map: id =>
+          Pesticide(id, PesticideData(NomenclatureName(row.name), PesticideType(row.pesticideType), row.info.map(NomenclatureInfo.apply)))
 
     private def updatePlantRow(plant: Plant): Frag =
       val details = plant.details
@@ -156,7 +205,7 @@ object SqlitePlantJournalStore:
            set species = ${details.species.value},
                nickname = ${details.maybeNickname.map(_.value)},
                location = ${details.location.value},
-               substrate = ${StoredSubstrate.encodeString(details.substrate)},
+               substrate = ${encodeSubstrate(details.substrate).noSpaces},
                status = ${details.status.toString}
            where id = ${plant.id.value}"""
 
@@ -169,3 +218,5 @@ object SqlitePlantJournalStore:
       derives DbCodec
 
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
+  private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec
+  private case class PesticideRow(id: String, name: String, pesticideType: String, info: Option[String]) derives DbCodec

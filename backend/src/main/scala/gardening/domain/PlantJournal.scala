@@ -51,7 +51,7 @@ object PlantJournal:
 
     override def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
       val operation = Operation(OperationId(idGen.nextId()), plantId, clock.now(), op)
-      validateReferences(op) match
+      validateOperationDetails(op) match
         case Left(reason) => LogOperationResult.LoggingFailed(reason)
         case Right(_)     =>
           store.addOperation(operation) match
@@ -70,7 +70,7 @@ object PlantJournal:
         case GetOperationResult.Read(operation) if !sameType(operation.details, details) =>
           EditOperationResult.OperationTypeMismatch
         case GetOperationResult.Read(operation) =>
-          validateReferences(details) match
+          validateOperationDetails(details) match
             case Left(reason) => EditOperationResult.EditFailed(reason)
             case Right(_)     =>
               store.updateOperation(id, details) match
@@ -94,27 +94,34 @@ object PlantJournal:
             updated <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def validateReferences(details: OperationDetails): Either[Throwable, Unit] =
+    private def validateOperationDetails(details: OperationDetails) =
       details match
-        case care: OperationDetails.Care if care.pesticides.nonEmpty =>
-          store.getPesticides match
-            case CatalogReadResult.Read(pesticides) =>
-              val known   = pesticides.map(_.id.value).toSet
-              val missing = care.pesticides.map(_.value).diff(known)
-              Either.cond(missing.isEmpty, (), RuntimeException(s"unknown pesticide ids: ${missing.toVector.sortBy(_.toString).mkString(", ")}"))
-            case CatalogReadResult.ReadFailed(reason) => reason.asLeft
-        case _: OperationDetails.Care      => ().asRight
-        case repot: OperationDetails.Repot =>
-          store.getSubstrateComponents match
-            case CatalogReadResult.Read(components) =>
-              val known   = components.map(_.id.value).toSet
-              val missing = repot.substrate.parts.map(_.componentId.value).toSet.diff(known)
-              Either.cond(
-                missing.isEmpty,
-                (),
-                RuntimeException(s"unknown substrate component ids: ${missing.toVector.sortBy(_.toString).mkString(", ")}")
-              )
-            case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+        case op: OperationDetails.Care  => validatePesticides(op.pesticides)
+        case op: OperationDetails.Repot => validateSubstrateComponents(op.substrate)
+
+    private def validatePesticides(selected: Set[PesticideId]) =
+      if selected.isEmpty then ().asRight
+      else
+        store.getPesticides match
+          case CatalogReadResult.Read(pesticides) =>
+            val known   = pesticides.map(_.id).toSet
+            val missing = selected.diff(known)
+            Either.cond(missing.isEmpty, (), unknownPesticides(missing))
+          case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+
+    private def validateSubstrateComponents(substrate: Substrate) =
+      store.getSubstrateComponents match
+        case CatalogReadResult.Read(components) =>
+          val known   = components.map(_.id).toSet
+          val missing = substrate.parts.map(_.componentId).toSet.diff(known)
+          Either.cond(missing.isEmpty, (), unknownSubstrateComponents(missing))
+        case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+
+    private def unknownPesticides(ids: Set[PesticideId]) =
+      RuntimeException(s"unknown pesticide ids: ${ids.toVector.map(_.value).sorted.mkString(", ")}")
+
+    private def unknownSubstrateComponents(ids: Set[SubstrateComponentId]) =
+      RuntimeException(s"unknown substrate component ids: ${ids.toVector.map(_.value).sorted.mkString(", ")}")
 
     private def updatePlantIfOperationIsLatestRepot(operation: Operation) =
       operation.details match

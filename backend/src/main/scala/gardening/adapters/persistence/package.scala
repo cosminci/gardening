@@ -9,6 +9,8 @@ import cats.syntax.validated.*
 import gardening.domain.*
 import io.circe.{DecodingFailure, Decoder, HCursor, Json}
 import io.circe.parser.parse
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.Interval
 
 private[persistence] object StoredOperationPayload:
 
@@ -28,10 +30,29 @@ private[persistence] object StoredOperationPayload:
         )
       case OperationDetails.Repot(substrate, maybeNote) =>
         Json.obj(
-          "substrate" -> StoredSubstrate.encode(substrate),
+          "substrate" -> encodeSubstrate(substrate),
           "note"      -> maybeNote.fold(Json.Null)(note => Json.fromString(note.value))
         )
     ).noSpaces
+
+  def encodeSubstrate(substrate: Substrate): Json =
+    Json.arr(
+      substrate.parts.map(part =>
+        Json.obj(
+          "component" -> Json.fromString(part.componentId.value.toString),
+          "share"     -> Json.fromInt(part.share)
+        )
+      )*
+    )
+
+  def decodeSubstrate(encoded: String): Either[Throwable, Substrate] =
+    // SQLite's json_valid constraint prevents this parse failure for persisted plants.
+    // $COVERAGE-OFF$
+    parse(encoded)
+      .leftMap(reason => invalidSubstrate(reason.message))
+      // $COVERAGE-ON$
+      .flatMap(_.as[List[StoredSubstratePart]].leftMap(reason => invalidSubstrate(reason.message)))
+      .flatMap(parts => decodeSubstrateParts(parts).toEither.leftMap(errors => errors.head))
 
   extension (payload: String)
     def decode(kind: String): ValidatedNel[Throwable, OperationDetails] =
@@ -66,7 +87,7 @@ private[persistence] object StoredOperationPayload:
   private def decodeRepot(cursor: HCursor): ValidatedNel[Throwable, OperationDetails] =
     val substrate = cursor.downField("substrate").focus
       .toValidNel(invalidOperationPayload(DecodingFailure("missing substrate", cursor.history)))
-      .andThen(StoredSubstrate.decodeJson)
+      .andThen(decodeSubstrate)
     val note = decodeField[Option[String]](cursor, "note")
 
     (substrate, note).mapN: (substrate, note) =>
@@ -84,6 +105,25 @@ private[persistence] object StoredOperationPayload:
   private def decodePesticide(encoded: String): Either[Throwable, PesticideId] =
     PesticideId.parse(encoded).toRight(invalidOperationPayload(DecodingFailure(s"invalid pesticide id: $encoded", ops = Nil)))
 
+  private def decodeSubstrate(json: Json): ValidatedNel[Throwable, Substrate] =
+    json.as[List[StoredSubstratePart]]
+      .leftMap(reason => invalidSubstrate(reason.message))
+      .toValidatedNel
+      .andThen(decodeSubstrateParts)
+
+  private def decodeSubstrateParts(parts: List[StoredSubstratePart]): ValidatedNel[Throwable, Substrate] =
+    parts
+      .traverse(decodeSubstratePart(_).toValidatedNel)
+      .andThen(parts => Substrate.of(parts).leftMap(reason => invalidSubstrate(reason.toString)).toValidatedNel)
+
+  private def decodeSubstratePart(part: StoredSubstratePart): Either[Throwable, SubstratePart] =
+    for
+      componentId <- SubstrateComponentId.parse(part.component).toRight(invalidSubstrate(s"invalid component id: ${part.component}"))
+      share       <- part.share
+        .refineOption[Interval.Closed[1, 100]]
+        .toRight(invalidSubstrate(s"invalid share: ${part.share}"))
+    yield SubstratePart(componentId, share)
+
   private def decodeEnum[A](encoded: String, values: Seq[A], field: String): Either[Throwable, A] =
     values
       .find(_.toString.equals(encoded))
@@ -97,3 +137,11 @@ private[persistence] object StoredOperationPayload:
       case _ => reason.getMessage
       // $COVERAGE-ON$
     RuntimeException(s"invalid stored operation payload: $message", reason)
+
+  private def invalidSubstrate(reason: String): RuntimeException =
+    RuntimeException(s"invalid stored substrate: $reason")
+
+  private case class StoredSubstratePart(component: String, share: Int)
+
+  private given Decoder[StoredSubstratePart] =
+    Decoder.forProduct2("component", "share")(StoredSubstratePart.apply)
