@@ -51,13 +51,16 @@ object PlantJournal:
 
     override def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
       val operation = Operation(OperationId(idGen.nextId()), plantId, clock.now(), op)
-      store.addOperation(operation) match
-        case res: LogOperationResult.Logged =>
-          updatePlantAfterLogging(operation)
-            .compensateWith(store.removeOperation(operation.id))
-            .leftMap(LogOperationResult.LoggingFailed.apply)
-            .fold(identity, _ => res)
-        case failure => failure
+      validateReferences(op) match
+        case Left(reason) => LogOperationResult.LoggingFailed(reason)
+        case Right(_)     =>
+          store.addOperation(operation) match
+            case res: LogOperationResult.Logged =>
+              updatePlantAfterLogging(operation)
+                .compensateWith(store.removeOperation(operation.id))
+                .leftMap(LogOperationResult.LoggingFailed.apply)
+                .fold(identity, _ => res)
+            case failure => failure
 
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = operationMutex.exclusively:
       store.getOperation(id) match
@@ -67,13 +70,16 @@ object PlantJournal:
         case GetOperationResult.Read(operation) if !sameType(operation.details, details) =>
           EditOperationResult.OperationTypeMismatch
         case GetOperationResult.Read(operation) =>
-          store.updateOperation(id, details) match
-            case res @ EditOperationResult.Edited(edited) =>
-              updatePlantIfOperationIsLatestRepot(edited)
-                .compensateWith(store.restoreOperation(operation))
-                .leftMap(EditOperationResult.EditFailed.apply)
-                .fold(identity, _ => res)
-            case failure => failure
+          validateReferences(details) match
+            case Left(reason) => EditOperationResult.EditFailed(reason)
+            case Right(_)     =>
+              store.updateOperation(id, details) match
+                case res @ EditOperationResult.Edited(edited) =>
+                  updatePlantIfOperationIsLatestRepot(edited)
+                    .compensateWith(store.restoreOperation(operation))
+                    .leftMap(EditOperationResult.EditFailed.apply)
+                    .fold(identity, _ => res)
+                case failure => failure
 
     private enum PlantUpdateInterruption:
       case NotLatestRepot
@@ -87,6 +93,28 @@ object PlantJournal:
             plant   <- readPlant(operation.plantId)
             updated <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
+
+    private def validateReferences(details: OperationDetails): Either[Throwable, Unit] =
+      details match
+        case care: OperationDetails.Care if care.pesticides.nonEmpty =>
+          store.getPesticides match
+            case CatalogReadResult.Read(pesticides) =>
+              val known   = pesticides.map(_.id.value).toSet
+              val missing = care.pesticides.map(_.value).diff(known)
+              Either.cond(missing.isEmpty, (), RuntimeException(s"unknown pesticide ids: ${missing.toVector.sortBy(_.toString).mkString(", ")}"))
+            case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+        case _: OperationDetails.Care      => ().asRight
+        case repot: OperationDetails.Repot =>
+          store.getSubstrateComponents match
+            case CatalogReadResult.Read(components) =>
+              val known   = components.map(_.id.value).toSet
+              val missing = repot.substrate.parts.map(_.componentId.value).toSet.diff(known)
+              Either.cond(
+                missing.isEmpty,
+                (),
+                RuntimeException(s"unknown substrate component ids: ${missing.toVector.sortBy(_.toString).mkString(", ")}")
+              )
+            case CatalogReadResult.ReadFailed(reason) => reason.asLeft
 
     private def updatePlantIfOperationIsLatestRepot(operation: Operation) =
       operation.details match

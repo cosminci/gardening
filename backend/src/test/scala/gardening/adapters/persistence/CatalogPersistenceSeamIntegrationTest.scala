@@ -7,7 +7,7 @@ import gardening.domain.*
 import munit.FunSuite
 import org.flywaydb.core.Flyway
 
-import java.sql.{Connection, SQLException}
+import java.sql.Connection
 import java.util.UUID
 
 class CatalogPersistenceSeamIntegrationTest extends FunSuite:
@@ -118,27 +118,6 @@ class CatalogPersistenceSeamIntegrationTest extends FunSuite:
     store.getPesticides match
       case CatalogReadResult.ReadFailed(_) => ()
       case other                           => fail(s"expected ReadFailed, got $other")
-
-  test("should reject journal records that reference unknown catalog identifiers"):
-    withStore: (connection, _) =>
-      val dataSource = connection.dataSource
-      val unknown    = "10000000-0000-4000-8000-000000000099"
-      val validPlant =
-        s"""insert into plant values ('p1', 'Ficus', null, 'Desk', 'Active', '[{"component":"${TestNomenclatureIds.Perlite.value}","share":100}]')"""
-      val invalidPlant =
-        s"""insert into plant values ('bad', 'Ficus', null, 'Desk', 'Active', '[{"component":"$unknown","share":100}]')"""
-      val careWithUnknownPesticide =
-        s"""insert into operation values ('o1', 'p1', '2026-01-01T00:00:00Z', 'Care', '{"actions":["Pesticide"],"pesticides":["$unknown"],"moisture":"Wet","note":null}')"""
-      val repotWithUnknownComponent =
-        s"""insert into operation values ('o2', 'p1', '2026-01-01T00:00:01Z', 'Repot', '{"substrate":[{"component":"$unknown","share":100}],"note":null}')"""
-
-      val plantFailure = intercept[SQLException](execute(dataSource, invalidPlant))
-      assert(plantFailure.getMessage.contains("unknown substrate component"))
-      execute(dataSource, validPlant)
-      val careFailure = intercept[SQLException](execute(dataSource, careWithUnknownPesticide))
-      assert(careFailure.getMessage.contains("unknown nomenclature reference"))
-      val repotFailure = intercept[SQLException](execute(dataSource, repotWithUnknownComponent))
-      assert(repotFailure.getMessage.contains("unknown nomenclature reference"))
 
   private def withStore(test: (SqliteConnection, PlantJournalStore) => Unit): Unit =
     val connection = connectionWithSchema()

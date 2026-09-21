@@ -100,6 +100,54 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.addedPesticides.get(), Vector(Pesticide(pesticideId, pesticide)))
     assertEquals(store.editedPesticides.get(), Vector(pesticideId -> pesticide))
 
+  test("should validate catalog references before writing operations"):
+    val selectedCare = care.copy(pesticides = Set(TestNomenclatureIds.Vertab, TestNomenclatureIds.NeemOil))
+    val pesticides   = Vector(
+      Pesticide(
+        TestNomenclatureIds.Vertab,
+        PesticideData(NomenclatureName("VERTAB"), PesticideType("Insecticide"), NomenclatureInfo("0.8ml/L").some)
+      ),
+      Pesticide(
+        TestNomenclatureIds.NeemOil,
+        PesticideData(NomenclatureName("Neem oil"), PesticideType("Insecticide"), none)
+      )
+    )
+    val validStore = StoreStub(pesticideReadResult = CatalogReadResult.Read(pesticides))
+    assertEquals(buildJournal(validStore).logOperation(plant.id, selectedCare), LogOperationResult.Logged(OperationId("id-1")))
+
+    val unknownPesticideStore = StoreStub()
+    buildJournal(unknownPesticideStore).logOperation(plant.id, selectedCare) match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(unknownPesticideStore.recordedOperations.get(), Vector.empty)
+
+    val readFailure          = RuntimeException("catalog unavailable")
+    val unreadablePesticides = StoreStub(pesticideReadResult = CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(
+      buildJournal(unreadablePesticides).logOperation(plant.id, selectedCare),
+      LogOperationResult.LoggingFailed(readFailure)
+    )
+
+    val unknownComponentStore = StoreStub(componentReadResult = CatalogReadResult.Read(Vector.empty))
+    val unknownComponents     = Substrate
+      .of(List(SubstratePart(TestNomenclatureIds.Perlite, 50), SubstratePart(TestNomenclatureIds.Leca, 50)))
+      .getOrElse(fail("invalid test substrate"))
+    val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
+    buildJournal(unknownComponentStore).logOperation(plant.id, repotWithUnknownComponents) match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(unknownComponentStore.recordedOperations.get(), Vector.empty)
+
+    val unreadableComponents = StoreStub(componentReadResult = CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(buildJournal(unreadableComponents).logOperation(plant.id, repot), LogOperationResult.LoggingFailed(readFailure))
+
+    buildJournal(unknownPesticideStore).editOperation(operation.id, selectedCare) match
+      case EditOperationResult.EditFailed(reason) =>
+        assert(reason.getMessage.contains(TestNomenclatureIds.Vertab.value.toString))
+        assert(reason.getMessage.contains(TestNomenclatureIds.NeemOil.value.toString))
+      case other => fail(s"expected EditFailed, got $other")
+    assertEquals(unknownPesticideStore.updatedOperations.get(), Vector.empty)
+
   test("should assign the backend timestamp when recording care"):
     val store = StoreStub()
 
@@ -361,7 +409,14 @@ class PlantJournalUnitTest extends munit.FunSuite:
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
-      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
+      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(
+        Vector(
+          TestNomenclatureIds.Perlite,
+          TestNomenclatureIds.PineBark,
+          TestNomenclatureIds.Sand3to5,
+          TestNomenclatureIds.Leca
+        ).map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
+      ),
       componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(
         SubstrateComponent(TestNomenclatureIds.Perlite, SubstrateComponentData(NomenclatureName("Perlite"), none))
       ),

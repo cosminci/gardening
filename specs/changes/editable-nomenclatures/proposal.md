@@ -43,7 +43,7 @@ Editing of both substrates and pesticides should be fluent and natural. Rather t
 - UI allows users to add and edit pesticides and substrate components directly from the action forms.
 
 ## Out of Scope
-- Deleting pesticides and substrate components. This is a separate discussion as it raises questions about how to handle existing actions and plants that reference deleted items.
+- Deleting pesticides and substrate components. A later delete operation must reject items still referenced by a plant or operation.
 
 ## Doc Sync
 

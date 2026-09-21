@@ -82,10 +82,7 @@ private[persistence] object StoredOperationPayload:
     decodeEnum(encoded, MoistureLevel.values.toSeq, "moisture")
 
   private def decodePesticide(encoded: String): Either[Throwable, PesticideId] =
-    // SQLite reference triggers prevent invalid or unknown pesticide identifiers from being persisted.
-    // $COVERAGE-OFF$
     PesticideId.parse(encoded).toRight(invalidOperationPayload(DecodingFailure(s"invalid pesticide id: $encoded", ops = Nil)))
-    // $COVERAGE-ON$
 
   private def decodeEnum[A](encoded: String, values: Seq[A], field: String): Either[Throwable, A] =
     values

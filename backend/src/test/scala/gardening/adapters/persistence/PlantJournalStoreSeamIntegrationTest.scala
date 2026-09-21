@@ -18,7 +18,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
 
   private val care = OperationDetails.Care(
     actions = Set(ActionType.Watered, ActionType.Fertilized),
-    pesticides = Set(TestNomenclatureIds.Vertab, TestNomenclatureIds.NeemOil),
+    pesticides = Set.empty,
     moisture = MoistureLevel.Wet,
     maybeNote = Note("a little dry").some
   )
@@ -96,7 +96,12 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
   test("should round-trip a care operation without changing plant substrate"):
     withStore: (dataSource, store) =>
       seedPlant(dataSource, id = "p1")
-      val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+      val operation = Operation(
+        OperationId("o1"),
+        PlantId("p1"),
+        date,
+        care.copy(pesticides = Set(TestNomenclatureIds.Vertab, TestNomenclatureIds.NeemOil))
+      )
 
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
 
