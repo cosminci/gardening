@@ -1,7 +1,18 @@
-import { Show, createSignal } from "solid-js";
+import { Show, createSignal, untrack } from "solid-js";
 import type { Component } from "solid-js";
-import type { ActionType, OperationDetails } from "../domain/Journal";
-import { note, percentage, seededSubstrateComponentIds, substrate } from "../domain/Journal";
+import type {
+  ActionType,
+  CatalogAddResult,
+  CatalogEditResult,
+  OperationDetails,
+  Pesticide,
+  PesticideData,
+  PesticideId,
+  SubstrateComponent,
+  SubstrateComponentData,
+  SubstrateComponentId,
+} from "../domain/Journal";
+import { note, percentage, substrate } from "../domain/Journal";
 import { CareFields } from "./CareFields";
 import { SubstrateFields } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
@@ -10,11 +21,26 @@ import "./operation-form.css";
 
 interface OperationFormProps {
   readonly initial: OperationDetails | undefined;
+  readonly substrateComponents: readonly SubstrateComponent[];
+  readonly pesticides: readonly Pesticide[];
   readonly onSubmit: (details: OperationDetails) => Promise<void>;
+  readonly onAddSubstrateComponent: (
+    data: SubstrateComponentData,
+  ) => Promise<CatalogAddResult<SubstrateComponent>>;
+  readonly onEditSubstrateComponent: (
+    id: SubstrateComponentId,
+    data: SubstrateComponentData,
+  ) => Promise<CatalogEditResult<SubstrateComponent>>;
+  readonly onAddPesticide: (data: PesticideData) => Promise<CatalogAddResult<Pesticide>>;
+  readonly onEditPesticide: (
+    id: PesticideId,
+    data: PesticideData,
+  ) => Promise<CatalogEditResult<Pesticide>>;
   readonly onCancel: () => void;
 }
 
 export const OperationForm: Component<OperationFormProps> = (props) => {
+  const initialSubstrateComponent = untrack(() => props.substrateComponents[0]);
   const [kind, setKind] = createSignal(props.initial?.kind ?? "care");
   const [actions, setActions] = createSignal(
     props.initial?.kind === "care" ? new Set(props.initial.actions) : new Set<ActionType>(),
@@ -22,11 +48,15 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
   const [moisture, setMoisture] = createSignal(
     props.initial?.kind === "care" ? props.initial.moisture : "noReading",
   );
-  const pesticides = props.initial?.kind === "care" ? props.initial.pesticides : new Set<never>();
+  const [selectedPesticides, setSelectedPesticides] = createSignal<ReadonlySet<PesticideId>>(
+    props.initial?.kind === "care" ? new Set(props.initial.pesticides) : new Set(),
+  );
   const [parts, setParts] = createSignal<SubstratePartInput[]>(
     props.initial?.kind === "repot"
       ? props.initial.substrate.map((part) => ({ component: part.component, share: part.share }))
-      : [{ component: seededSubstrateComponentIds.perlite, share: 100 }],
+      : initialSubstrateComponent === undefined
+        ? []
+        : [{ component: initialSubstrateComponent.id, share: 100 }],
   );
   const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
   const [validationError, setValidationError] = createSignal<string>();
@@ -35,11 +65,20 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
   const toggleAction = (action: ActionType, checked: boolean) =>
     setActions((current) => {
       const updated = new Set(current);
-      if (checked && action === "noAction") return new Set(["noAction"]);
+      if (checked && action === "noAction") return new Set<ActionType>(["noAction"]);
       if (checked) {
         updated.delete("noAction");
         updated.add(action);
       } else updated.delete(action);
+      if (!checked && action === "pesticide") setSelectedPesticides(new Set<PesticideId>());
+      return updated;
+    });
+
+  const togglePesticide = (pesticide: PesticideId, checked: boolean) =>
+    setSelectedPesticides((current) => {
+      const updated = new Set(current);
+      if (checked) updated.add(pesticide);
+      else updated.delete(pesticide);
       return updated;
     });
 
@@ -52,7 +91,13 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
     const maybeNote = notes().trim() === "" ? null : note(notes().trim());
     const details: OperationDetails =
       kind() === "care"
-        ? { kind: "care", actions: actions(), pesticides, moisture: moisture(), maybeNote }
+        ? {
+            kind: "care",
+            actions: actions(),
+            pesticides: selectedPesticides(),
+            moisture: moisture(),
+            maybeNote,
+          }
         : {
             kind: "repot",
             substrate: substrate(
@@ -97,13 +142,26 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
 
       <Show
         when={kind() === "care"}
-        fallback={<SubstrateFields parts={parts()} onChange={setParts} />}
+        fallback={
+          <SubstrateFields
+            parts={parts()}
+            components={props.substrateComponents}
+            onChange={setParts}
+            onAddComponent={props.onAddSubstrateComponent}
+            onEditComponent={props.onEditSubstrateComponent}
+          />
+        }
       >
         <CareFields
           actions={actions()}
           moisture={moisture()}
+          pesticides={props.pesticides}
+          selectedPesticides={selectedPesticides()}
           onActionChange={toggleAction}
           onMoistureChange={setMoisture}
+          onPesticideChange={togglePesticide}
+          onAddPesticide={props.onAddPesticide}
+          onEditPesticide={props.onEditPesticide}
         />
       </Show>
 
@@ -139,6 +197,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
 };
 
 const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
+  if (parts.length === 0) return "Add at least one substrate component.";
   if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
     return "Each substrate share must be a whole number from 1 to 100%.";
   if (new Set(parts.map((part) => part.component)).size !== parts.length)

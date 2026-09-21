@@ -1,6 +1,18 @@
 import { Show, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
-import type { Operation, OperationDetails, PlantId } from "../domain/Journal";
+import type {
+  CatalogAddResult,
+  CatalogEditResult,
+  Operation,
+  OperationDetails,
+  Pesticide,
+  PesticideData,
+  PesticideId,
+  PlantId,
+  SubstrateComponent,
+  SubstrateComponentData,
+  SubstrateComponentId,
+} from "../domain/Journal";
 import { editOperationControlId, logOperationControlId } from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
 import "./sheet.css";
@@ -16,8 +28,22 @@ export const operationControlId = (target: OperationTarget) =>
 
 interface OperationSheetProps {
   readonly target: OperationTarget;
+  readonly substrateComponents: readonly SubstrateComponent[];
+  readonly pesticides: readonly Pesticide[];
   readonly saveError: string | undefined;
   readonly onSubmit: (details: OperationDetails) => Promise<void>;
+  readonly onAddSubstrateComponent: (
+    data: SubstrateComponentData,
+  ) => Promise<CatalogAddResult<SubstrateComponent>>;
+  readonly onEditSubstrateComponent: (
+    id: SubstrateComponentId,
+    data: SubstrateComponentData,
+  ) => Promise<CatalogEditResult<SubstrateComponent>>;
+  readonly onAddPesticide: (data: PesticideData) => Promise<CatalogAddResult<Pesticide>>;
+  readonly onEditPesticide: (
+    id: PesticideId,
+    data: PesticideData,
+  ) => Promise<CatalogEditResult<Pesticide>>;
   readonly onCancel: () => void;
 }
 
@@ -59,7 +85,17 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
         role="dialog"
         tabIndex="-1"
       >
-        <OperationForm initial={initial()} onSubmit={props.onSubmit} onCancel={props.onCancel} />
+        <OperationForm
+          initial={initial()}
+          substrateComponents={props.substrateComponents}
+          pesticides={props.pesticides}
+          onSubmit={props.onSubmit}
+          onAddSubstrateComponent={props.onAddSubstrateComponent}
+          onEditSubstrateComponent={props.onEditSubstrateComponent}
+          onAddPesticide={props.onAddPesticide}
+          onEditPesticide={props.onEditPesticide}
+          onCancel={props.onCancel}
+        />
         <Show when={props.saveError}>
           {(message) => (
             <p class="inline-alert" role="alert">

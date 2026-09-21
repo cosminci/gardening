@@ -1,12 +1,21 @@
 import { render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
+import { nomenclatureName, pesticideId, pesticideType } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, monstera, repot } from "./JournalTestSupport";
 
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
+    const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
     const operations = [
-      care("o4", "2026-04-04T22:30:00Z", "wet", "Recovered"),
+      care(
+        "o4",
+        "2026-04-04T22:30:00Z",
+        "wet",
+        "Recovered",
+        new Set(["watered", "pesticide"]),
+        new Set([neemId]),
+      ),
       care("o2", "2026-02-02T00:00:00Z", "moderatePlus", null, new Set()),
       repot("o3", "2026-03-03T00:00:00Z"),
       care("o1", "2026-01-01T00:00:00Z", "dry"),
@@ -16,6 +25,19 @@ describe("browsing the journal", () => {
       getOperationsByPlantId: {
         p1: [{ kind: "read", operations }],
         p2: [{ kind: "read", operations: [] }],
+      },
+      getPesticidesResult: {
+        kind: "read",
+        entries: [
+          {
+            id: neemId,
+            data: {
+              name: nomenclatureName("Neem oil"),
+              pesticideType: pesticideType("organic"),
+              maybeInfo: null,
+            },
+          },
+        ],
       },
     });
 
@@ -32,7 +54,7 @@ describe("browsing the journal", () => {
     );
     expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
     expect(renderedOperations[2]).toHaveTextContent(
-      "2026-04-05EditCareMoistureWetActionsWateredNoteRecovered",
+      "2026-04-05EditCareMoistureWetActionsWatered, Insecticide / H2O2PesticidesNeem oilNoteRecovered",
     );
     expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
       "datetime",
@@ -94,37 +116,31 @@ describe("browsing the journal", () => {
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
 
-  it("should report corrupted plant records", async () => {
+  it("should report substrate catalog failures", async () => {
     const journal = buildJournal({
-      getPlantsResult: {
-        kind: "corrupted",
-        details: [{ record: { kind: "plant", id: ficus().id }, reason: new Error("corrupt") }],
+      getSubstrateComponentsResult: {
+        kind: "readFailed",
+        reason: new Error("private details"),
       },
     });
 
     render(() => <App journal={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+    expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
 
-  it("should report corrupted operation records", async () => {
-    const operation = repot("o1", "2026-01-01T00:00:00Z");
+  it("should report pesticide catalog failures", async () => {
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: {
-        p1: [
-          {
-            kind: "corrupted",
-            details: [
-              { record: { kind: "operation", id: operation.id }, reason: new Error("corrupt") },
-            ],
-          },
-        ],
+      getPesticidesResult: {
+        kind: "readFailed",
+        reason: new Error("private details"),
       },
     });
 
     render(() => <App journal={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+    expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
 });

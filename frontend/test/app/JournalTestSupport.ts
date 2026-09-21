@@ -1,5 +1,8 @@
 import type {
   ActionType,
+  CatalogAddResult,
+  CatalogEditResult,
+  CatalogReadResult,
   EditOperationResult,
   GetOperationsResult,
   GetPlantsResult,
@@ -7,21 +10,34 @@ import type {
   LogOperationResult,
   Operation,
   OperationDetails,
+  Pesticide,
+  PesticideData,
   PesticideId,
   Plant,
+  SubstrateComponent,
+  SubstrateComponentData,
+  SubstrateComponentId,
 } from "../../src/domain/Journal";
 import {
   instant,
   location,
   nickname,
+  nomenclatureName,
   note,
   operationId,
   percentage,
   plantId,
-  seededSubstrateComponentIds,
+  substrateComponentId,
   species,
   substrate,
 } from "../../src/domain/Journal";
+
+const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
+const pineBarkId = substrateComponentId("00000000-0000-4000-8000-000000000004");
+const substrateComponents: readonly SubstrateComponent[] = [
+  { id: perliteId, data: { name: nomenclatureName("Perlite"), maybeInfo: null } },
+  { id: pineBarkId, data: { name: nomenclatureName("Pine bark"), maybeInfo: null } },
+];
 
 export const ficus = (): Plant => ({
   id: plantId("p1"),
@@ -29,9 +45,7 @@ export const ficus = (): Plant => ({
     species: species("Ficus lyrata"),
     maybeNickname: nickname("Fern"),
     location: location("Balcony"),
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
-    ]),
+    substrate: substrate([{ component: perliteId, share: percentage(100) }]),
     status: "active",
   },
 });
@@ -42,9 +56,7 @@ export const monstera = (): Plant => ({
     species: species("Monstera deliciosa"),
     maybeNickname: null,
     location: location("Kitchen"),
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.pineBark, share: percentage(40) },
-    ]),
+    substrate: substrate([{ component: pineBarkId, share: percentage(40) }]),
     status: "active",
   },
 });
@@ -75,9 +87,7 @@ export const repot = (id: string, date: string): Operation => ({
   date: instant(date),
   details: {
     kind: "repot",
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
-    ]),
+    substrate: substrate([{ component: perliteId, share: percentage(100) }]),
     maybeNote: null,
   },
 });
@@ -87,8 +97,18 @@ export const buildJournal = ({
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
+  componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  getPesticidesResult = { kind: "read", entries: [] },
+  pesticideAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
   logged = [],
   edited = [],
+  addedComponents = [],
+  editedComponents = [],
+  addedPesticides = [],
+  editedPesticides = [],
 }: {
   getPlantsResult?: GetPlantsResult;
   getOperationsByPlantId?: Readonly<
@@ -96,8 +116,21 @@ export const buildJournal = ({
   >;
   logOperationResult?: LogOperationResult;
   editOperationResult?: EditOperationResult;
+  getSubstrateComponentsResult?: CatalogReadResult<SubstrateComponent>;
+  componentAddResult?: CatalogAddResult<SubstrateComponent>;
+  componentEditResult?: CatalogEditResult<SubstrateComponent>;
+  getPesticidesResult?: CatalogReadResult<Pesticide>;
+  pesticideAddResult?: CatalogAddResult<Pesticide>;
+  pesticideEditResult?: CatalogEditResult<Pesticide>;
   logged?: { plantId: string; details: OperationDetails }[];
   edited?: { operationId: string; details: OperationDetails }[];
+  addedComponents?: SubstrateComponentData[];
+  editedComponents?: {
+    id: SubstrateComponentId;
+    data: SubstrateComponentData;
+  }[];
+  addedPesticides?: PesticideData[];
+  editedPesticides?: { id: PesticideId; data: PesticideData }[];
 } = {}): JournalClient => {
   const operationReads = new Map<string, number>();
 
@@ -119,6 +152,24 @@ export const buildJournal = ({
     editOperation: (id, details) => {
       edited.push({ operationId: id, details });
       return Promise.resolve(editOperationResult);
+    },
+    getSubstrateComponents: () => Promise.resolve(getSubstrateComponentsResult),
+    addSubstrateComponent: (data) => {
+      addedComponents.push(data);
+      return Promise.resolve(componentAddResult);
+    },
+    editSubstrateComponent: (id, data) => {
+      editedComponents.push({ id, data });
+      return Promise.resolve(componentEditResult);
+    },
+    getPesticides: () => Promise.resolve(getPesticidesResult),
+    addPesticide: (data) => {
+      addedPesticides.push(data);
+      return Promise.resolve(pesticideAddResult);
+    },
+    editPesticide: (id, data) => {
+      editedPesticides.push({ id, data });
+      return Promise.resolve(pesticideEditResult);
     },
   };
 };

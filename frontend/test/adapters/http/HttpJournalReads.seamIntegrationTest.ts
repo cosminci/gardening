@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import { makeHttpJournalClient } from "../../../src/adapters/http/HttpJournalClient";
 import {
   operationId,
+  nomenclatureInfo,
+  nomenclatureName,
   percentage,
   pesticideId,
+  pesticideType,
   plantId,
-  seededSubstrateComponentIds,
   substrate,
+  substrateComponentId,
 } from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
+
+const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
+const pineBarkId = substrateComponentId("00000000-0000-4000-8000-000000000004");
 
 describe("HttpJournalClient reads", () => {
   it("should translate plant and operation responses into domain values", async () => {
@@ -22,7 +28,7 @@ describe("HttpJournalClient reads", () => {
             location: "Balcony",
             substrate: [
               {
-                componentId: seededSubstrateComponentIds.perlite,
+                componentId: perliteId,
                 share: 100,
               },
             ],
@@ -37,7 +43,7 @@ describe("HttpJournalClient reads", () => {
             location: "Kitchen",
             substrate: [
               {
-                componentId: seededSubstrateComponentIds.pineBark,
+                componentId: pineBarkId,
                 share: 40,
               },
             ],
@@ -83,9 +89,7 @@ describe("HttpJournalClient reads", () => {
             species: "Ficus lyrata",
             maybeNickname: "Fern",
             location: "Balcony",
-            substrate: substrate([
-              { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
-            ]),
+            substrate: substrate([{ component: perliteId, share: percentage(100) }]),
             status: "active",
           },
         },
@@ -95,9 +99,7 @@ describe("HttpJournalClient reads", () => {
             species: "Monstera deliciosa",
             maybeNickname: null,
             location: "Kitchen",
-            substrate: substrate([
-              { component: seededSubstrateComponentIds.pineBark, share: percentage(40) },
-            ]),
+            substrate: substrate([{ component: pineBarkId, share: percentage(40) }]),
             status: "active",
           },
         },
@@ -132,5 +134,56 @@ describe("HttpJournalClient reads", () => {
         },
       ],
     });
+  });
+
+  it("should translate substrate component and pesticide catalogs", async () => {
+    const requests: Request[] = [];
+    const fetch = respondingWith(
+      [
+        jsonResponse([
+          {
+            id: perliteId,
+            data: { name: "Perlite", info: "Adds drainage" },
+          },
+        ]),
+        jsonResponse([
+          {
+            id: "00000000-0000-4000-8001-000000000003",
+            data: { name: "Neem oil", type: "organic", info: null },
+          },
+        ]),
+      ],
+      requests,
+    );
+    const journal = makeHttpJournalClient(fetch);
+
+    await expect(journal.getSubstrateComponents()).resolves.toEqual({
+      kind: "read",
+      entries: [
+        {
+          id: perliteId,
+          data: {
+            name: nomenclatureName("Perlite"),
+            maybeInfo: nomenclatureInfo("Adds drainage"),
+          },
+        },
+      ],
+    });
+    await expect(journal.getPesticides()).resolves.toEqual({
+      kind: "read",
+      entries: [
+        {
+          id: pesticideId("00000000-0000-4000-8001-000000000003"),
+          data: {
+            name: nomenclatureName("Neem oil"),
+            pesticideType: pesticideType("organic"),
+            maybeInfo: null,
+          },
+        },
+      ],
+    });
+    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
+      ["GET /substrate-components", "GET /pesticides"],
+    );
   });
 });

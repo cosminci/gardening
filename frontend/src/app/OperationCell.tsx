@@ -1,12 +1,14 @@
 import { Show } from "solid-js";
 import type { Component } from "solid-js";
-import type { Operation, OperationDetails } from "../domain/Journal";
-import { actionLabels, formatSubstrate, moistureLabels } from "./JournalLabels";
+import type { Operation, OperationDetails, Pesticide, SubstrateComponent } from "../domain/Journal";
+import { actionLabels, formatSubstrate, moistureLabels, pesticideLabel } from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
 
 interface OperationCellProps {
   readonly operation: Operation;
   readonly position: number;
+  readonly substrateComponents: readonly SubstrateComponent[];
+  readonly pesticides: readonly Pesticide[];
   readonly onEdit: () => void;
 }
 
@@ -36,7 +38,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
         </span>
       </div>
       <dl class="operation__details">
-        {renderDetails(props.operation.details)}
+        {renderDetails(props.operation.details, props.substrateComponents, props.pesticides)}
         <Show when={props.operation.details.maybeNote}>
           {(note) => (
             <>
@@ -50,7 +52,11 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
   );
 };
 
-const renderDetails = (details: OperationDetails) => {
+const renderDetails = (
+  details: OperationDetails,
+  substrateComponents: readonly SubstrateComponent[],
+  pesticides: readonly Pesticide[],
+) => {
   switch (details.kind) {
     case "care":
       return (
@@ -63,13 +69,21 @@ const renderDetails = (details: OperationDetails) => {
               ? "None recorded"
               : [...details.actions].map((action) => actionLabels[action]).join(", ")}
           </dd>
+          <Show when={details.pesticides.size > 0}>
+            <>
+              <dt>Pesticides</dt>
+              <dd>
+                {[...details.pesticides].map((id) => pesticideLabel(id, pesticides)).join(", ")}
+              </dd>
+            </>
+          </Show>
         </>
       );
     case "repot":
       return (
         <>
           <dt>Substrate</dt>
-          <dd>{formatSubstrate(details.substrate)}</dd>
+          <dd>{formatSubstrate(details.substrate, substrateComponents)}</dd>
         </>
       );
   }

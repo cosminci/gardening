@@ -1,12 +1,13 @@
 import { render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
-import { substrateComponentLabel } from "../../src/app/JournalLabels";
+import { pesticideLabel, substrateComponentLabel } from "../../src/app/JournalLabels";
 import { PlantCard } from "../../src/app/PlantCard";
-import { substrateComponentId } from "../../src/domain/Journal";
+import { nomenclatureName, pesticideId, substrateComponentId } from "../../src/domain/Journal";
 import { care, ficus } from "./JournalTestSupport";
 
 describe("plant operation controls", () => {
   it("should distinguish edit controls for same-day care operations", () => {
+    const componentId = substrateComponentId("00000000-0000-4000-8000-000000000003");
     render(() => (
       <PlantCard
         plant={ficus()}
@@ -14,6 +15,13 @@ describe("plant operation controls", () => {
           care("o1", "2026-03-03T08:00:00Z", "dry"),
           care("o2", "2026-03-03T12:00:00Z", "wet"),
         ]}
+        substrateComponents={[
+          {
+            id: componentId,
+            data: { name: nomenclatureName("Perlite"), maybeInfo: null },
+          },
+        ]}
+        pesticides={[]}
         onLog={() => undefined}
         onEdit={() => undefined}
       />
@@ -29,6 +37,11 @@ describe("plant operation controls", () => {
 
   it("should identify an unrecognized persisted substrate component", () => {
     const id = substrateComponentId("10000000-0000-4000-8000-000000000099");
-    expect(substrateComponentLabel(id)).toBe(id);
+    expect(substrateComponentLabel(id, [])).toBe(id);
+  });
+
+  it("should identify an unrecognized persisted pesticide", () => {
+    const id = pesticideId("10000000-0000-4000-8001-000000000099");
+    expect(pesticideLabel(id, [])).toBe(id);
   });
 });

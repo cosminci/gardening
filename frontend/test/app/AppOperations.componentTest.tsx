@@ -1,17 +1,27 @@
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/app/App";
-import type { OperationDetails } from "../../src/domain/Journal";
+import type {
+  OperationDetails,
+  PesticideData,
+  SubstrateComponentData,
+} from "../../src/domain/Journal";
 import {
+  nomenclatureInfo,
+  nomenclatureName,
   note,
   operationId,
   percentage,
-  seededSubstrateComponentIds,
+  pesticideId,
+  pesticideType,
   substrate,
+  substrateComponentId,
 } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, repot } from "./JournalTestSupport";
 
 afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
+
+const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
 
 describe("changing the journal", () => {
   it("should log care and refresh the plant's operation history", async () => {
@@ -76,9 +86,7 @@ describe("changing the journal", () => {
       ...existing,
       details: {
         kind: "repot" as const,
-        substrate: substrate([
-          { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
-        ]),
+        substrate: substrate([{ component: perliteId, share: percentage(80) }]),
         maybeNote: note("Less perlite"),
       },
     };
@@ -116,9 +124,7 @@ describe("changing the journal", () => {
           operationId: "o1",
           details: {
             kind: "repot",
-            substrate: substrate([
-              { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
-            ]),
+            substrate: substrate([{ component: perliteId, share: percentage(80) }]),
             maybeNote: "Less perlite",
           },
         },
@@ -156,5 +162,182 @@ describe("changing the journal", () => {
     expect(header.inert).toBe(false);
     expect(journalRows.inert).toBe(false);
     expect(trigger).toHaveFocus();
+  });
+
+  it("should add and edit substrate components from the repot form", async () => {
+    const pumiceId = substrateComponentId("00000000-0000-4000-8000-000000000005");
+    const addedComponents: SubstrateComponentData[] = [];
+    const editedComponents: {
+      id: ReturnType<typeof substrateComponentId>;
+      data: SubstrateComponentData;
+    }[] = [];
+    const journal = buildJournal({
+      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      componentAddResult: {
+        kind: "added",
+        entry: {
+          id: pumiceId,
+          data: { name: nomenclatureName("Pumice"), maybeInfo: null },
+        },
+      },
+      componentEditResult: {
+        kind: "edited",
+        entry: {
+          id: perliteId,
+          data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
+        },
+      },
+      addedComponents,
+      editedComponents,
+    });
+    render(() => <App journal={journal} />);
+    await screen.findByRole("article", { name: "Fern" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Operation type" }), {
+      target: { value: "repot" },
+    });
+    fireEvent.click(screen.getByText("Manage substrate components"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name for Perlite" }), {
+      target: { value: "Fine perlite" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Perlite" }));
+    await screen.findByRole("button", { name: "Save Fine perlite" });
+    expect(screen.getByText("Fine perlite 100%")).toBeInTheDocument();
+
+    fireEvent.input(screen.getByRole("textbox", { name: "New substrate component name" }), {
+      target: { value: "Pumice" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add substrate component" }));
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveTextContent("Pumice"),
+    );
+    expect(addedComponents).toEqual([{ name: nomenclatureName("Pumice"), maybeInfo: null }]);
+    expect(editedComponents).toEqual([
+      {
+        id: perliteId,
+        data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
+      },
+    ]);
+  });
+
+  it("should add and edit pesticides from the care form", async () => {
+    const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
+    const soapId = pesticideId("00000000-0000-4000-8001-000000000004");
+    const addedPesticides: PesticideData[] = [];
+    const editedPesticides: {
+      id: ReturnType<typeof pesticideId>;
+      data: PesticideData;
+    }[] = [];
+    const journal = buildJournal({
+      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getOperationsByPlantId: {
+        p1: [
+          {
+            kind: "read",
+            operations: [
+              care(
+                "o1",
+                "2026-03-03T00:00:00Z",
+                "wet",
+                null,
+                new Set(["pesticide"]),
+                new Set([neemId]),
+              ),
+            ],
+          },
+        ],
+      },
+      getPesticidesResult: {
+        kind: "read",
+        entries: [
+          {
+            id: neemId,
+            data: {
+              name: nomenclatureName("Neem oil"),
+              pesticideType: pesticideType("organic"),
+              maybeInfo: null,
+            },
+          },
+          {
+            id: pesticideId("00000000-0000-4000-8001-000000000006"),
+            data: {
+              name: nomenclatureName("Spinosad"),
+              pesticideType: pesticideType("organic"),
+              maybeInfo: null,
+            },
+          },
+        ],
+      },
+      pesticideAddResult: {
+        kind: "added",
+        entry: {
+          id: soapId,
+          data: {
+            name: nomenclatureName("Insecticidal soap"),
+            pesticideType: pesticideType("soap"),
+            maybeInfo: null,
+          },
+        },
+      },
+      pesticideEditResult: {
+        kind: "edited",
+        entry: {
+          id: neemId,
+          data: {
+            name: nomenclatureName("Neem concentrate"),
+            pesticideType: pesticideType("botanical"),
+            maybeInfo: nomenclatureInfo("Dilute first"),
+          },
+        },
+      },
+      addedPesticides,
+      editedPesticides,
+    });
+    render(() => <App journal={journal} />);
+    await screen.findByRole("article", { name: "Fern" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Insecticide / H2O2" }));
+    fireEvent.click(screen.getByText("Manage pesticides"));
+    fireEvent.input(screen.getByRole("textbox", { name: "Name for Neem oil" }), {
+      target: { value: "Neem concentrate" },
+    });
+    fireEvent.input(screen.getByRole("textbox", { name: "Type for Neem oil" }), {
+      target: { value: "botanical" },
+    });
+    fireEvent.input(screen.getByRole("textbox", { name: "Info for Neem oil" }), {
+      target: { value: "Dilute first" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Neem oil" }));
+    await screen.findByRole("button", { name: "Save Neem concentrate" });
+    expect(screen.getByText("Neem concentrate", { selector: "dd" })).toBeInTheDocument();
+
+    fireEvent.input(screen.getByRole("textbox", { name: "New pesticide name" }), {
+      target: { value: "Insecticidal soap" },
+    });
+    fireEvent.input(screen.getByRole("textbox", { name: "New pesticide type" }), {
+      target: { value: "soap" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add pesticide" }));
+    expect(await screen.findByRole("checkbox", { name: "Insecticidal soap" })).toBeInTheDocument();
+    expect(addedPesticides).toEqual([
+      {
+        name: nomenclatureName("Insecticidal soap"),
+        pesticideType: pesticideType("soap"),
+        maybeInfo: null,
+      },
+    ]);
+    expect(editedPesticides).toEqual([
+      {
+        id: neemId,
+        data: {
+          name: nomenclatureName("Neem concentrate"),
+          pesticideType: pesticideType("botanical"),
+          maybeInfo: nomenclatureInfo("Dilute first"),
+        },
+      },
+    ]);
   });
 });

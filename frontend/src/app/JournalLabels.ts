@@ -1,11 +1,13 @@
 import type {
   ActionType,
   MoistureLevel,
+  Pesticide,
+  PesticideId,
   Plant,
   Substrate,
+  SubstrateComponent,
   SubstrateComponentId,
 } from "../domain/Journal";
-import { seededSubstrateComponentIds } from "../domain/Journal";
 
 export const plantDisplayName = (plant: Plant) =>
   plant.details.maybeNickname ?? plant.details.species;
@@ -26,20 +28,15 @@ export const moistureLabels: Record<MoistureLevel, string> = {
   noReading: "N/A",
 };
 
-export const substrateComponentLabels: Record<SubstrateComponentId, string> = {
-  [seededSubstrateComponentIds.kekkilaUniversal]: "Kekkila universal peat",
-  [seededSubstrateComponentIds.kekkilaEricaceous]: "Kekkila ericaceous peat",
-  [seededSubstrateComponentIds.perlite]: "Perlite",
-  [seededSubstrateComponentIds.pineBark]: "Pine bark",
-  [seededSubstrateComponentIds.sand3to5]: "Sand 3-5 mm",
-  [seededSubstrateComponentIds.sand4to8]: "Sand 4-8 mm",
-  [seededSubstrateComponentIds.leca]: "LECA",
-};
+export const substrateComponentLabel = (
+  componentId: SubstrateComponentId,
+  components: readonly SubstrateComponent[],
+) => components.find((component) => component.id === componentId)?.data.name ?? componentId;
 
-export const substrateComponentLabel = (componentId: SubstrateComponentId) =>
-  substrateComponentLabels[componentId] ?? componentId;
+export const pesticideLabel = (pesticideId: PesticideId, pesticides: readonly Pesticide[]) =>
+  pesticides.find((pesticide) => pesticide.id === pesticideId)?.data.name ?? pesticideId;
 
-export const formatSubstrate = (value: Substrate) =>
+export const formatSubstrate = (value: Substrate, components: readonly SubstrateComponent[]) =>
   value
-    .map((part) => `${substrateComponentLabel(part.component)} ${String(part.share)}%`)
+    .map((part) => `${substrateComponentLabel(part.component, components)} ${String(part.share)}%`)
     .join(", ");
