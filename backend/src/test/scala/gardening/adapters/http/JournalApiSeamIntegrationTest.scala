@@ -1,6 +1,5 @@
 package gardening.adapters.http
 
-import cats.data.NonEmptyList
 import cats.syntax.option.*
 import gardening.domain.*
 import io.circe.parser.parse
@@ -81,10 +80,9 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     invalidBodies.foreach(body => assertEquals(logOperation(body, journal).code, StatusCode.BadRequest))
     assertEquals(logged.get(), Vector.empty)
 
-  test("should hide corruption and storage failures returned by read operations"):
-    val corruption = JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("private details"))
-    val journal    = buildJournal(
-      getPlantsResult = GetPlantsResult.Corrupted(NonEmptyList.one(corruption)),
+  test("should hide storage failures returned by read operations"):
+    val journal = buildJournal(
+      getPlantsResult = GetPlantsResult.ReadFailed(RuntimeException("offline")),
       getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("offline"))
     )
 
@@ -108,13 +106,10 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     val response = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.OperationTypeMismatch))
     assertEquals(response.code -> jsonBody(response), StatusCode.Conflict -> json("""{"message":"operation type cannot be changed"}"""))
 
-  test("should hide corruption and storage failures returned when editing"):
-    val corruption = JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("private details"))
-    val corrupted  = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.Corrupted(NonEmptyList.one(corruption))))
-    val failed     = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
-    val expected   = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
-    assertEquals(corrupted.code -> jsonBody(corrupted), expected)
-    assertEquals(failed.code    -> jsonBody(failed), expected)
+  test("should hide storage failures returned when editing"):
+    val response = editOperation(careRequest, buildJournal(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
+    val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
 
   private def getPlants(journal: PlantJournal) =
     basicRequest.get(uri"http://test/plants").send(backend(journal))

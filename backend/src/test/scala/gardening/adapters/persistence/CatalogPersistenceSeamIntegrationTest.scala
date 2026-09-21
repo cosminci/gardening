@@ -84,17 +84,23 @@ class CatalogPersistenceSeamIntegrationTest extends FunSuite:
         CatalogEditResult.RecordMissing
       )
 
-  test("should report invalid stored identifiers and database failures"):
+  test("should fail when stored catalog identifiers are corrupt"):
     val connection = connectionWithSchema()
     val store      = SqlitePlantJournalStore.make(connection.transactor)
     execute(connection.dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Perlite'")
     execute(connection.dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'H2O2'")
-    store.getSubstrateComponents match
-      case CatalogReadResult.ReadFailed(_) => ()
-      case other                           => fail(s"expected ReadFailed, got $other")
-    store.getPesticides match
-      case CatalogReadResult.ReadFailed(_) => ()
-      case other                           => fail(s"expected ReadFailed, got $other")
+
+    assertEquals(
+      intercept[DatabaseCorruption](store.getSubstrateComponents).err.getMessage,
+      "invalid substrate component id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    )
+    assertEquals(intercept[DatabaseCorruption](store.getPesticides).err.getMessage, "invalid pesticide id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+    connection.close()
+
+  test("should report database failures"):
+    val connection = connectionWithSchema()
+    val store      = SqlitePlantJournalStore.make(connection.transactor)
 
     val readOnlyStore = SqlitePlantJournalStore.make(Transactor(connection.dataSource, connectionConfig = makeReadOnly))
     val component     = SubstrateComponent(componentId, SubstrateComponentData(NomenclatureName("Pumice"), none))

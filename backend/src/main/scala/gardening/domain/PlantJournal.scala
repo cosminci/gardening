@@ -1,6 +1,5 @@
 package gardening.domain
 
-import cats.data.NonEmptyList
 import cats.syntax.either.*
 import monocle.syntax.all.*
 
@@ -64,7 +63,6 @@ object PlantJournal:
 
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = operationMutex.exclusively:
       store.getOperation(id) match
-        case GetOperationResult.Corrupted(corruptions)                                   => EditOperationResult.Corrupted(corruptions)
         case GetOperationResult.ReadFailed(reason)                                       => EditOperationResult.EditFailed(reason)
         case GetOperationResult.RecordMissing                                            => EditOperationResult.OperationMissing
         case GetOperationResult.Read(operation) if !sameType(operation.details, details) =>
@@ -138,16 +136,12 @@ object PlantJournal:
       store.getOperations(plantId) match
         case GetOperationsResult.Read(operations)   => operations.asRight
         case GetOperationsResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
-        case GetOperationsResult.Corrupted(details) =>
-          PlantUpdateInterruption.Failed(readFailure("cannot read operations after editing repot", details)).asLeft
 
     private def readPlant(plantId: PlantId) =
       store.getPlant(plantId) match
         case GetPlantResult.Read(plant)        => plant.asRight
         case GetPlantResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
         case GetPlantResult.RecordMissing      => PlantUpdateInterruption.Failed(RuntimeException("cannot read plant after repot")).asLeft
-        case GetPlantResult.Corrupted(details) =>
-          PlantUpdateInterruption.Failed(readFailure("cannot read plant after repot", details)).asLeft
 
     private def updatePlant(plant: Plant) =
       store.updatePlant(plant) match
@@ -159,10 +153,6 @@ object PlantJournal:
         other.details match
           case _: OperationDetails.Repot => operation.date.isAfter(other.date)
           case _                         => true
-
-    private def readFailure(context: String, details: NonEmptyList[JournalCorruption]) =
-      val reasons = details.map(_.reason)
-      RuntimeException(context, reasons.head).tap(error => reasons.tail.foreach(error.addSuppressed))
 
     extension (result: Either[PlantUpdateInterruption, Unit])
       private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =

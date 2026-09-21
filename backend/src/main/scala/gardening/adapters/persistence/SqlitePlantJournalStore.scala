@@ -1,8 +1,5 @@
 package gardening.adapters.persistence
 
-import cats.data.ValidatedNel
-import cats.syntax.apply.*
-import cats.syntax.either.*
 import cats.syntax.eq.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
@@ -21,10 +18,8 @@ object SqlitePlantJournalStore:
 
     override def getPlants: GetPlantsResult =
       try
-        connect(transactor)(selectPlants.query[PlantRow].run())
-          .traverse(toPlant)
-          .map(_.filter(_.details.status === PlantStatus.Active))
-          .fold(GetPlantsResult.Corrupted.apply, GetPlantsResult.Read.apply)
+        val plants = trust(connect(transactor)(selectPlants.query[PlantRow].run()).traverse(toPlant))
+        GetPlantsResult.Read(plants.filter(_.details.status === PlantStatus.Active))
       catch case error: SqlException => GetPlantsResult.ReadFailed(error)
 
     private def selectPlants: Frag =
@@ -34,33 +29,29 @@ object SqlitePlantJournalStore:
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
           case None      => GetPlantResult.RecordMissing
-          case Some(row) => toPlant(row).fold(GetPlantResult.Corrupted.apply, GetPlantResult.Read.apply)
+          case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
       catch case error: SqlException => GetPlantResult.ReadFailed(error)
 
     private def selectPlant(id: String): Frag =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
 
-    private def toPlant(row: PlantRow): ValidatedNel[JournalCorruption, Plant] =
-      val record          = JournalRecord.Plant(PlantId(row.id))
-      val substrateResult = decodeSubstrate(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
-
-      // The schema check constrains every stored status to a PlantStatus name.
-      // $COVERAGE-OFF$
-      val statusResult = PlantStatus.values
-        .find(_.toString.equals(row.status))
-        .toRight(JournalCorruption(record, RuntimeException(s"invalid stored plant status: ${row.status}")))
-        .toValidatedNel
+    private def toPlant(row: PlantRow) =
+      for
+        substrate <- decodeSubstrate(row.substrate)
+        // The schema check constrains every stored status to a PlantStatus name.
+        // $COVERAGE-OFF$
+        status <- PlantStatus.values
+          .find(_.toString.equals(row.status))
+          .toRight(RuntimeException(s"invalid stored plant status: ${row.status}"))
       // $COVERAGE-ON$
-
-      (substrateResult, statusResult).mapN: (substrate, status) =>
+      yield
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
 
     override def getOperations(plantId: PlantId): GetOperationsResult =
       try
-        connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run())
-          .traverse(toOperation)
-          .fold(GetOperationsResult.Corrupted.apply, GetOperationsResult.Read.apply)
+        val operations = trust(connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run()).traverse(toOperation))
+        GetOperationsResult.Read(operations)
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
 
     private def selectOperationsForPlant(plantId: String): Frag =
@@ -70,21 +61,17 @@ object SqlitePlantJournalStore:
       try
         connect(transactor)(selectOperation(id.value).query[OperationRow].run().headOption) match
           case None      => GetOperationResult.RecordMissing
-          case Some(row) => toOperation(row).fold(GetOperationResult.Corrupted.apply, GetOperationResult.Read.apply)
+          case Some(row) => GetOperationResult.Read(trust(toOperation(row)))
       catch case error: SqlException => GetOperationResult.ReadFailed(error)
 
     private def selectOperation(id: String): Frag =
       sql"select id, plant_id, date, kind, payload from operation where id = $id"
 
-    private def toOperation(row: OperationRow): ValidatedNel[JournalCorruption, Operation] =
-      val record     = JournalRecord.Operation(OperationId(row.id))
-      val dateResult = Try(Instant.parse(row.date)).toEither.left
-        .map(_ => JournalCorruption(record, RuntimeException(s"invalid stored operation date: ${row.date}")))
-        .toValidatedNel
-      val detailResult = row.payload.decode(row.kind).leftMap(_.map(reason => JournalCorruption(record, reason)))
-
-      (dateResult, detailResult).mapN: (date, details) =>
-        Operation(OperationId(row.id), PlantId(row.plantId), date, details)
+    private def toOperation(row: OperationRow) =
+      for
+        date    <- Try(Instant.parse(row.date)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: ${row.date}"))
+        details <- row.payload.decodeStoredOperation(row.kind)
+      yield Operation(OperationId(row.id), PlantId(row.plantId), date, details)
 
     override def addOperation(operation: Operation): LogOperationResult =
       try
@@ -93,8 +80,8 @@ object SqlitePlantJournalStore:
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation): Frag =
-      val operationKind = kind(operation.details)
-      val payload       = encode(operation.details)
+      val operationKind = storedOperationKind(operation.details)
+      val payload       = encodeStoredOperation(operation.details)
       sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $operationKind, $payload)"
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
@@ -105,7 +92,7 @@ object SqlitePlantJournalStore:
             .run()
             .headOption
           queryResult.fold[EditOperationResult](OperationMissing): row =>
-            toOperation(row).fold(EditOperationResult.Corrupted.apply, Edited.apply)
+            Edited(trust(toOperation(row)))
       catch case e: SqlException => EditFailed(e)
 
     override def removeOperation(id: OperationId): OperationCompensationResult =
@@ -114,8 +101,8 @@ object SqlitePlantJournalStore:
 
     override def restoreOperation(operation: Operation): OperationCompensationResult =
       try
-        val operationKind = kind(operation.details)
-        val payload       = encode(operation.details)
+        val operationKind = storedOperationKind(operation.details)
+        val payload       = encodeStoredOperation(operation.details)
         transact(transactor)(
           sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()
         ) match
@@ -132,9 +119,11 @@ object SqlitePlantJournalStore:
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
       try
-        connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run())
-          .traverse(toComponent)
-          .fold(CatalogReadResult.ReadFailed.apply, CatalogReadResult.Read.apply)
+        CatalogReadResult.Read(
+          trust(
+            connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run()).traverse(toComponent)
+          )
+        )
       catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 
     override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
@@ -160,9 +149,9 @@ object SqlitePlantJournalStore:
 
     override def getPesticides: CatalogReadResult[Pesticide] =
       try
-        connect(transactor)(sql"select id, name, type, info from pesticide order by rowid".query[PesticideRow].run())
-          .traverse(toPesticide)
-          .fold(CatalogReadResult.ReadFailed.apply, CatalogReadResult.Read.apply)
+        CatalogReadResult.Read(
+          trust(connect(transactor)(sql"select id, name, type, info from pesticide order by rowid".query[PesticideRow].run()).traverse(toPesticide))
+        )
       catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 
     override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
@@ -200,6 +189,11 @@ object SqlitePlantJournalStore:
         .map: id =>
           Pesticide(id, PesticideData(NomenclatureName(row.name), PesticideType(row.pesticideType), row.info.map(NomenclatureInfo.apply)))
 
+    @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
+    private def trust[A](decoded: Either[Throwable, A]) =
+      // Writes are validated before persistence; a decode failure is an invariant violation.
+      decoded.left.map(DatabaseCorruption.apply).toTry.get
+
     private def updatePlantRow(plant: Plant): Frag =
       val details = plant.details
       sql"""update plant
@@ -211,8 +205,8 @@ object SqlitePlantJournalStore:
            where id = ${plant.id.value}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails): Frag =
-      val operationKind = kind(details)
-      val payload       = encode(details)
+      val operationKind = storedOperationKind(details)
+      val payload       = encodeStoredOperation(details)
       sql"update operation set kind = $operationKind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
 
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)

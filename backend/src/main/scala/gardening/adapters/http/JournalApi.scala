@@ -73,13 +73,13 @@ object JournalApi:
     List(
       getPlantsEndpoint.handle: _ =>
         journal.getPlants match
-          case GetPlantsResult.Read(plants)                                 => plants.asRight
-          case GetPlantsResult.Corrupted(_) | GetPlantsResult.ReadFailed(_) =>
+          case GetPlantsResult.Read(plants)  => plants.asRight
+          case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       getOperationsEndpoint.handle: plantId =>
         journal.getOperations(PlantId(plantId)) match
-          case GetOperationsResult.Read(operations)                                 => operations.asRight
-          case GetOperationsResult.Corrupted(_) | GetOperationsResult.ReadFailed(_) =>
+          case GetOperationsResult.Read(operations) => operations.asRight
+          case GetOperationsResult.ReadFailed(_)    =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       logOperationEndpoint.handle: (plantId, details) =>
         journal.logOperation(PlantId(plantId), details) match
@@ -95,7 +95,7 @@ object JournalApi:
             JournalError.operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch =>
             JournalError.operationTypeMismatch.asLeft
-          case EditOperationResult.Corrupted(_) | EditOperationResult.EditFailed(_) =>
+          case EditOperationResult.EditFailed(_) =>
             JournalError.editFailed.asLeft,
       getComponentsEndpoint.handle: _ =>
         journal.getSubstrateComponents match

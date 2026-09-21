@@ -1,6 +1,5 @@
 package gardening.domain
 
-import cats.data.NonEmptyList
 import cats.syntax.option.*
 import io.github.iltotore.iron.*
 
@@ -51,17 +50,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     PlantJournal.make(using store, idGen, clock)
 
   test("should return plants and operation history while preserving read failures"):
-    val plantCorruptions     = NonEmptyList.one(JournalCorruption(JournalRecord.Plant(PlantId("p1")), RuntimeException("corrupt plant")))
-    val operationCorruptions = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt operation")))
-    val readFailure          = RuntimeException("store down")
+    val readFailure = RuntimeException("store down")
 
     assertEquals(
       buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))).getPlants,
       GetPlantsResult.Read(Vector(plant))
-    )
-    assertEquals(
-      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Corrupted(plantCorruptions))).getPlants,
-      GetPlantsResult.Corrupted(plantCorruptions)
     )
     assertEquals(
       buildJournal(StoreStub(getPlantsResult = GetPlantsResult.ReadFailed(readFailure))).getPlants,
@@ -70,10 +63,6 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(
       buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Read(Vector(operation)))).getOperations(PlantId("p1")),
       GetOperationsResult.Read(Vector(operation))
-    )
-    assertEquals(
-      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Corrupted(operationCorruptions))).getOperations(PlantId("p1")),
-      GetOperationsResult.Corrupted(operationCorruptions)
     )
     assertEquals(
       buildJournal(StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(readFailure))).getOperations(PlantId("p1")),
@@ -200,18 +189,11 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
 
   test("should remove a recorded repot whenever its plant cannot reflect it"):
-    val readFailure     = RuntimeException("read failed")
-    val updateFailure   = RuntimeException("update failed")
-    val firstCorruption = RuntimeException("invalid substrate")
-    val nextCorruption  = RuntimeException("invalid status")
-    val corruptions     = NonEmptyList.of(
-      JournalCorruption(JournalRecord.Plant(PlantId("p1")), firstCorruption),
-      JournalCorruption(JournalRecord.Plant(PlantId("p1")), nextCorruption)
-    )
-    val missingPlant = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
-    val unreadable   = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
-    val corrupted    = StoreStub(getPlantResult = GetPlantResult.Corrupted(corruptions))
-    val notUpdated   = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
+    val readFailure   = RuntimeException("read failed")
+    val updateFailure = RuntimeException("update failed")
+    val missingPlant  = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
+    val unreadable    = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val notUpdated    = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
     buildJournal(missingPlant).logOperation(PlantId("p1"), repot) match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
@@ -222,12 +204,6 @@ class PlantJournalUnitTest extends munit.FunSuite:
       LogOperationResult.LoggingFailed(readFailure)
     )
     assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
-    buildJournal(corrupted).logOperation(PlantId("p1"), repot) match
-      case LogOperationResult.LoggingFailed(reason) =>
-        assertEquals(reason.getCause, firstCorruption)
-        assertEquals(reason.getSuppressed.toList, List(nextCorruption))
-      case other => fail(s"expected LoggingFailed, got $other")
-    assertEquals(corrupted.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(
       buildJournal(notUpdated).logOperation(PlantId("p1"), repot),
       LogOperationResult.LoggingFailed(updateFailure)
@@ -287,24 +263,13 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.restoredOperations.get(), Vector.empty)
 
   test("should restore an amended repot whenever plant synchronization cannot complete"):
-    val existingRepot    = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val historyFailure   = RuntimeException("history unavailable")
-    val plantFailure     = RuntimeException("plant unavailable")
-    val updateFailure    = RuntimeException("plant update failed")
-    val firstCorruption  = RuntimeException("first corruption")
-    val secondCorruption = RuntimeException("second corruption")
-    val corruptions      = NonEmptyList.of(
-      JournalCorruption(JournalRecord.Operation(OperationId("o1")), firstCorruption),
-      JournalCorruption(JournalRecord.Operation(OperationId("o2")), secondCorruption)
-    )
+    val existingRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val historyFailure    = RuntimeException("history unavailable")
+    val plantFailure      = RuntimeException("plant unavailable")
+    val updateFailure     = RuntimeException("plant update failed")
     val unreadableHistory = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
       getOperationsResult = GetOperationsResult.ReadFailed(historyFailure),
-      updateOperationResult = EditOperationResult.Edited(existingRepot)
-    )
-    val corruptedHistory = StoreStub(
-      getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Corrupted(corruptions),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val unreadablePlant = StoreStub(
@@ -324,11 +289,6 @@ class PlantJournalUnitTest extends munit.FunSuite:
       buildJournal(unreadableHistory).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(historyFailure)
     )
-    buildJournal(corruptedHistory).editOperation(existingRepot.id, repot) match
-      case EditOperationResult.EditFailed(reason) =>
-        assertEquals(reason.getCause, firstCorruption)
-        assertEquals(reason.getSuppressed.toList, List(secondCorruption))
-      case other => fail(s"expected EditFailed, got $other")
     assertEquals(
       buildJournal(unreadablePlant).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(plantFailure)
@@ -337,7 +297,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
       buildJournal(plantNotUpdated).editOperation(existingRepot.id, repot),
       EditOperationResult.EditFailed(updateFailure)
     )
-    List(unreadableHistory, corruptedHistory, unreadablePlant, plantNotUpdated).foreach: store =>
+    List(unreadableHistory, unreadablePlant, plantNotUpdated).foreach: store =>
       assertEquals(store.updatedOperations.get(), Vector(existingRepot.id -> repot))
       assertEquals(store.restoredOperations.get(), Vector(existingRepot))
 
@@ -379,18 +339,15 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should reject invalid edit requests before writing"):
-    val corruptions  = NonEmptyList.one(JournalCorruption(JournalRecord.Operation(OperationId("o1")), RuntimeException("corrupt row")))
     val readFailure  = RuntimeException("store down")
     val typeMismatch = StoreStub()
     val missing      = StoreStub(getOperationResult = GetOperationResult.RecordMissing)
-    val corrupted    = StoreStub(getOperationResult = GetOperationResult.Corrupted(corruptions))
     val unreadable   = StoreStub(getOperationResult = GetOperationResult.ReadFailed(readFailure))
 
     assertEquals(buildJournal(typeMismatch).editOperation(operation.id, repot), EditOperationResult.OperationTypeMismatch)
     assertEquals(buildJournal(missing).editOperation(OperationId("nope"), care), EditOperationResult.OperationMissing)
-    assertEquals(buildJournal(corrupted).editOperation(operation.id, care), EditOperationResult.Corrupted(corruptions))
     assertEquals(buildJournal(unreadable).editOperation(operation.id, care), EditOperationResult.EditFailed(readFailure))
-    List(typeMismatch, missing, corrupted, unreadable).foreach: store =>
+    List(typeMismatch, missing, unreadable).foreach: store =>
       assertEquals(store.updatedOperations.get(), Vector.empty)
 
   test("should surface an edit failure from the store"):

@@ -1,7 +1,6 @@
 package gardening.domain
 
 import cats.Eq
-import cats.data.NonEmptyList
 import cats.syntax.either.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
@@ -151,32 +150,22 @@ object OperationDetails:
 
 final case class Operation(id: OperationId, plantId: PlantId, date: Instant, details: OperationDetails)
 
-enum JournalRecord:
-  case Plant(id: PlantId)
-  case Operation(id: OperationId)
-
-final case class JournalCorruption(record: JournalRecord, reason: Throwable)
-
 enum GetPlantResult:
   case Read(plant: Plant)
   case RecordMissing
-  case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
 enum GetPlantsResult:
   case Read(plants: Vector[Plant])
-  case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
 enum GetOperationResult:
   case Read(operation: Operation)
   case RecordMissing
-  case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
 enum GetOperationsResult:
   case Read(operations: Vector[Operation])
-  case Corrupted(details: NonEmptyList[JournalCorruption])
   case ReadFailed(reason: Throwable)
 
 enum LogOperationResult:
@@ -187,7 +176,6 @@ enum EditOperationResult:
   case Edited(operation: Operation)
   case OperationMissing
   case OperationTypeMismatch
-  case Corrupted(details: NonEmptyList[JournalCorruption])
   case EditFailed(reason: Throwable)
 
 enum OperationCompensationResult:
