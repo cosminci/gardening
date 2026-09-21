@@ -1,4 +1,5 @@
 import type {
+  ActionType,
   GetOperationsResult,
   GetPlantsResult,
   JournalClient,
@@ -44,13 +45,14 @@ export const care = (
   date: string,
   moisture: "dry" | "moderatePlus" | "wet",
   maybeNote: string | null = null,
+  actions: ReadonlySet<ActionType> = new Set(["watered"]),
 ): Operation => ({
   id: operationId(id),
   plantId: plantId("p1"),
   date: instant(date),
   details: {
     kind: "care",
-    actions: new Set(["watered"]),
+    actions,
     moisture,
     maybeNote: maybeNote === null ? null : note(maybeNote),
   },

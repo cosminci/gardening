@@ -7,7 +7,7 @@ describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
     const operations = [
       care("o4", "2026-04-04T00:00:00Z", "wet", "Recovered"),
-      care("o2", "2026-02-02T00:00:00Z", "moderatePlus"),
+      care("o2", "2026-02-02T00:00:00Z", "moderatePlus", null, new Set()),
       repot("o3", "2026-03-03T00:00:00Z"),
       care("o1", "2026-01-01T00:00:00Z", "dry"),
     ];
@@ -24,16 +24,15 @@ describe("browsing the journal", () => {
     const card = await screen.findByRole("article", { name: "Fern" });
     expect(within(card).getByText("Ficus lyrata")).toBeInTheDocument();
     expect(within(card).getByText("Balcony")).toBeInTheDocument();
-    expect(within(card).getByText("Perlite 100%")).toBeInTheDocument();
-    expect(
-      within(card)
-        .getAllByRole("listitem")
-        .map((item) => item.querySelector("span")?.textContent),
-    ).toEqual([
-      "2026-02-02 — Moderate + — Watered",
-      "2026-03-03 — Repotted — Perlite 100%",
-      "2026-04-04 — Wet — Watered — Recovered",
-    ]);
+    expect(within(card).getAllByText("Perlite 100%")).toHaveLength(2);
+    const renderedOperations = within(card).getAllByRole("listitem");
+    expect(renderedOperations[0]).toHaveTextContent(
+      "2026-02-02CareMoistureModerate +ActionsNone recorded",
+    );
+    expect(renderedOperations[1]).toHaveTextContent("2026-03-03RepotSubstratePerlite 100%");
+    expect(renderedOperations[2]).toHaveTextContent(
+      "2026-04-04CareMoistureWetActionsWateredNoteRecovered",
+    );
     expect(
       within(screen.getByRole("article", { name: "Monstera deliciosa" })).getByText(
         "No operations yet.",
