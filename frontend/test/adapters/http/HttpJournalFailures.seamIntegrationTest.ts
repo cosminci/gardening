@@ -8,6 +8,7 @@ describe("HttpJournalClient failures", () => {
     const details = {
       kind: "care" as const,
       actions: new Set<never>(),
+      pesticides: new Set<never>(),
       moisture: "noReading" as const,
       maybeNote: null,
     };

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { makeHttpJournalClient } from "../../../src/adapters/http/HttpJournalClient";
-import { operationId, percentage, plantId, substrate } from "../../../src/domain/Journal";
+import {
+  operationId,
+  percentage,
+  pesticideId,
+  plantId,
+  seededSubstrateComponentIds,
+  substrate,
+} from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
 describe("HttpJournalClient reads", () => {
@@ -13,7 +20,12 @@ describe("HttpJournalClient reads", () => {
             species: "Ficus lyrata",
             nickname: "Fern",
             location: "Balcony",
-            substrate: [{ component: "perlite", share: 100 }],
+            substrate: [
+              {
+                componentId: seededSubstrateComponentIds.perlite,
+                share: 100,
+              },
+            ],
             status: "active",
           },
         },
@@ -23,7 +35,12 @@ describe("HttpJournalClient reads", () => {
             species: "Monstera deliciosa",
             nickname: null,
             location: "Kitchen",
-            substrate: [{ component: "pineBark", share: 40 }],
+            substrate: [
+              {
+                componentId: seededSubstrateComponentIds.pineBark,
+                share: 40,
+              },
+            ],
             status: "active",
           },
         },
@@ -36,6 +53,7 @@ describe("HttpJournalClient reads", () => {
           details: {
             kind: "care",
             actions: ["watered", "pruned"],
+            pesticides: ["00000000-0000-4000-8001-000000000003"],
             moisture: "wet",
             notes: "Recovered",
           },
@@ -47,6 +65,7 @@ describe("HttpJournalClient reads", () => {
           details: {
             kind: "care",
             actions: [],
+            pesticides: [],
             moisture: "noReading",
             notes: null,
           },
@@ -64,7 +83,9 @@ describe("HttpJournalClient reads", () => {
             species: "Ficus lyrata",
             maybeNickname: "Fern",
             location: "Balcony",
-            substrate: substrate([{ component: "perlite", share: percentage(100) }]),
+            substrate: substrate([
+              { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
+            ]),
             status: "active",
           },
         },
@@ -74,7 +95,9 @@ describe("HttpJournalClient reads", () => {
             species: "Monstera deliciosa",
             maybeNickname: null,
             location: "Kitchen",
-            substrate: substrate([{ component: "pineBark", share: percentage(40) }]),
+            substrate: substrate([
+              { component: seededSubstrateComponentIds.pineBark, share: percentage(40) },
+            ]),
             status: "active",
           },
         },
@@ -90,6 +113,7 @@ describe("HttpJournalClient reads", () => {
           details: {
             kind: "care",
             actions: new Set(["watered", "pruned"]),
+            pesticides: new Set([pesticideId("00000000-0000-4000-8001-000000000003")]),
             moisture: "wet",
             maybeNote: "Recovered",
           },
@@ -101,6 +125,7 @@ describe("HttpJournalClient reads", () => {
           details: {
             kind: "care",
             actions: new Set(),
+            pesticides: new Set(),
             moisture: "noReading",
             maybeNote: null,
           },

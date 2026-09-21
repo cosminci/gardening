@@ -7,6 +7,8 @@ import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 
 import java.time.Instant
+import java.util.UUID
+import scala.util.Try
 
 opaque type PlantId = String
 object PlantId:
@@ -38,6 +40,51 @@ object Note:
   def apply(value: String): Note           = value
   extension (note: Note) def value: String = note
 
+opaque type SubstrateComponentId = UUID
+object SubstrateComponentId:
+  def apply(value: UUID): SubstrateComponentId           = value
+  def parse(value: String): Option[SubstrateComponentId] = Try(UUID.fromString(value)).toOption
+  extension (id: SubstrateComponentId) def value: UUID   = id
+
+opaque type PesticideId = UUID
+object PesticideId:
+  def apply(value: UUID): PesticideId           = value
+  def parse(value: String): Option[PesticideId] = Try(UUID.fromString(value)).toOption
+  extension (id: PesticideId) def value: UUID   = id
+
+opaque type NomenclatureName = String
+object NomenclatureName:
+  def apply(value: String): NomenclatureName           = value
+  extension (name: NomenclatureName) def value: String = name
+
+opaque type NomenclatureInfo = String
+object NomenclatureInfo:
+  def apply(value: String): NomenclatureInfo           = value
+  extension (info: NomenclatureInfo) def value: String = info
+
+opaque type PesticideType = String
+object PesticideType:
+  def apply(value: String): PesticideType                    = value
+  extension (pesticideType: PesticideType) def value: String = pesticideType
+
+final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Option[NomenclatureInfo])
+final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
+final case class PesticideData(name: NomenclatureName, pesticideType: PesticideType, maybeInfo: Option[NomenclatureInfo])
+final case class Pesticide(id: PesticideId, data: PesticideData)
+
+enum CatalogReadResult[+A]:
+  case Read(entries: Vector[A])
+  case ReadFailed(reason: Throwable)
+
+enum CatalogAddResult[+A]:
+  case Added(entry: A)
+  case AddFailed(reason: Throwable)
+
+enum CatalogEditResult[+A]:
+  case Edited(entry: A)
+  case RecordMissing
+  case EditFailed(reason: Throwable)
+
 type Percentage = Int :| Interval.Closed[1, 100]
 
 enum PlantStatus derives CanEqual:
@@ -45,15 +92,6 @@ enum PlantStatus derives CanEqual:
 
 object PlantStatus:
   given Eq[PlantStatus] = Eq.fromUniversalEquals
-
-enum SubstrateComponent(val label: String):
-  case KekkilaUniversal  extends SubstrateComponent("Kekkila universal peat")
-  case KekkilaEricaceous extends SubstrateComponent("Kekkila ericaceous peat")
-  case Perlite           extends SubstrateComponent("Perlite")
-  case PineBark          extends SubstrateComponent("Pine bark")
-  case Sand3to5          extends SubstrateComponent("Sand 3-5 mm")
-  case Sand4to8          extends SubstrateComponent("Sand 4-8 mm")
-  case Leca              extends SubstrateComponent("LECA")
 
 enum ActionType(val label: String):
   case Watered    extends ActionType("Watered")
@@ -69,7 +107,7 @@ enum MoistureLevel(val label: String):
   case Dry           extends MoistureLevel("Dry")
   case NoReading     extends MoistureLevel("N/A")
 
-final case class SubstratePart(component: SubstrateComponent, share: Percentage)
+final case class SubstratePart(componentId: SubstrateComponentId, share: Percentage)
 
 enum SubstrateError:
   case Empty
@@ -80,7 +118,7 @@ opaque type Substrate = List[SubstratePart]
 object Substrate:
   def of(parts: List[SubstratePart]): Either[SubstrateError, Substrate] =
     if parts.isEmpty then SubstrateError.Empty.asLeft
-    else if parts.map(_.component).distinct.size < parts.size then SubstrateError.DuplicateComponent.asLeft
+    else if parts.map(_.componentId).distinct.size < parts.size then SubstrateError.DuplicateComponent.asLeft
     else if parts.map(part => part.share: Int).sum > 100 then SubstrateError.ExceedsTotal.asLeft
     else parts.asRight
 
@@ -102,6 +140,7 @@ sealed trait OperationDetails:
 object OperationDetails:
   final case class Care(
       actions: Set[ActionType],
+      pesticides: Set[PesticideId],
       moisture: MoistureLevel,
       override val maybeNote: Option[Note]
   ) extends OperationDetails

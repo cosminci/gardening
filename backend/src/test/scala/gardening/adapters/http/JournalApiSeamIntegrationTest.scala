@@ -16,24 +16,26 @@ import scala.util.chaining.*
 
 class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
-  private val date           = Instant.parse("2026-01-01T00:00:00Z")
-  private val species        = Species("Ficus lyrata")
-  private val nickname       = Nickname("Fern").some
-  private val location       = Location("Balcony")
-  private val substrate      = Substrate.of(List(SubstratePart(SubstrateComponent.Perlite, 100))).getOrElse(fail("invalid substrate"))
-  private val plant          = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
-  private val care           = OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), MoistureLevel.Wet, Note("dry").some)
+  private val date      = Instant.parse("2026-01-01T00:00:00Z")
+  private val species   = Species("Ficus lyrata")
+  private val nickname  = Nickname("Fern").some
+  private val location  = Location("Balcony")
+  private val substrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Perlite, 100))).getOrElse(fail("invalid substrate"))
+  private val plant     = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
+  private val care      =
+    OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
   private val repot          = OperationDetails.Repot(substrate, Note("fresh").some)
   private val careOperation  = Operation(OperationId("care"), plant.id, date, care)
   private val repotOperation = Operation(OperationId("repot"), plant.id, date.plusSeconds(1), repot)
-  private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"moisture":"wet","notes":"dry"}"""
-  private val repotRequest   = """{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}"""
-  private val plantsJson     =
-    """[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"component":"perlite","share":100}],"status":"active"}}]"""
+  private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
+  private val repotRequest   =
+    """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
+  private val plantsJson =
+    """[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}}]"""
   private val operationsJson =
-    """[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}}]"""
+    """[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}]"""
   private val repotJson =
-    """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"component":"perlite","share":100}],"notes":"fresh"}}"""
+    """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
 
   test("should return active plants and the requested plant's care history"):
     val requestedPlants = AtomicReference(Vector.empty[PlantId])
@@ -70,10 +72,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     val logged        = AtomicReference(Vector.empty[(PlantId, OperationDetails)])
     val journal       = buildJournal(loggedOperations = logged)
     val invalidBodies = List(
-      """{"kind":"care","actions":["misted"],"moisture":"wet","notes":null}""",
-      """{"kind":"repot","substrate":[{"component":"perlite","share":0}],"notes":null}""",
-      """{"kind":"repot","substrate":[{"component":"perlite","share":50},{"component":"perlite","share":50}],"notes":null}""",
-      """{"kind":"fertilize","actions":[],"moisture":"wet","notes":null}"""
+      """{"kind":"care","actions":["misted"],"pesticides":[],"moisture":"wet","notes":null}""",
+      """{"kind":"care","actions":[],"pesticides":["not-a-uuid"],"moisture":"wet","notes":null}""",
+      """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":0}],"notes":null}""",
+      """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":50},{"componentId":"00000000-0000-4000-8000-000000000003","share":50}],"notes":null}""",
+      """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
     invalidBodies.foreach(body => assertEquals(logOperation(body, journal).code, StatusCode.BadRequest))
     assertEquals(logged.get(), Vector.empty)
@@ -145,3 +148,13 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       loggedOperations.updateAndGet(_ :+ (plantId -> details)).pipe(_ => logOperationResult)
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
+    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = CatalogReadResult.Read(Vector.empty)
+    override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
+      CatalogAddResult.AddFailed(RuntimeException("unused"))
+    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
+      CatalogEditResult.RecordMissing
+    override def getPesticides: CatalogReadResult[Pesticide]                    = CatalogReadResult.Read(Vector.empty)
+    override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
+      CatalogAddResult.AddFailed(RuntimeException("unused"))
+    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
+      CatalogEditResult.RecordMissing

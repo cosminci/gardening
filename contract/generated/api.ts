@@ -73,6 +73,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/substrate-components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List substrate components */
+        get: operations["getSubstrate-components"];
+        put?: never;
+        /** Add a substrate component */
+        post: operations["postSubstrate-components"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrate-components/{componentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a substrate component */
+        put: operations["putSubstrate-componentsComponentid"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pesticides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pesticides */
+        get: operations["getPesticides"];
+        put?: never;
+        /** Add a pesticide */
+        post: operations["postPesticides"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/pesticides/{pesticideId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a pesticide */
+        put: operations["putPesticidesPesticideid"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -89,6 +159,7 @@ export interface components {
         /** Care */
         Care: {
             actions: components["schemas"]["ActionType"][];
+            pesticides: string[];
             moisture: components["schemas"]["MoistureLevel"];
             notes: string | null;
             /**
@@ -121,6 +192,18 @@ export interface components {
         };
         /** OperationDetails */
         OperationDetails: components["schemas"]["Care"] | components["schemas"]["Repot"];
+        /** Pesticide */
+        Pesticide: {
+            /** Format: uuid */
+            id: string;
+            data: components["schemas"]["PesticideData"];
+        };
+        /** PesticideData */
+        PesticideData: {
+            name: string;
+            type: string;
+            info: string | null;
+        };
         /** Plant */
         Plant: {
             id: string;
@@ -149,14 +232,21 @@ export interface components {
              */
             kind: "repot";
         };
-        /**
-         * SubstrateComponent
-         * @enum {string}
-         */
-        SubstrateComponent: "kekkilaEricaceous" | "kekkilaUniversal" | "leca" | "perlite" | "pineBark" | "sand3to5" | "sand4to8";
+        /** SubstrateComponent */
+        SubstrateComponent: {
+            /** Format: uuid */
+            id: string;
+            data: components["schemas"]["SubstrateComponentData"];
+        };
+        /** SubstrateComponentData */
+        SubstrateComponentData: {
+            name: string;
+            info: string | null;
+        };
         /** SubstratePart */
         SubstratePart: {
-            component: components["schemas"]["SubstrateComponent"];
+            /** Format: uuid */
+            componentId: string;
             /** Format: int32 */
             share: number;
         };
@@ -327,6 +417,238 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    "getSubstrate-components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    "postSubstrate-components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateComponentData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    "putSubstrate-componentsComponentid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                componentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateComponentData"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPesticides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPesticides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PesticideData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putPesticidesPesticideid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pesticideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PesticideData"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

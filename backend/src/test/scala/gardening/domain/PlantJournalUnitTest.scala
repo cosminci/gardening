@@ -7,6 +7,7 @@ import io.github.iltotore.iron.*
 import language.experimental.captureChecking
 
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.CountDownLatch
@@ -17,7 +18,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
   private val date = Instant.parse("2026-01-01T00:00:00Z")
 
   private val substrate = Substrate
-    .of(List(SubstratePart(SubstrateComponent.Perlite, share = 100)))
+    .of(List(SubstratePart(TestNomenclatureIds.Perlite, share = 100)))
     .getOrElse(fail("invalid test substrate"))
 
   private val plant = Plant(
@@ -33,6 +34,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
 
   private val care = OperationDetails.Care(
     actions = Set(ActionType.Watered),
+    pesticides = Set.empty,
     moisture = MoistureLevel.Wet,
     maybeNote = Note("dry").some
   )
@@ -78,6 +80,26 @@ class PlantJournalUnitTest extends munit.FunSuite:
       GetOperationsResult.ReadFailed(readFailure)
     )
 
+  test("should assign catalog identifiers and delegate nomenclature operations"):
+    val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
+    val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
+    val ids         = Iterator(componentId.value.toString, pesticideId.value.toString)
+    val store       = StoreStub()
+    val journal     = buildJournal(store, idGen = () => ids.next())
+    val component   = SubstrateComponentData(NomenclatureName("Pumice"), none)
+    val pesticide   = PesticideData(NomenclatureName("Soap"), PesticideType("Treatment"), none)
+
+    assertEquals(journal.getSubstrateComponents, store.componentReadResult)
+    assertEquals(journal.addSubstrateComponent(component), store.componentAddResult)
+    assertEquals(journal.editSubstrateComponent(componentId, component), store.componentEditResult)
+    assertEquals(journal.getPesticides, store.pesticideReadResult)
+    assertEquals(journal.addPesticide(pesticide), store.pesticideAddResult)
+    assertEquals(journal.editPesticide(pesticideId, pesticide), store.pesticideEditResult)
+    assertEquals(store.addedComponents.get(), Vector(SubstrateComponent(componentId, component)))
+    assertEquals(store.editedComponents.get(), Vector(componentId -> component))
+    assertEquals(store.addedPesticides.get(), Vector(Pesticide(pesticideId, pesticide)))
+    assertEquals(store.editedPesticides.get(), Vector(pesticideId -> pesticide))
+
   test("should assign the backend timestamp when recording care"):
     val store = StoreStub()
 
@@ -86,7 +108,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should update a plant after recording the latest repot"):
-    val newSubstrate = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val store        = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("must not read history")))
 
@@ -95,8 +117,8 @@ class PlantJournalUnitTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should finish concurrent repot logs in timestamp order"):
-    val firstSubstrate  = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
-    val secondSubstrate = Substrate.of(List(SubstratePart(SubstrateComponent.Sand3to5, share = 100))).getOrElse(fail("invalid test substrate"))
+    val firstSubstrate  = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val secondSubstrate = Substrate.of(List(SubstratePart(TestNomenclatureIds.Sand3to5, share = 100))).getOrElse(fail("invalid test substrate"))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
     val firstClockCall  = CountDownLatch(1)
@@ -189,7 +211,7 @@ class PlantJournalUnitTest extends munit.FunSuite:
   test("should update a plant after amending the latest repot"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
-    val newSubstrate  = Substrate.of(List(SubstratePart(SubstrateComponent.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate  = Substrate.of(List(SubstratePart(TestNomenclatureIds.Leca, share = 100))).getOrElse(fail("invalid test substrate"))
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
@@ -338,13 +360,30 @@ class PlantJournalUnitTest extends munit.FunSuite:
       updateOperationResult: EditOperationResult = EditOperationResult.Edited(operation),
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
-      updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated
+      updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
+      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
+      componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(
+        SubstrateComponent(TestNomenclatureIds.Perlite, SubstrateComponentData(NomenclatureName("Perlite"), none))
+      ),
+      componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
+      pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
+      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(
+        Pesticide(
+          PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
+          PesticideData(NomenclatureName("Neem"), PesticideType("Treatment"), none)
+        )
+      ),
+      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) extends PlantJournalStore:
-    val recordedOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
-    val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = new AtomicReference(Vector.empty)
-    val removedOperations: AtomicReference[Vector[OperationId]]                     = new AtomicReference(Vector.empty)
-    val restoredOperations: AtomicReference[Vector[Operation]]                      = new AtomicReference(Vector.empty)
-    val updatedPlants: AtomicReference[Vector[Plant]]                               = new AtomicReference(Vector.empty)
+    val recordedOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
+    val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]]               = new AtomicReference(Vector.empty)
+    val removedOperations: AtomicReference[Vector[OperationId]]                                   = new AtomicReference(Vector.empty)
+    val restoredOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
+    val updatedPlants: AtomicReference[Vector[Plant]]                                             = new AtomicReference(Vector.empty)
+    val addedComponents: AtomicReference[Vector[SubstrateComponent]]                              = new AtomicReference(Vector.empty)
+    val editedComponents: AtomicReference[Vector[(SubstrateComponentId, SubstrateComponentData)]] = new AtomicReference(Vector.empty)
+    val addedPesticides: AtomicReference[Vector[Pesticide]]                                       = new AtomicReference(Vector.empty)
+    val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
     override def getPlant(id: PlantId): GetPlantResult                  = getPlantResult
     override def getPlants: GetPlantsResult                             = getPlantsResult
@@ -360,3 +399,13 @@ class PlantJournalUnitTest extends munit.FunSuite:
       restoredOperations.updateAndGet(_ :+ operation).pipe(_ => restoreOperationResult)
     override def updatePlant(plant: Plant): UpdatePlantResult =
       updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
+    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                              = componentReadResult
+    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      addedComponents.updateAndGet(_ :+ component).pipe(_ => componentAddResult)
+    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
+      editedComponents.updateAndGet(_ :+ (id -> data)).pipe(_ => componentEditResult)
+    override def getPesticides: CatalogReadResult[Pesticide]                     = pesticideReadResult
+    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+      addedPesticides.updateAndGet(_ :+ pesticide).pipe(_ => pesticideAddResult)
+    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
+      editedPesticides.updateAndGet(_ :+ (id -> data)).pipe(_ => pesticideEditResult)

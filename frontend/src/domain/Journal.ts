@@ -8,6 +8,8 @@ export type Location = Brand<string, "Location">;
 export type Note = Brand<string, "Note">;
 export type Instant = Brand<string, "Instant">;
 export type Percentage = Brand<number, "Percentage">;
+export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
+export type PesticideId = Brand<string, "PesticideId">;
 
 export const plantId = (value: string): PlantId => value as PlantId;
 export const operationId = (value: string): OperationId => value as OperationId;
@@ -17,20 +19,25 @@ export const location = (value: string): Location => value as Location;
 export const note = (value: string): Note => value as Note;
 export const instant = (value: string): Instant => value as Instant;
 export const percentage = (value: number): Percentage => value as Percentage;
+export const substrateComponentId = (value: string): SubstrateComponentId =>
+  value as SubstrateComponentId;
+export const pesticideId = (value: string): PesticideId => value as PesticideId;
 
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];
 
-export const substrateComponents = [
-  "kekkilaUniversal",
-  "kekkilaEricaceous",
-  "perlite",
-  "pineBark",
-  "sand3to5",
-  "sand4to8",
-  "leca",
-] as const;
-export type SubstrateComponent = (typeof substrateComponents)[number];
+export const seededSubstrateComponentIds = {
+  kekkilaUniversal: substrateComponentId("00000000-0000-4000-8000-000000000001"),
+  kekkilaEricaceous: substrateComponentId("00000000-0000-4000-8000-000000000002"),
+  perlite: substrateComponentId("00000000-0000-4000-8000-000000000003"),
+  pineBark: substrateComponentId("00000000-0000-4000-8000-000000000004"),
+  sand3to5: substrateComponentId("00000000-0000-4000-8000-000000000005"),
+  sand4to8: substrateComponentId("00000000-0000-4000-8000-000000000006"),
+  leca: substrateComponentId("00000000-0000-4000-8000-000000000007"),
+} as const;
+export const substrateComponents: readonly SubstrateComponentId[] = Object.values(
+  seededSubstrateComponentIds,
+);
 
 export const actionTypes = ["watered", "fertilized", "pesticide", "pruned", "noAction"] as const;
 export type ActionType = (typeof actionTypes)[number];
@@ -39,7 +46,7 @@ export const moistureLevels = ["wet", "moderatePlus", "moderateMinus", "dry", "n
 export type MoistureLevel = (typeof moistureLevels)[number];
 
 export interface SubstratePart {
-  readonly component: SubstrateComponent;
+  readonly component: SubstrateComponentId;
   readonly share: Percentage;
 }
 
@@ -62,6 +69,7 @@ export interface Plant {
 export interface CareOperationDetails {
   readonly kind: "care";
   readonly actions: ReadonlySet<ActionType>;
+  readonly pesticides: ReadonlySet<PesticideId>;
   readonly moisture: MoistureLevel;
   readonly maybeNote: Note | null;
 }

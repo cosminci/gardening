@@ -139,6 +139,182 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /substrate-components:
+    get:
+      summary: List substrate components
+      operationId: getSubstrate-components
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubstrateComponent'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Add a substrate component
+      operationId: postSubstrate-components
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateComponentData'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateComponent'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrate-components/{componentId}:
+    put:
+      summary: Edit a substrate component
+      operationId: putSubstrate-componentsComponentid
+      parameters:
+      - name: componentId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateComponentData'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateComponent'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /pesticides:
+    get:
+      summary: List pesticides
+      operationId: getPesticides
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pesticide'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Add a pesticide
+      operationId: postPesticides
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PesticideData'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pesticide'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /pesticides/{pesticideId}:
+    put:
+      summary: Edit a pesticide
+      operationId: putPesticidesPesticideid
+      parameters:
+      - name: pesticideId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PesticideData'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pesticide'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   schemas:
     ActionType:
@@ -163,6 +339,7 @@ components:
       type: object
       required:
       - actions
+      - pesticides
       - moisture
       - notes
       - kind
@@ -172,6 +349,12 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/ActionType'
+        pesticides:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
         moisture:
           $ref: '#/components/schemas/MoistureLevel'
         notes:
@@ -237,6 +420,34 @@ components:
         mapping:
           care: '#/components/schemas/Care'
           repot: '#/components/schemas/Repot'
+    Pesticide:
+      title: Pesticide
+      type: object
+      required:
+      - id
+      - data
+      properties:
+        id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/PesticideData'
+    PesticideData:
+      title: PesticideData
+      type: object
+      required:
+      - name
+      - type
+      - info
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        info:
+          type:
+          - string
+          - 'null'
     Plant:
       title: Plant
       type: object
@@ -301,24 +512,39 @@ components:
           const: repot
     SubstrateComponent:
       title: SubstrateComponent
-      type: string
-      enum:
-      - kekkilaEricaceous
-      - kekkilaUniversal
-      - leca
-      - perlite
-      - pineBark
-      - sand3to5
-      - sand4to8
+      type: object
+      required:
+      - id
+      - data
+      properties:
+        id:
+          type: string
+          format: uuid
+        data:
+          $ref: '#/components/schemas/SubstrateComponentData'
+    SubstrateComponentData:
+      title: SubstrateComponentData
+      type: object
+      required:
+      - name
+      - info
+      properties:
+        name:
+          type: string
+        info:
+          type:
+          - string
+          - 'null'
     SubstratePart:
       title: SubstratePart
       type: object
       required:
-      - component
+      - componentId
       - share
       properties:
-        component:
-          $ref: '#/components/schemas/SubstrateComponent'
+        componentId:
+          type: string
+          format: uuid
         share:
           type: integer
           format: int32

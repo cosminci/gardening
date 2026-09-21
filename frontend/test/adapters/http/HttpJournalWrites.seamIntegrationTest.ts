@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { makeHttpJournalClient } from "../../../src/adapters/http/HttpJournalClient";
 import type { OperationDetails } from "../../../src/domain/Journal";
-import { note, operationId, percentage, plantId, substrate } from "../../../src/domain/Journal";
+import {
+  note,
+  operationId,
+  percentage,
+  pesticideId,
+  plantId,
+  seededSubstrateComponentIds,
+  substrate,
+} from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
 describe("HttpJournalClient writes", () => {
@@ -14,7 +22,7 @@ describe("HttpJournalClient writes", () => {
         date: "2026-01-01T00:00:00Z",
         details: {
           kind: "repot",
-          substrate: [{ component: "perlite", share: 80 }],
+          substrate: [{ componentId: seededSubstrateComponentIds.perlite, share: 80 }],
           notes,
         },
       });
@@ -31,12 +39,15 @@ describe("HttpJournalClient writes", () => {
     const care: OperationDetails = {
       kind: "care",
       actions: new Set(["watered"]),
+      pesticides: new Set([pesticideId("00000000-0000-4000-8001-000000000003")]),
       moisture: "wet",
       maybeNote: null,
     };
     const repot: OperationDetails = {
       kind: "repot",
-      substrate: substrate([{ component: "perlite", share: percentage(80) }]),
+      substrate: substrate([
+        { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
+      ]),
       maybeNote: note("Fresh"),
     };
 
@@ -52,7 +63,9 @@ describe("HttpJournalClient writes", () => {
       operation: {
         details: {
           kind: "repot",
-          substrate: substrate([{ component: "perlite", share: percentage(80) }]),
+          substrate: substrate([
+            { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
+          ]),
           maybeNote: note("Fresh"),
         },
       },
@@ -71,12 +84,13 @@ describe("HttpJournalClient writes", () => {
     await expect(requests[0]!.json()).resolves.toEqual({
       kind: "care",
       actions: ["watered"],
+      pesticides: ["00000000-0000-4000-8001-000000000003"],
       moisture: "wet",
       notes: null,
     });
     await expect(requests[1]!.json()).resolves.toEqual({
       kind: "repot",
-      substrate: [{ component: "perlite", share: 80 }],
+      substrate: [{ componentId: seededSubstrateComponentIds.perlite, share: 80 }],
       notes: "Fresh",
     });
   });

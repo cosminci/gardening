@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { OperationForm } from "../../src/app/OperationForm";
 import type { OperationDetails } from "../../src/domain/Journal";
-import { percentage, substrate } from "../../src/domain/Journal";
+import {
+  percentage,
+  pesticideId,
+  seededSubstrateComponentIds,
+  substrate,
+} from "../../src/domain/Journal";
 import { care, repot } from "./JournalTestSupport";
 
 describe("OperationForm", () => {
@@ -69,7 +74,7 @@ describe("OperationForm", () => {
     );
 
     fireEvent.change(screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: "pineBark" },
+      target: { value: seededSubstrateComponentIds.pineBark },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -82,7 +87,7 @@ describe("OperationForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove component 2" }));
     fireEvent.click(screen.getByRole("button", { name: "Add component" }));
     fireEvent.change(screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: "pineBark" },
+      target: { value: seededSubstrateComponentIds.pineBark },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
@@ -90,12 +95,46 @@ describe("OperationForm", () => {
       {
         kind: "repot",
         substrate: substrate([
-          { component: "perlite", share: percentage(80) },
-          { component: "pineBark", share: percentage(1) },
+          { component: seededSubstrateComponentIds.perlite, share: percentage(80) },
+          { component: seededSubstrateComponentIds.pineBark, share: percentage(1) },
         ]),
         maybeNote: null,
       },
     ]);
+  });
+
+  it("should preserve pesticide references while editing care", async () => {
+    const submitted: OperationDetails[] = [];
+    const selectedPesticide = pesticideId("00000000-0000-4000-8001-000000000003");
+    render(() => (
+      <OperationForm
+        initial={{
+          kind: "care",
+          actions: new Set(["pesticide"]),
+          pesticides: new Set([selectedPesticide]),
+          moisture: "wet",
+          maybeNote: null,
+        }}
+        onSubmit={(details) => {
+          submitted.push(details);
+          return Promise.resolve();
+        }}
+        onCancel={() => undefined}
+      />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
+    await waitFor(() => {
+      expect(submitted).toEqual([
+        {
+          kind: "care",
+          actions: new Set(["pesticide"]),
+          pesticides: new Set([selectedPesticide]),
+          moisture: "wet",
+          maybeNote: null,
+        },
+      ]);
+    });
   });
 
   it("should prevent another save while a save is in progress", async () => {

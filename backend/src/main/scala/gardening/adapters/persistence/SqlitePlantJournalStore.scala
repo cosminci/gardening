@@ -10,9 +10,6 @@ import gardening.adapters.persistence.StoredOperationPayload.*
 import gardening.domain.*
 import gardening.domain.EditOperationResult.*
 import gardening.domain.LogOperationResult.*
-import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.Interval
-
 import java.time.Instant
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
@@ -46,7 +43,7 @@ object SqlitePlantJournalStore:
 
     private def toPlant(row: PlantRow): ValidatedNel[JournalCorruption, Plant] =
       val record          = JournalRecord.Plant(PlantId(row.id))
-      val substrateResult = decodeSubstrate(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
+      val substrateResult = StoredSubstrate.decodeString(row.substrate).leftMap(JournalCorruption(record, _)).toValidatedNel
 
       // The schema check constrains every stored status to a PlantStatus name.
       // $COVERAGE-OFF$
@@ -132,13 +129,34 @@ object SqlitePlantJournalStore:
           case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
       catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
 
+    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
+      SqliteCatalogQueries.getSubstrateComponents(transactor)
+
+    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      SqliteCatalogQueries.addSubstrateComponent(transactor, component)
+
+    override def editSubstrateComponent(
+        id: SubstrateComponentId,
+        data: SubstrateComponentData
+    ): CatalogEditResult[SubstrateComponent] =
+      SqliteCatalogQueries.editSubstrateComponent(transactor, id, data)
+
+    override def getPesticides: CatalogReadResult[Pesticide] =
+      SqliteCatalogQueries.getPesticides(transactor)
+
+    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+      SqliteCatalogQueries.addPesticide(transactor, pesticide)
+
+    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
+      SqliteCatalogQueries.editPesticide(transactor, id, data)
+
     private def updatePlantRow(plant: Plant): Frag =
       val details = plant.details
       sql"""update plant
            set species = ${details.species.value},
                nickname = ${details.maybeNickname.map(_.value)},
                location = ${details.location.value},
-               substrate = ${encodeSubstrate(details.substrate)},
+               substrate = ${StoredSubstrate.encodeString(details.substrate)},
                status = ${details.status.toString}
            where id = ${plant.id.value}"""
 
@@ -146,31 +164,6 @@ object SqlitePlantJournalStore:
       val kind    = StoredOperationPayload.kind(details)
       val payload = StoredOperationPayload.encode(details)
       sql"update operation set kind = $kind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
-
-  private def decodeSubstrate(encoded: String): Either[Throwable, Substrate] =
-    for
-      parts     <- encoded.split(",", -1).toList.traverse(decodePart)
-      substrate <- Substrate.of(parts).leftMap(reason => invalidSubstrate(reason.toString))
-    yield substrate
-
-  private def decodePart(encoded: String): Either[Throwable, SubstratePart] =
-    encoded.split(":", -1).toList match
-      case component :: share :: Nil =>
-        for
-          parsedComponent <- SubstrateComponent.values
-            .find(_.toString.equals(component))
-            .toRight(invalidSubstrate(s"unknown component: $component"))
-          parsedShare <- share.toIntOption
-            .flatMap(_.refineOption[Interval.Closed[1, 100]])
-            .toRight(invalidSubstrate(s"invalid share: $share"))
-        yield SubstratePart(parsedComponent, parsedShare)
-      case _ => invalidSubstrate(s"malformed part: $encoded").asLeft
-
-  private def invalidSubstrate(reason: String): RuntimeException =
-    RuntimeException(s"invalid stored substrate: $reason")
-
-  private def encodeSubstrate(substrate: Substrate): String =
-    substrate.parts.map(part => s"${part.component}:${part.share: Int}").mkString(",")
 
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)
       derives DbCodec
