@@ -1,0 +1,62 @@
+.plant-card {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.3fr) minmax(0, 3fr);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: rgb(255 253 247 / 92%);
+  box-shadow: var(--shadow);
+}
+
+.plant-summary {
+  min-width: 0;
+  padding: 0.95rem 1rem;
+  border-right: 1px solid var(--line);
+}
+
+.plant-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.plant-card h2 {
+  margin-bottom: 0.05rem;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.plant-card__species {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.plant-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.45rem;
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.plant-facts dt {
+  font-weight: 750;
+}
+
+.plant-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+
+@media (max-width: 46rem) {
+  .plant-card {
+    grid-template-columns: 1fr;
+  }
+
+  .plant-summary {
+    border-right: 0;
+  }
+}

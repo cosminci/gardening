@@ -1,7 +1,8 @@
 import { render } from "solid-js/web";
+import { makeHttpJournalClient } from "./adapters/http/HttpJournalClient";
 import { App } from "./app/App";
 
 const root = document.getElementById("root");
 if (root !== null) {
-  render(() => <App />, root);
+  render(() => <App journal={makeHttpJournalClient()} />, root);
 }
