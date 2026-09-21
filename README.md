@@ -1,6 +1,6 @@
 # plant-journal
 
-A journal of the household's house plants and their dated care, running on the home NAS. This README is the index; each document below owns its area.
+A journal of the household's house plants and their dated care, built for the home NAS. This README is the index; each document below owns its area.
 
 - [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) — how the code is designed and built; read first.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to work in the repo: stack, setup, commands, the repository map, conventions, the SDD workflow, and the definition of done.

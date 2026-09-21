@@ -2,15 +2,18 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 
-Domain terms for the house-plant care journal. Every term below is **provisional** — seeded before the first feature and pinned to precise meaning as features land through the SDD skill. Source records are Romanian; terms here are the English translations the app uses throughout.
+Domain terms for the house-plant care journal. Controlled vocabulary is presented in English; free-text species, nicknames, locations, and notes are preserved verbatim.
 
-| Term | Meaning | Status |
-| --- | --- | --- |
-| **Plant** | A single house plant the household owns; the unit a journal is kept for. | provisional |
-| **Location** | The in-house place a plant lives (e.g. a windowsill, a room). Plants are ordered by location in the main list. | provisional |
-| **Species page** | The per-plant editable page describing the plant's species and care notes. | provisional |
-| **Action** | A dated care event recorded against a plant (e.g. watered, repotted), carrying a date, a substrate-characteristic, and an action-type. | provisional |
-| **Action-type** | The kind of an action, chosen from a user-editable option list. | provisional |
-| **Substrate** | The growing medium a plant sits in. | provisional |
-| **Substrate-characteristic** | An observed property of the substrate at the time of an action (e.g. dry, moist), chosen from a user-editable option list. | provisional |
-| **Option list** | A user-editable set of allowed values backing a field (e.g. action-types, substrate-characteristics). | provisional |
+| Term | Meaning |
+| --- | --- |
+| **Plant** | A single house plant the household owns and the unit for which a journal is kept. |
+| **Location** | The in-house place where a plant lives, such as a room or windowsill. |
+| **Nickname** | An optional household name for a plant, distinct from its species. |
+| **Plant status** | Whether a plant is active or archived. Active plants appear in the journal; archived status is retained for later archived-plant support. |
+| **Operation** | A dated care event belonging to one plant. It is either care or a repot; its identifier, plant, timestamp, and kind do not change after logging, while its kind-specific details may be edited. |
+| **Care operation** | An operation recording one moisture-level, zero or more action-types, and an optional note. |
+| **Repot operation** | An operation recording the plant's new substrate and an optional note. The latest repot determines the plant's current substrate. |
+| **Action-type** | A fixed English category of care performed, such as watering, fertilizing, pesticide treatment, or pruning. |
+| **Moisture-level** | A fixed English observation of substrate moisture recorded with a care operation. |
+| **Substrate** | A non-empty component mix describing the growing medium in which a plant currently sits. |
+| **Substrate-component** | A fixed English ingredient in a substrate mix, recorded with a percentage share. |

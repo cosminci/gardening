@@ -13,7 +13,7 @@ A browsable care journal for the household's plants.
 - One row per active plant: fixed attributes (species, nickname, location), current substrate (a component mix), and recent operations.
 - Operations can be logged and edited.
 - Plant status is persisted for later archived-plant support.
-- Controlled vocabulary (substrate components, action-types, moisture levels) is English; imported free text is preserved verbatim.
+- Controlled vocabulary (substrate components, action-types, moisture levels) is English; free text is preserved verbatim.
 
 ## Domain
 
@@ -288,7 +288,7 @@ interface JournalClient {
 - A missing plant or operation is reported as `RecordMissing`, distinct from a successful single-record read.
 - Collection reads never report `RecordMissing`; an empty journal, including the operation log requested for an unknown plant, is `Read(Vector.empty)`.
 - Database access failures are reported separately from stored-data corruption.
-- First run is pre-populated: a one-time, idempotent import script loads every plant (attributes, substrate mix, full operation history) from the household spreadsheet, retired plants archived.
+> **Scope revision — 2026-09-21:** The one-time household-spreadsheet import is deferred until editable care catalogs exist, so the importer targets the final persisted catalog model rather than the temporary enum-backed vocabulary.
 
 ## Tradeoffs accepted
 
