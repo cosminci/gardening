@@ -90,7 +90,7 @@ Its five phases are **classify → spec → tests → implement → sync & archi
 
 ## Testing conventions
 
-- **Backend** uses MUnit; name suites `<Unit>Suite`. Test behaviour through the domain and the capability ports, never implementation details, so a test fails only when a stated behaviour changes. Substitute the capability ports for domain and application tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to — never by reaching past that service to a lower port.
+- **Backend** uses MUnit; name suites `<Component>ComponentTest`. A component is a complete port, trait, adapter, or domain abstraction—not an arbitrary method. Test behaviour through that boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port.
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)` (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real seam), and `*.systemIntegrationTest.ts(x)` (the running system).
 - Every test name starts with `should ` and describes a use case, not an implementation detail.
 - Prefer duplication over a shared test helper until the third repetition — a test should read top-to-bottom without indirection.

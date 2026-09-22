@@ -6,7 +6,7 @@ Cross-cutting test conventions and gates live in [CONTRIBUTING.md](../CONTRIBUTI
 
 ## Service-specific strategy
 
-- Backend unit tests exercise journal orchestration through injected capabilities, including latest-repot synchronization, compensation, accumulated failures, and serialized mutations.
+- Backend component tests exercise complete ports and traits through injected capabilities, including journal orchestration, latest-repot synchronization, compensation, accumulated failures, and serialized mutations.
 - Persistence seam-integration tests exercise the store against real SQLite with the production migrations and deliberately malformed rows.
 - HTTP seam-integration tests run the Tapir endpoints through its stub interpreter and assert both wire representations and result-specific failures.
 - Frontend seam-integration tests exercise HTTP translation through controlled fetch responses; component tests inject the journal client and assert observable SolidJS behavior.

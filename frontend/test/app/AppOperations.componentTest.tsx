@@ -38,7 +38,17 @@ describe("changing the journal", () => {
       getOperationsByPlantId: {
         p1: [
           { kind: "read", operations: [] },
-          { kind: "read", operations: [care("new", "2026-05-05T00:00:00Z", "wet", "Recovered")] },
+          {
+            kind: "read",
+            operations: [
+              care({
+                id: "new",
+                date: "2026-05-05T00:00:00Z",
+                moisture: "wet",
+                maybeNote: "Recovered",
+              }),
+            ],
+          },
         ],
       },
       logOperationResult: { kind: "logged", id: operationId("new") },
@@ -63,19 +73,15 @@ describe("changing the journal", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Log operation for Fern" })).toHaveFocus();
     });
+    const expectedOperation: OperationDetails = {
+      kind: "care",
+      actions: new Set(["watered"]),
+      pesticides: new Set(),
+      moisture: "wet",
+      maybeNote: note("Recovered"),
+    };
     expect(startViewTransition).toHaveBeenCalledOnce();
-    expect(logged).toEqual([
-      {
-        plantId: "p1",
-        details: {
-          kind: "care",
-          actions: new Set(["watered"]),
-          pesticides: new Set(),
-          moisture: "wet",
-          maybeNote: note("Recovered"),
-        },
-      },
-    ]);
+    expect(logged).toEqual([{ plantId: "p1", details: expectedOperation }]);
   });
 
   it("should edit repot details without allowing its operation type to change", async () => {
@@ -118,17 +124,13 @@ describe("changing the journal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
+    const expectedOperation: OperationDetails = {
+      kind: "repot",
+      substrate: substrate([{ component: perliteId, share: percentage(80) }]),
+      maybeNote: note("Less perlite"),
+    };
     await waitFor(() => {
-      expect(edited).toEqual([
-        {
-          operationId: "o1",
-          details: {
-            kind: "repot",
-            substrate: substrate([{ component: perliteId, share: percentage(80) }]),
-            maybeNote: "Less perlite",
-          },
-        },
-      ]);
+      expect(edited).toEqual([{ operationId: "o1", details: expectedOperation }]);
     });
     expect(await screen.findByText("Less perlite")).toBeInTheDocument();
     await waitFor(() => {
@@ -176,23 +178,13 @@ describe("changing the journal", () => {
       id: ReturnType<typeof substrateComponentId>;
       data: SubstrateComponentData;
     }[] = [];
+    const addedComponent = { name: nomenclatureName("Pumice"), maybeInfo: null };
+    const editedComponent = { name: nomenclatureName("Fine perlite"), maybeInfo: null };
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
-      componentAddResult: {
-        kind: "added",
-        entry: {
-          id: pumiceId,
-          data: { name: nomenclatureName("Pumice"), maybeInfo: null },
-        },
-      },
-      componentEditResult: {
-        kind: "edited",
-        entry: {
-          id: perliteId,
-          data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
-        },
-      },
+      componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
+      componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
       addedComponents,
       editedComponents,
     });
@@ -230,13 +222,8 @@ describe("changing the journal", () => {
         screen.queryByRole("dialog", { name: "Substrate component editor" }),
       ).not.toBeInTheDocument();
     });
-    expect(addedComponents).toEqual([{ name: nomenclatureName("Pumice"), maybeInfo: null }]);
-    expect(editedComponents).toEqual([
-      {
-        id: perliteId,
-        data: { name: nomenclatureName("Fine perlite"), maybeInfo: null },
-      },
-    ]);
+    expect(addedComponents).toEqual([addedComponent]);
+    expect(editedComponents).toEqual([{ id: perliteId, data: editedComponent }]);
   });
 
   it("should add and edit pesticides from the care form", async () => {
@@ -247,68 +234,47 @@ describe("changing the journal", () => {
       id: ReturnType<typeof pesticideId>;
       data: PesticideData;
     }[] = [];
+    const pesticides = [
+      {
+        id: neemId,
+        data: {
+          name: nomenclatureName("Neem oil"),
+          pesticideType: "insecticide" as const,
+          maybeInfo: null,
+        },
+      },
+      {
+        id: pesticideId("00000000-0000-4000-8001-000000000006"),
+        data: {
+          name: nomenclatureName("Spinosad"),
+          pesticideType: "insecticide" as const,
+          maybeInfo: null,
+        },
+      },
+    ];
+    const addedPesticide: PesticideData = {
+      name: nomenclatureName("Insecticidal soap"),
+      pesticideType: "insecticide",
+      maybeInfo: null,
+    };
+    const editedPesticide: PesticideData = {
+      name: nomenclatureName("Neem concentrate"),
+      pesticideType: "treatment",
+      maybeInfo: nomenclatureInfo("Dilute first"),
+    };
+    const existingOperation = care({
+      id: "o1",
+      date: "2026-03-03T00:00:00Z",
+      moisture: "wet",
+      actions: new Set(["pesticide"]),
+      pesticides: new Set([neemId]),
+    });
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: {
-        p1: [
-          {
-            kind: "read",
-            operations: [
-              care(
-                "o1",
-                "2026-03-03T00:00:00Z",
-                "wet",
-                null,
-                new Set(["pesticide"]),
-                new Set([neemId]),
-              ),
-            ],
-          },
-        ],
-      },
-      getPesticidesResult: {
-        kind: "read",
-        entries: [
-          {
-            id: neemId,
-            data: {
-              name: nomenclatureName("Neem oil"),
-              pesticideType: "insecticide",
-              maybeInfo: null,
-            },
-          },
-          {
-            id: pesticideId("00000000-0000-4000-8001-000000000006"),
-            data: {
-              name: nomenclatureName("Spinosad"),
-              pesticideType: "insecticide",
-              maybeInfo: null,
-            },
-          },
-        ],
-      },
-      pesticideAddResult: {
-        kind: "added",
-        entry: {
-          id: soapId,
-          data: {
-            name: nomenclatureName("Insecticidal soap"),
-            pesticideType: "insecticide",
-            maybeInfo: null,
-          },
-        },
-      },
-      pesticideEditResult: {
-        kind: "edited",
-        entry: {
-          id: neemId,
-          data: {
-            name: nomenclatureName("Neem concentrate"),
-            pesticideType: "treatment",
-            maybeInfo: nomenclatureInfo("Dilute first"),
-          },
-        },
-      },
+      getOperationsByPlantId: { p1: [{ kind: "read", operations: [existingOperation] }] },
+      getPesticidesResult: { kind: "read", entries: pesticides },
+      pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
+      pesticideEditResult: { kind: "edited", entry: { id: neemId, data: editedPesticide } },
       addedPesticides,
       editedPesticides,
     });
@@ -353,23 +319,8 @@ describe("changing the journal", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
     });
-    expect(addedPesticides).toEqual([
-      {
-        name: nomenclatureName("Insecticidal soap"),
-        pesticideType: "insecticide",
-        maybeInfo: null,
-      },
-    ]);
-    expect(editedPesticides).toEqual([
-      {
-        id: neemId,
-        data: {
-          name: nomenclatureName("Neem concentrate"),
-          pesticideType: "treatment",
-          maybeInfo: nomenclatureInfo("Dilute first"),
-        },
-      },
-    ]);
+    expect(addedPesticides).toEqual([addedPesticide]);
+    expect(editedPesticides).toEqual([{ id: neemId, data: editedPesticide }]);
     fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
     fireEvent.keyDown(window, { key: "Escape" });
     expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");

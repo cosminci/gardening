@@ -191,7 +191,7 @@ object SqlitePlantJournalStore:
         id <- PesticideId
           .parse(row.id)
           .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
-        // The schema check constrains every stored type to a PesticideType name.
+        // The schema check mirrors PesticideType; extending it requires a migration before persistence.
         // $COVERAGE-OFF$
         pesticideType <- Try(PesticideType.valueOf(row.pesticideType)).toEither.left.map: error =>
           RuntimeException(s"invalid pesticide type: ${row.pesticideType}", error)

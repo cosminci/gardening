@@ -7,18 +7,36 @@ import { buildJournal, care, ficus, monstera, repot } from "./JournalTestSupport
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
     const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
+    const pesticides = new Set([neemId]);
+    const actions = new Set(["watered", "pesticide"] as const);
+    const treated = care({
+      id: "o4",
+      date: "2026-04-04T22:30:00Z",
+      moisture: "wet",
+      maybeNote: "Recovered",
+      actions,
+      pesticides,
+    });
     const operations = [
-      care(
-        "o4",
-        "2026-04-04T22:30:00Z",
-        "wet",
-        "Recovered",
-        new Set(["watered", "pesticide"]),
-        new Set([neemId]),
-      ),
-      care("o2", "2026-02-02T00:00:00Z", "moderatePlus", null, new Set()),
+      treated,
+      care({
+        id: "o2",
+        date: "2026-02-02T00:00:00Z",
+        moisture: "moderatePlus",
+        actions: new Set(),
+      }),
       repot("o3", "2026-03-03T00:00:00Z"),
-      care("o1", "2026-01-01T00:00:00Z", "dry"),
+      care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "dry" }),
+    ];
+    const pesticideCatalog = [
+      {
+        id: neemId,
+        data: {
+          name: nomenclatureName("Neem oil"),
+          pesticideType: "insecticide" as const,
+          maybeInfo: null,
+        },
+      },
     ];
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [monstera(), ficus()] },
@@ -26,19 +44,7 @@ describe("browsing the journal", () => {
         p1: [{ kind: "read", operations }],
         p2: [{ kind: "read", operations: [] }],
       },
-      getPesticidesResult: {
-        kind: "read",
-        entries: [
-          {
-            id: neemId,
-            data: {
-              name: nomenclatureName("Neem oil"),
-              pesticideType: "insecticide",
-              maybeInfo: null,
-            },
-          },
-        ],
-      },
+      getPesticidesResult: { kind: "read", entries: pesticideCatalog },
     });
 
     render(() => <App journal={journal} />);

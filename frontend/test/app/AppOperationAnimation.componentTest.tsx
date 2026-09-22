@@ -41,7 +41,7 @@ describe("animating operation changes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
     finishRefresh({
       kind: "read",
-      operations: [care("new", "2026-05-05T00:00:00Z", "wet")],
+      operations: [care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" })],
     });
 
     await screen.findByText("2026-05-05");

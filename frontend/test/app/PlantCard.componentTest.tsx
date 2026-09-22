@@ -12,8 +12,8 @@ describe("plant operation controls", () => {
       <PlantCard
         plant={ficus()}
         operations={[
-          care("o1", "2026-03-03T08:00:00Z", "dry"),
-          care("o2", "2026-03-03T12:00:00Z", "wet"),
+          care({ id: "o1", date: "2026-03-03T08:00:00Z", moisture: "dry" }),
+          care({ id: "o2", date: "2026-03-03T12:00:00Z", moisture: "wet" }),
         ]}
         substrateComponents={[
           {

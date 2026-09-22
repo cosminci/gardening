@@ -50,7 +50,7 @@ describe("OperationForm", () => {
     let cancelled = false;
     render(() => (
       <OperationForm
-        initial={care("o1", "2026-01-01T00:00:00Z", "wet").details}
+        initial={care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "wet" }).details}
         substrateComponents={substrateComponents}
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}

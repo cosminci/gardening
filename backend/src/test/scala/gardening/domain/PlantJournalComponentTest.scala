@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.CountDownLatch
 import scala.util.chaining.scalaUtilChainingOps
 
-class PlantJournalUnitTest extends munit.FunSuite:
+class PlantJournalComponentTest extends munit.FunSuite:
 
   private val date       = Instant.parse("2026-01-01T00:00:00Z")
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
