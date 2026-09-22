@@ -1,30 +1,16 @@
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import * as Testing from "@solidjs/testing-library";
+import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
-import type {
-  OperationDetails,
-  PesticideData,
-  SubstrateComponentData,
-} from "../../src/domain/Journal";
-import {
-  nomenclatureInfo,
-  nomenclatureName,
-  note,
-  operationId,
-  percentage,
-  pesticideId,
-  substrate,
-  substrateComponentId,
-} from "../../src/domain/Journal";
-import { buildJournal, care, ficus, repot } from "./JournalTestSupport";
+import * as Journal from "../../src/domain/Journal";
+import * as JournalFixtures from "./JournalTestSupport";
 
-afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
+Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
-const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
+const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 
-describe("changing the journal", () => {
-  it("should log care and refresh the plant's operation history", async () => {
-    const startViewTransition = vi.fn((update: () => void) => {
+Vitest.describe("changing the journal", () => {
+  Vitest.it("should log care and refresh the plant's operation history", async () => {
+    const startViewTransition = Vitest.vi.fn((update: () => void) => {
       update();
       return { updateCallbackDone: Promise.resolve() } as ViewTransition;
     });
@@ -32,16 +18,16 @@ describe("changing the journal", () => {
       configurable: true,
       value: startViewTransition,
     });
-    const logged: { plantId: string; details: OperationDetails }[] = [];
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const logged: { plantId: string; details: Journal.OperationDetails }[] = [];
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
         p1: [
           { kind: "read", operations: [] },
           {
             kind: "read",
             operations: [
-              care({
+              JournalFixtures.care({
                 id: "new",
                 date: "2026-05-05T00:00:00Z",
                 moisture: "wet",
@@ -51,52 +37,54 @@ describe("changing the journal", () => {
           },
         ],
       },
-      logOperationResult: { kind: "logged", id: operationId("new") },
+      logOperationResult: { kind: "logged", id: Journal.operationId("new") },
       logged,
     });
-    render(() => <App journal={journal} />);
-    await screen.findByRole("article", { name: "Fern" });
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByRole("article", { name: "Fern" });
 
-    const trigger = screen.getByRole("button", { name: "Log operation for Fern" });
+    const trigger = Testing.screen.getByRole("button", { name: "Log operation for Fern" });
     trigger.focus();
-    fireEvent.click(trigger);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Watered" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Moisture" }), {
+    Testing.fireEvent.click(trigger);
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Watered" }));
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Moisture" }), {
       target: { value: "wet" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Notes" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Notes" }), {
       target: { value: "Recovered" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-    await screen.findByText("2026-05-05");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Log operation for Fern" })).toHaveFocus();
+    await Testing.screen.findByText("2026-05-05");
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      ).toHaveFocus();
     });
-    const expectedOperation: OperationDetails = {
+    const expectedOperation: Journal.OperationDetails = {
       kind: "care",
       actions: new Set(["watered"]),
       pesticides: new Set(),
       moisture: "wet",
-      maybeNote: note("Recovered"),
+      maybeNote: Journal.note("Recovered"),
     };
-    expect(startViewTransition).toHaveBeenCalledOnce();
-    expect(logged).toEqual([{ plantId: "p1", details: expectedOperation }]);
+    Vitest.expect(startViewTransition).toHaveBeenCalledOnce();
+    Vitest.expect(logged).toEqual([{ plantId: "p1", details: expectedOperation }]);
   });
 
-  it("should edit repot details without allowing its operation type to change", async () => {
-    const edited: { operationId: string; details: OperationDetails }[] = [];
-    const existing = repot("o1", "2026-03-03T00:00:00Z");
+  Vitest.it("should edit repot details without allowing its operation type to change", async () => {
+    const edited: { operationId: string; details: Journal.OperationDetails }[] = [];
+    const existing = JournalFixtures.repot("o1", "2026-03-03T00:00:00Z");
     const updated = {
       ...existing,
       details: {
         kind: "repot" as const,
-        substrate: substrate([{ component: perliteId, share: percentage(80) }]),
-        maybeNote: note("Less perlite"),
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(80) }]),
+        maybeNote: Journal.note("Less perlite"),
       },
     };
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
         p1: [
           { kind: "read", operations: [existing] },
@@ -106,171 +94,179 @@ describe("changing the journal", () => {
       editOperationResult: { kind: "edited", operation: updated },
       edited,
     });
-    render(() => <App journal={journal} />);
-    await screen.findByText("2026-03-03");
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByText("2026-03-03");
 
-    const trigger = screen.getByRole("button", {
+    const trigger = Testing.screen.getByRole("button", {
       name: "Edit repot operation 1 from 2026-03-03",
     });
     trigger.focus();
-    fireEvent.click(trigger);
-    expect(screen.getByRole("dialog", { name: "Operation editor" })).toHaveClass("sheet--entering");
-    expect(screen.getByRole("combobox", { name: "Operation type" })).toBeDisabled();
-    fireEvent.input(screen.getByRole("spinbutton", { name: "Component 1 share" }), {
+    Testing.fireEvent.click(trigger);
+    Vitest.expect(Testing.screen.getByRole("dialog", { name: "Operation editor" })).toHaveClass(
+      "sheet--entering",
+    );
+    Vitest.expect(Testing.screen.getByRole("combobox", { name: "Operation type" })).toBeDisabled();
+    Testing.fireEvent.input(Testing.screen.getByRole("spinbutton", { name: "Component 1 share" }), {
       target: { value: "80" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Notes" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Notes" }), {
       target: { value: "Less perlite" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-    const expectedOperation: OperationDetails = {
+    const expectedOperation: Journal.OperationDetails = {
       kind: "repot",
-      substrate: substrate([{ component: perliteId, share: percentage(80) }]),
-      maybeNote: note("Less perlite"),
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(80) }]),
+      maybeNote: Journal.note("Less perlite"),
     };
-    await waitFor(() => {
-      expect(edited).toEqual([{ operationId: "o1", details: expectedOperation }]);
+    await Testing.waitFor(() => {
+      Vitest.expect(edited).toEqual([{ operationId: "o1", details: expectedOperation }]);
     });
-    expect(await screen.findByText("Less perlite")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }),
+    Vitest.expect(await Testing.screen.findByText("Less perlite")).toBeInTheDocument();
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }),
       ).toHaveFocus();
     });
   });
 
-  it("should close the operation editor with Escape", async () => {
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+  Vitest.it("should close the operation editor with Escape", async () => {
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
     });
-    const { container } = render(() => <App journal={journal} />);
-    const current = within(container);
+    const { container } = Testing.render(() => <App journal={journal} />);
+    const current = Testing.within(container);
     await current.findByRole("article", { name: "Fern" });
     const header = container.querySelector<HTMLElement>(".masthead")!;
     const journalRows = container.querySelector<HTMLElement>(".journal")!;
 
     const trigger = current.getByRole("button", { name: "Log operation for Fern" });
     trigger.focus();
-    fireEvent.click(trigger);
+    Testing.fireEvent.click(trigger);
     const dialog = current.getByRole("dialog", { name: "Operation editor" });
-    expect(document.activeElement).toBe(dialog);
-    expect(header.inert).toBe(true);
-    expect(journalRows.inert).toBe(true);
-    fireEvent.keyDown(window, { key: "Enter" });
-    expect(current.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: "Escape" });
+    Vitest.expect(document.activeElement).toBe(dialog);
+    Vitest.expect(header.inert).toBe(true);
+    Vitest.expect(journalRows.inert).toBe(true);
+    Testing.fireEvent.keyDown(window, { key: "Enter" });
+    Vitest.expect(current.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
+    Testing.fireEvent.keyDown(window, { key: "Escape" });
 
-    expect(dialog).toHaveClass("sheet--closing");
-    await waitFor(() => {
-      expect(current.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(header.inert).toBe(false);
-      expect(journalRows.inert).toBe(false);
-      expect(trigger).toHaveFocus();
+    Vitest.expect(dialog).toHaveClass("sheet--closing");
+    await Testing.waitFor(() => {
+      Vitest.expect(current.queryByRole("dialog")).not.toBeInTheDocument();
+      Vitest.expect(header.inert).toBe(false);
+      Vitest.expect(journalRows.inert).toBe(false);
+      Vitest.expect(trigger).toHaveFocus();
     });
   });
 
-  it("should add and edit substrate components from the repot form", async () => {
-    const pumiceId = substrateComponentId("00000000-0000-4000-8000-000000000005");
-    const addedComponents: SubstrateComponentData[] = [];
+  Vitest.it("should add and edit substrate components from the repot form", async () => {
+    const pumiceId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000005");
+    const addedComponents: Journal.SubstrateComponentData[] = [];
     const editedComponents: {
-      id: ReturnType<typeof substrateComponentId>;
-      data: SubstrateComponentData;
+      id: ReturnType<typeof Journal.substrateComponentId>;
+      data: Journal.SubstrateComponentData;
     }[] = [];
-    const addedComponent = { name: nomenclatureName("Pumice"), maybeInfo: null };
-    const editedComponent = { name: nomenclatureName("Fine perlite"), maybeInfo: null };
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const addedComponent = { name: Journal.nomenclatureName("Pumice"), maybeInfo: null };
+    const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
       componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
       componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
       addedComponents,
       editedComponents,
     });
-    render(() => <App journal={journal} />);
-    await screen.findByRole("article", { name: "Fern" });
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByRole("article", { name: "Fern" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
-    expect(screen.getByRole("dialog", { name: "Operation editor" })).toHaveClass("sheet--entering");
-    fireEvent.change(screen.getByRole("combobox", { name: "Operation type" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Vitest.expect(Testing.screen.getByRole("dialog", { name: "Operation editor" })).toHaveClass(
+      "sheet--entering",
+    );
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
       target: { value: "repot" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
-    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toBeInTheDocument();
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
+    ).toBeInTheDocument();
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Fine perlite" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Substrate component editor" }),
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    await Testing.waitFor(() =>
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Substrate component editor" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByText("Fine perlite 100%")).toBeInTheDocument();
+    Vitest.expect(Testing.screen.getByText("Fine perlite 100%")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new component" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Pumice" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveTextContent("Pumice"),
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    await Testing.waitFor(() =>
+      Vitest.expect(
+        Testing.screen.getByRole("combobox", { name: "Component 1" }),
+      ).toHaveTextContent("Pumice"),
     );
-    await waitFor(() => {
-      expect(
-        screen.queryByRole("dialog", { name: "Substrate component editor" }),
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Substrate component editor" }),
       ).not.toBeInTheDocument();
     });
-    expect(addedComponents).toEqual([addedComponent]);
-    expect(editedComponents).toEqual([{ id: perliteId, data: editedComponent }]);
+    Vitest.expect(addedComponents).toEqual([addedComponent]);
+    Vitest.expect(editedComponents).toEqual([{ id: perliteId, data: editedComponent }]);
   });
 
-  it("should add and edit pesticides from the care form", async () => {
-    const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
-    const soapId = pesticideId("00000000-0000-4000-8001-000000000004");
-    const addedPesticides: PesticideData[] = [];
+  Vitest.it("should add and edit pesticides from the care form", async () => {
+    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
+    const addedPesticides: Journal.PesticideData[] = [];
     const editedPesticides: {
-      id: ReturnType<typeof pesticideId>;
-      data: PesticideData;
+      id: ReturnType<typeof Journal.pesticideId>;
+      data: Journal.PesticideData;
     }[] = [];
     const pesticides = [
       {
         id: neemId,
         data: {
-          name: nomenclatureName("Neem oil"),
+          name: Journal.nomenclatureName("Neem oil"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
       },
       {
-        id: pesticideId("00000000-0000-4000-8001-000000000006"),
+        id: Journal.pesticideId("00000000-0000-4000-8001-000000000006"),
         data: {
-          name: nomenclatureName("Spinosad"),
+          name: Journal.nomenclatureName("Spinosad"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
       },
     ];
-    const addedPesticide: PesticideData = {
-      name: nomenclatureName("Insecticidal soap"),
+    const addedPesticide: Journal.PesticideData = {
+      name: Journal.nomenclatureName("Insecticidal soap"),
       pesticideType: "insecticide",
       maybeInfo: null,
     };
-    const editedPesticide: PesticideData = {
-      name: nomenclatureName("Neem concentrate"),
+    const editedPesticide: Journal.PesticideData = {
+      name: Journal.nomenclatureName("Neem concentrate"),
       pesticideType: "treatment",
-      maybeInfo: nomenclatureInfo("Dilute first"),
+      maybeInfo: Journal.nomenclatureInfo("Dilute first"),
     };
-    const existingOperation = care({
+    const existingOperation = JournalFixtures.care({
       id: "o1",
       date: "2026-03-03T00:00:00Z",
       moisture: "wet",
       actions: new Set(["pesticide"]),
       pesticides: new Set([neemId]),
     });
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "read", operations: [existingOperation] }] },
       getPesticidesResult: { kind: "read", entries: pesticides },
       pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
@@ -278,74 +274,94 @@ describe("changing the journal", () => {
       addedPesticides,
       editedPesticides,
     });
-    render(() => <App journal={journal} />);
-    await screen.findByRole("article", { name: "Fern" });
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByRole("article", { name: "Fern" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
-    const operation = screen.getByRole("dialog", { name: "Operation editor" });
-    fireEvent.input(within(operation).getByRole("textbox", { name: "Notes" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    const operation = Testing.screen.getByRole("dialog", { name: "Operation editor" });
+    Testing.fireEvent.input(Testing.within(operation).getByRole("textbox", { name: "Notes" }), {
       target: { value: "Draft treatment notes" },
     });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Pesticide" }));
-    expect(screen.getAllByLabelText("Insecticide")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Edit Neem oil" }));
-    expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", true);
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+    Vitest.expect(Testing.screen.getAllByLabelText("Insecticide")).toHaveLength(2);
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+    Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", true);
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Neem concentrate" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Type" }), {
       target: { value: "treatment" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Info" }), {
       target: { value: "Dilute first" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+      ).not.toBeInTheDocument();
     });
-    expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
-    expect(screen.getByRole("button", { name: "Edit Neem concentrate" })).toBeInTheDocument();
-    expect(screen.getByText("Neem concentrate", { selector: "dd" })).toBeInTheDocument();
+    Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
+    Vitest.expect(
+      Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.getByText("Neem concentrate", { selector: "dd" }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Define new pesticide" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new pesticide" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Insecticidal soap" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Type" }), {
       target: { value: "insecticide" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("checkbox", { name: "Insecticidal soap" })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    Vitest.expect(
+      await Testing.screen.findByRole("checkbox", { name: "Insecticidal soap" }),
+    ).toBeInTheDocument();
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+      ).not.toBeInTheDocument();
     });
-    expect(addedPesticides).toEqual([addedPesticide]);
-    expect(editedPesticides).toEqual([{ id: neemId, data: editedPesticide }]);
-    fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
-    expect(screen.getByRole("dialog", { name: "Pesticide editor" })).toHaveClass("sheet--closing");
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Edit Neem concentrate" })).toHaveFocus();
+    Vitest.expect(addedPesticides).toEqual([addedPesticide]);
+    Vitest.expect(editedPesticides).toEqual([{ id: neemId, data: editedPesticide }]);
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }));
+    Testing.fireEvent.keyDown(window, { key: "Escape" });
+    Vitest.expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
+    Vitest.expect(Testing.screen.getByRole("dialog", { name: "Pesticide editor" })).toHaveClass(
+      "sheet--closing",
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }),
+      ).toHaveFocus();
     });
-    expect(within(operation).getByRole("textbox", { name: "Notes" })).toHaveValue(
+    Vitest.expect(Testing.within(operation).getByRole("textbox", { name: "Notes" })).toHaveValue(
       "Draft treatment notes",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Edit Neem concentrate" }));
-    const editor = screen.getByRole("dialog", { name: "Pesticide editor" });
-    const collapseOperation = screen.getByRole("button", { name: "Collapse operation editor" });
-    fireEvent.click(collapseOperation);
-    fireEvent.click(collapseOperation);
-    expect(editor).toHaveClass("sheet--closing");
-    expect(operation).not.toHaveClass("sheet--closing");
-    expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Pesticide editor" })).not.toBeInTheDocument();
-      expect(operation).toHaveClass("sheet--closing");
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }));
+    const editor = Testing.screen.getByRole("dialog", { name: "Pesticide editor" });
+    const collapseOperation = Testing.screen.getByRole("button", {
+      name: "Collapse operation editor",
     });
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    Testing.fireEvent.click(collapseOperation);
+    Testing.fireEvent.click(collapseOperation);
+    Vitest.expect(editor).toHaveClass("sheet--closing");
+    Vitest.expect(operation).not.toHaveClass("sheet--closing");
+    Vitest.expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(operation).toHaveClass("sheet--closing");
+    });
+    await Testing.waitFor(() => {
+      Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
   });
 });

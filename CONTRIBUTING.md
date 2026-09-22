@@ -46,6 +46,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 - Optional fields, vals, and params are prefixed `maybe` — `maybeNickname: Option[Nickname]`.
 - `Either`-typed fields, vals, and params are suffixed `Result` — `editResult: Either[…, …]`.
 - Name an argument when its value does not reveal its role at the call site — for example `maybeNote = None`, `date = Instant.parse(…)`, or `share = 100`. Keep self-describing variables and value wrappers positional.
+- In TypeScript, use named imports only when at most three names fit on one line; otherwise use a namespace import. Keep framework imports named when compiler, lint, or introspection semantics depend on the imported bindings, as Solid does for reactive primitives and control flow and Dagger does for decorators.
 
 ## Composition and abstraction
 

@@ -3,10 +3,7 @@ import type { Component } from "solid-js";
 import type { SubstrateComponent, SubstrateComponentId } from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
 import { substrateComponentLabel } from "./JournalLabels";
-import {
-  addSubstrateComponentControlId,
-  editSubstrateComponentControlId,
-} from "./OperationControlIds";
+import * as Controls from "./OperationControlIds";
 
 export interface SubstratePartInput {
   readonly component: SubstrateComponentId;
@@ -61,7 +58,10 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
               </select>
               <Show when={selectedComponent(part().component)}>
                 {(component) => {
-                  const editControlId = editSubstrateComponentControlId(index, component().id);
+                  const editControlId = Controls.editSubstrateComponentControlId(
+                    index,
+                    component().id,
+                  );
                   return (
                     <>
                       <InfoControl
@@ -127,7 +127,7 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           Extend mix
         </button>
         <button
-          id={addSubstrateComponentControlId}
+          id={Controls.addSubstrateComponentControlId}
           class="compact-action catalog-action--define"
           type="button"
           onClick={() => {

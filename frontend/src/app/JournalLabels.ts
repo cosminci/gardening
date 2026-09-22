@@ -1,19 +1,9 @@
-import type {
-  ActionType,
-  MoistureLevel,
-  Pesticide,
-  PesticideId,
-  PesticideType,
-  Plant,
-  Substrate,
-  SubstrateComponent,
-  SubstrateComponentId,
-} from "../domain/Journal";
+import type * as Journal from "../domain/Journal";
 
-export const plantDisplayName = (plant: Plant) =>
+export const plantDisplayName = (plant: Journal.Plant) =>
   plant.details.maybeNickname ?? plant.details.species;
 
-export const actionLabels: Record<ActionType, string> = {
+export const actionLabels: Record<Journal.ActionType, string> = {
   watered: "Watered",
   fertilized: "Fertilized",
   pesticide: "Pesticide",
@@ -21,7 +11,7 @@ export const actionLabels: Record<ActionType, string> = {
   noAction: "None",
 };
 
-export const moistureLabels: Record<MoistureLevel, string> = {
+export const moistureLabels: Record<Journal.MoistureLevel, string> = {
   wet: "Wet",
   moderatePlus: "Moderate +",
   moderateMinus: "Moderate -",
@@ -29,21 +19,26 @@ export const moistureLabels: Record<MoistureLevel, string> = {
   noReading: "N/A",
 };
 
-export const pesticideTypeLabels: Record<PesticideType, string> = {
+export const pesticideTypeLabels: Record<Journal.PesticideType, string> = {
   fungicide: "Fungicide",
   insecticide: "Insecticide",
   treatment: "Treatment",
 };
 
 export const substrateComponentLabel = (
-  componentId: SubstrateComponentId,
-  components: readonly SubstrateComponent[],
+  componentId: Journal.SubstrateComponentId,
+  components: readonly Journal.SubstrateComponent[],
 ) => components.find((component) => component.id === componentId)?.data.name ?? componentId;
 
-export const pesticideLabel = (pesticideId: PesticideId, pesticides: readonly Pesticide[]) =>
-  pesticides.find((pesticide) => pesticide.id === pesticideId)?.data.name ?? pesticideId;
+export const pesticideLabel = (
+  pesticideId: Journal.PesticideId,
+  pesticides: readonly Journal.Pesticide[],
+) => pesticides.find((pesticide) => pesticide.id === pesticideId)?.data.name ?? pesticideId;
 
-export const formatSubstrate = (value: Substrate, components: readonly SubstrateComponent[]) =>
+export const formatSubstrate = (
+  value: Journal.Substrate,
+  components: readonly Journal.SubstrateComponent[],
+) =>
   value
     .map((part) => `${substrateComponentLabel(part.component, components)} ${String(part.share)}%`)
     .join(", ");

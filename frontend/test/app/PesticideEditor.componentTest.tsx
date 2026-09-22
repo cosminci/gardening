@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
+import * as Testing from "@solidjs/testing-library";
+import * as Vitest from "vitest";
 import { PesticideEditor } from "../../src/app/PesticideEditor";
 import { nomenclatureInfo, nomenclatureName, pesticideId } from "../../src/domain/Journal";
 
@@ -13,14 +13,14 @@ const neem = {
   },
 };
 
-describe("PesticideEditor", () => {
-  it("should add a pesticide through constrained and multiline fields", async () => {
-    const onAdd = vi
+Vitest.describe("PesticideEditor", () => {
+  Vitest.it("should add a pesticide through constrained and multiline fields", async () => {
+    const onAdd = Vitest.vi
       .fn()
       .mockResolvedValueOnce({ kind: "addFailed", reason: new Error("private") })
       .mockResolvedValueOnce({ kind: "added", entry: neem });
-    const onClose = vi.fn();
-    render(() => (
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
       <PesticideEditor
         pesticide={undefined}
         onAdd={onAdd}
@@ -29,87 +29,100 @@ describe("PesticideEditor", () => {
       />
     ));
 
-    expect(screen.getAllByRole("heading")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Add pesticide" })).toBeInTheDocument();
-    const form = screen.getByRole("form", { name: "Add pesticide" });
-    fireEvent.submit(form);
-    expect(screen.getByRole("alert")).toHaveTextContent("Enter a pesticide name.");
-    expect(screen.getByRole("combobox", { name: "Type" })).toHaveDisplayValue("Fungicide");
-    expect(
-      within(screen.getByRole("combobox", { name: "Type" })).getAllByRole("option"),
+    Vitest.expect(Testing.screen.getAllByRole("heading")).toHaveLength(1);
+    Vitest.expect(
+      Testing.screen.getByRole("heading", { name: "Add pesticide" }),
+    ).toBeInTheDocument();
+    const form = Testing.screen.getByRole("form", { name: "Add pesticide" });
+    Testing.fireEvent.submit(form);
+    Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent("Enter a pesticide name.");
+    Vitest.expect(Testing.screen.getByRole("combobox", { name: "Type" })).toHaveDisplayValue(
+      "Fungicide",
+    );
+    Vitest.expect(
+      Testing.within(Testing.screen.getByRole("combobox", { name: "Type" })).getAllByRole("option"),
     ).toHaveLength(3);
 
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: " Soap " },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Type" }), {
       target: { value: "insecticide" },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Info" }), {
       target: { value: " Dilute first.\nApply weekly. " },
     });
-    fireEvent.submit(form);
-    expect(await screen.findByRole("alert")).toHaveTextContent("The pesticide could not be saved.");
-    fireEvent.submit(form);
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledOnce();
+    Testing.fireEvent.submit(form);
+    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+      "The pesticide could not be saved.",
+    );
+    Testing.fireEvent.submit(form);
+    await Testing.waitFor(() => {
+      Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
-    expect(onAdd).toHaveBeenLastCalledWith({
+    Vitest.expect(onAdd).toHaveBeenLastCalledWith({
       name: nomenclatureName("Soap"),
       pesticideType: "insecticide",
       maybeInfo: nomenclatureInfo("Dilute first.\nApply weekly."),
     });
   });
 
-  it("should edit a pesticide and distinguish missing entries from save failures", async () => {
-    const onEdit = vi
-      .fn()
-      .mockResolvedValueOnce({ kind: "recordMissing" })
-      .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
-      .mockResolvedValueOnce({ kind: "edited", entry: neem });
-    const onClose = vi.fn();
-    render(() => (
-      <PesticideEditor
-        pesticide={neem}
-        onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
-        onEdit={onEdit}
-        onClose={onClose}
-      />
-    ));
+  Vitest.it(
+    "should edit a pesticide and distinguish missing entries from save failures",
+    async () => {
+      const onEdit = Vitest.vi
+        .fn()
+        .mockResolvedValueOnce({ kind: "recordMissing" })
+        .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
+        .mockResolvedValueOnce({ kind: "edited", entry: neem });
+      const onClose = Vitest.vi.fn();
+      Testing.render(() => (
+        <PesticideEditor
+          pesticide={neem}
+          onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
+          onEdit={onEdit}
+          onClose={onClose}
+        />
+      ));
 
-    const form = screen.getByRole("form", { name: "Edit Neem oil" });
-    const name = screen.getByRole("textbox", { name: "Name" });
-    fireEvent.input(name, { target: { value: " " } });
-    fireEvent.submit(form);
-    expect(screen.getByRole("alert")).toHaveTextContent("Enter a pesticide name.");
+      const form = Testing.screen.getByRole("form", { name: "Edit Neem oil" });
+      const name = Testing.screen.getByRole("textbox", { name: "Name" });
+      Testing.fireEvent.input(name, { target: { value: " " } });
+      Testing.fireEvent.submit(form);
+      Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent("Enter a pesticide name.");
 
-    fireEvent.input(name, { target: { value: " Neem concentrate " } });
-    fireEvent.change(screen.getByRole("combobox", { name: "Type" }), {
-      target: { value: "treatment" },
-    });
-    fireEvent.submit(form);
-    expect(await screen.findByRole("alert")).toHaveTextContent("This pesticide no longer exists.");
-    fireEvent.submit(form);
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("The pesticide could not be saved."),
-    );
-    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
-      target: { value: " Use weekly. " },
-    });
-    fireEvent.submit(form);
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledOnce();
-    });
-    expect(onEdit).toHaveBeenLastCalledWith(neemId, {
-      name: nomenclatureName("Neem concentrate"),
-      pesticideType: "treatment",
-      maybeInfo: nomenclatureInfo("Use weekly."),
-    });
-  });
+      Testing.fireEvent.input(name, { target: { value: " Neem concentrate " } });
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Type" }), {
+        target: { value: "treatment" },
+      });
+      Testing.fireEvent.submit(form);
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "This pesticide no longer exists.",
+      );
+      Testing.fireEvent.submit(form);
+      await Testing.waitFor(() =>
+        Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent(
+          "The pesticide could not be saved.",
+        ),
+      );
+      Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Info" }), {
+        target: { value: " Use weekly. " },
+      });
+      Testing.fireEvent.submit(form);
+      await Testing.waitFor(() => {
+        Vitest.expect(onClose).toHaveBeenCalledOnce();
+      });
+      Vitest.expect(onEdit).toHaveBeenLastCalledWith(neemId, {
+        name: nomenclatureName("Neem concentrate"),
+        pesticideType: "treatment",
+        maybeInfo: nomenclatureInfo("Use weekly."),
+      });
+    },
+  );
 
-  it("should collapse without saving", () => {
-    const onClose = vi.fn();
-    render(() => (
+  Vitest.it("should collapse without saving", () => {
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
       <PesticideEditor
         pesticide={neem}
         onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
@@ -118,7 +131,9 @@ describe("PesticideEditor", () => {
       />
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse pesticide editor" }));
-    expect(onClose).toHaveBeenCalledOnce();
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", { name: "Collapse pesticide editor" }),
+    );
+    Vitest.expect(onClose).toHaveBeenCalledOnce();
   });
 });

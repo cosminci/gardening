@@ -1,21 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { makeHttpJournalClient } from "../../../src/adapters/http/HttpJournalClient";
-import type { OperationDetails } from "../../../src/domain/Journal";
-import {
-  nomenclatureInfo,
-  nomenclatureName,
-  note,
-  operationId,
-  percentage,
-  pesticideId,
-  plantId,
-  substrate,
-  substrateComponentId,
-} from "../../../src/domain/Journal";
+import * as Journal from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
-const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
-const pineBarkId = substrateComponentId("00000000-0000-4000-8000-000000000004");
+const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
+const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
 const expectKind = (result: Promise<unknown>, kind: string) =>
   expect(result).resolves.toMatchObject({ kind });
 const expectResult = (result: Promise<unknown>, expected: object) =>
@@ -23,7 +12,7 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
 
 describe("HttpJournalClient", () => {
   it("should translate plant and operation responses into domain values", async () => {
-    const pesticide = pesticideId("00000000-0000-4000-8001-000000000003");
+    const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const fetch = respondingWith([
       jsonResponse([
         {
@@ -87,22 +76,22 @@ describe("HttpJournalClient", () => {
     const journal = makeHttpJournalClient(fetch);
     const expectedPlants = [
       {
-        id: plantId("p1"),
+        id: Journal.plantId("p1"),
         details: {
           species: "Ficus lyrata",
           maybeNickname: "Fern",
           location: "Balcony",
-          substrate: substrate([{ component: perliteId, share: percentage(100) }]),
+          substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
           status: "active",
         },
       },
       {
-        id: plantId("p2"),
+        id: Journal.plantId("p2"),
         details: {
           species: "Monstera deliciosa",
           maybeNickname: null,
           location: "Kitchen",
-          substrate: substrate([{ component: pineBarkId, share: percentage(40) }]),
+          substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(40) }]),
           status: "active",
         },
       },
@@ -110,8 +99,8 @@ describe("HttpJournalClient", () => {
     const expectedPesticides = new Set([pesticide]);
     const expectedOperations = [
       {
-        id: operationId("o1"),
-        plantId: plantId("p1"),
+        id: Journal.operationId("o1"),
+        plantId: Journal.plantId("p1"),
         date: "2026-01-01T00:00:00Z",
         details: {
           kind: "care",
@@ -122,8 +111,8 @@ describe("HttpJournalClient", () => {
         },
       },
       {
-        id: operationId("o2"),
-        plantId: plantId("p1"),
+        id: Journal.operationId("o2"),
+        plantId: Journal.plantId("p1"),
         date: "2026-01-02T00:00:00Z",
         details: {
           kind: "care",
@@ -136,7 +125,7 @@ describe("HttpJournalClient", () => {
     ];
 
     await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: expectedPlants });
-    await expect(journal.getOperations(plantId("p1"))).resolves.toEqual({
+    await expect(journal.getOperations(Journal.plantId("p1"))).resolves.toEqual({
       kind: "read",
       operations: expectedOperations,
     });
@@ -165,13 +154,20 @@ describe("HttpJournalClient", () => {
     const expectedComponents = [
       {
         id: perliteId,
-        data: { name: nomenclatureName("Perlite"), maybeInfo: nomenclatureInfo("Adds drainage") },
+        data: {
+          name: Journal.nomenclatureName("Perlite"),
+          maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
+        },
       },
     ];
     const expectedPesticides = [
       {
-        id: pesticideId("00000000-0000-4000-8001-000000000003"),
-        data: { name: nomenclatureName("Neem oil"), pesticideType: "insecticide", maybeInfo: null },
+        id: Journal.pesticideId("00000000-0000-4000-8001-000000000003"),
+        data: {
+          name: Journal.nomenclatureName("Neem oil"),
+          pesticideType: "insecticide",
+          maybeInfo: null,
+        },
       },
     ];
 
@@ -211,38 +207,38 @@ describe("HttpJournalClient", () => {
       requests,
     );
     const journal = makeHttpJournalClient(fetch);
-    const care: OperationDetails = {
+    const care: Journal.OperationDetails = {
       kind: "care",
       actions: new Set(["watered"]),
-      pesticides: new Set([pesticideId("00000000-0000-4000-8001-000000000003")]),
+      pesticides: new Set([Journal.pesticideId("00000000-0000-4000-8001-000000000003")]),
       moisture: "wet",
       maybeNote: null,
     };
-    const repot: OperationDetails = {
+    const repot: Journal.OperationDetails = {
       kind: "repot",
-      substrate: substrate([{ component: perliteId, share: percentage(80) }]),
-      maybeNote: note("Fresh"),
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(80) }]),
+      maybeNote: Journal.note("Fresh"),
     };
     const expectedOperation = {
       details: {
         kind: "repot",
-        substrate: substrate([{ component: perliteId, share: percentage(80) }]),
-        maybeNote: note("Fresh"),
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(80) }]),
+        maybeNote: Journal.note("Fresh"),
       },
     };
 
-    await expect(journal.logOperation(plantId("p1"), care)).resolves.toEqual({
+    await expect(journal.logOperation(Journal.plantId("p1"), care)).resolves.toEqual({
       kind: "logged",
-      id: operationId("logged"),
+      id: Journal.operationId("logged"),
     });
-    await expect(journal.editOperation(operationId("o1"), repot)).resolves.toEqual({
+    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toEqual({
       kind: "operationTypeMismatch",
     });
-    await expect(journal.editOperation(operationId("o1"), repot)).resolves.toMatchObject({
+    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toMatchObject({
       kind: "edited",
       operation: expectedOperation,
     });
-    await expect(journal.editOperation(operationId("o1"), repot)).resolves.toMatchObject({
+    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toMatchObject({
       operation: { details: { maybeNote: null } },
     });
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
@@ -269,7 +265,7 @@ describe("HttpJournalClient", () => {
 
   it("should send substrate component and pesticide catalog changes", async () => {
     const requests: Request[] = [];
-    const pesticide = pesticideId("00000000-0000-4000-8001-000000000003");
+    const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const fetch = respondingWith(
       [
         jsonResponse({ id: perliteId, data: { name: "Perlite", info: "Adds drainage" } }, 201),
@@ -292,13 +288,13 @@ describe("HttpJournalClient", () => {
 
     await expect(
       journal.addSubstrateComponent({
-        name: nomenclatureName("Perlite"),
-        maybeInfo: nomenclatureInfo("Adds drainage"),
+        name: Journal.nomenclatureName("Perlite"),
+        maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
       }),
     ).resolves.toMatchObject({ kind: "added", entry: { id: perliteId } });
     await expect(
       journal.editSubstrateComponent(perliteId, {
-        name: nomenclatureName("Perlite fine"),
+        name: Journal.nomenclatureName("Perlite fine"),
         maybeInfo: null,
       }),
     ).resolves.toMatchObject({
@@ -307,14 +303,14 @@ describe("HttpJournalClient", () => {
     });
     await expect(
       journal.addPesticide({
-        name: nomenclatureName("Neem oil"),
+        name: Journal.nomenclatureName("Neem oil"),
         pesticideType: "insecticide",
-        maybeInfo: nomenclatureInfo("Dilute first"),
+        maybeInfo: Journal.nomenclatureInfo("Dilute first"),
       }),
     ).resolves.toMatchObject({ kind: "added", entry: { id: pesticide } });
     await expect(
       journal.editPesticide(pesticide, {
-        name: nomenclatureName("Neem"),
+        name: Journal.nomenclatureName("Neem"),
         pesticideType: "insecticide",
         maybeInfo: null,
       }),
@@ -370,22 +366,22 @@ describe("HttpJournalClient", () => {
         jsonResponse({ message: "catalog could not be changed" }, 500),
       ]),
     );
-    const component = substrateComponentId("00000000-0000-4000-8000-000000000003");
-    const pesticide = pesticideId("00000000-0000-4000-8001-000000000003");
-    const componentData = { name: nomenclatureName("Perlite"), maybeInfo: null };
+    const component = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
+    const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const componentData = { name: Journal.nomenclatureName("Perlite"), maybeInfo: null };
     const pesticideData = {
-      name: nomenclatureName("Neem"),
+      name: Journal.nomenclatureName("Neem"),
       pesticideType: "insecticide" as const,
       maybeInfo: null,
     };
 
     await expectKind(httpFailures.getPlants(), "readFailed");
-    await expectKind(httpFailures.getOperations(plantId("p1")), "readFailed");
-    await expectKind(httpFailures.logOperation(plantId("p1"), details), "loggingFailed");
-    await expectResult(httpFailures.editOperation(operationId("missing"), details), {
+    await expectKind(httpFailures.getOperations(Journal.plantId("p1")), "readFailed");
+    await expectKind(httpFailures.logOperation(Journal.plantId("p1"), details), "loggingFailed");
+    await expectResult(httpFailures.editOperation(Journal.operationId("missing"), details), {
       kind: "operationMissing",
     });
-    await expectKind(httpFailures.editOperation(operationId("o1"), details), "editFailed");
+    await expectKind(httpFailures.editOperation(Journal.operationId("o1"), details), "editFailed");
     await expectKind(httpFailures.getSubstrateComponents(), "readFailed");
     await expectKind(httpFailures.addSubstrateComponent(componentData), "addFailed");
     await expectResult(httpFailures.editSubstrateComponent(component, componentData), {
@@ -407,13 +403,13 @@ describe("HttpJournalClient", () => {
       expect(result).resolves.toEqual({ kind, reason });
 
     await expectNetworkFailure(networkFailures.getPlants(), "readFailed");
-    await expectNetworkFailure(networkFailures.getOperations(plantId("p1")), "readFailed");
+    await expectNetworkFailure(networkFailures.getOperations(Journal.plantId("p1")), "readFailed");
     await expectNetworkFailure(
-      networkFailures.logOperation(plantId("p1"), details),
+      networkFailures.logOperation(Journal.plantId("p1"), details),
       "loggingFailed",
     );
     await expectNetworkFailure(
-      networkFailures.editOperation(operationId("o1"), details),
+      networkFailures.editOperation(Journal.operationId("o1"), details),
       "editFailed",
     );
     await expectNetworkFailure(networkFailures.getSubstrateComponents(), "readFailed");

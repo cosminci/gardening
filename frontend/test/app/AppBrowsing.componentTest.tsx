@@ -2,14 +2,14 @@ import { render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import { nomenclatureName, pesticideId } from "../../src/domain/Journal";
-import { buildJournal, care, ficus, monstera, repot } from "./JournalTestSupport";
+import * as JournalFixtures from "./JournalTestSupport";
 
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
     const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
     const pesticides = new Set([neemId]);
     const actions = new Set(["watered", "pesticide"] as const);
-    const treated = care({
+    const treated = JournalFixtures.care({
       id: "o4",
       date: "2026-04-04T22:30:00Z",
       moisture: "wet",
@@ -19,14 +19,14 @@ describe("browsing the journal", () => {
     });
     const operations = [
       treated,
-      care({
+      JournalFixtures.care({
         id: "o2",
         date: "2026-02-02T00:00:00Z",
         moisture: "moderatePlus",
         actions: new Set(),
       }),
-      repot("o3", "2026-03-03T00:00:00Z"),
-      care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "dry" }),
+      JournalFixtures.repot("o3", "2026-03-03T00:00:00Z"),
+      JournalFixtures.care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "dry" }),
     ];
     const pesticideCatalog = [
       {
@@ -38,8 +38,11 @@ describe("browsing the journal", () => {
         },
       },
     ];
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [monstera(), ficus()] },
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: {
+        kind: "read",
+        plants: [JournalFixtures.monstera(), JournalFixtures.ficus()],
+      },
       getOperationsByPlantId: {
         p1: [{ kind: "read", operations }],
         p2: [{ kind: "read", operations: [] }],
@@ -77,8 +80,8 @@ describe("browsing the journal", () => {
   });
 
   it("should identify a journal containing one active plant", async () => {
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
     });
 
@@ -89,7 +92,9 @@ describe("browsing the journal", () => {
 
   it("should report a plant read failure without showing its reason", async () => {
     const reason = new Error("private details");
-    const journal = buildJournal({ getPlantsResult: { kind: "readFailed", reason } });
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "readFailed", reason },
+    });
 
     render(() => <App journal={journal} />);
 
@@ -99,8 +104,8 @@ describe("browsing the journal", () => {
 
   it("should report an operation history read failure without showing its reason", async () => {
     const reason = new Error("private details");
-    const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+    const journal = JournalFixtures.buildJournal({
+      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
@@ -112,7 +117,7 @@ describe("browsing the journal", () => {
 
   it("should report an unexpected rejected request", async () => {
     const journal = {
-      ...buildJournal(),
+      ...JournalFixtures.buildJournal(),
       getPlants: () => Promise.reject(new Error("private details")),
     };
 
@@ -123,7 +128,7 @@ describe("browsing the journal", () => {
   });
 
   it("should report substrate catalog failures", async () => {
-    const journal = buildJournal({
+    const journal = JournalFixtures.buildJournal({
       getSubstrateComponentsResult: {
         kind: "readFailed",
         reason: new Error("private details"),
@@ -137,7 +142,7 @@ describe("browsing the journal", () => {
   });
 
   it("should report pesticide catalog failures", async () => {
-    const journal = buildJournal({
+    const journal = JournalFixtures.buildJournal({
       getPesticidesResult: {
         kind: "readFailed",
         reason: new Error("private details"),

@@ -1,15 +1,6 @@
 import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  JournalClient,
-  Operation,
-  OperationDetails,
-  Pesticide,
-  PesticideData,
-  Plant,
-  SubstrateComponent,
-  SubstrateComponentData,
-} from "../domain/Journal";
+import type * as Journal from "../domain/Journal";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
@@ -17,12 +8,12 @@ import { PlantCard } from "./PlantCard";
 import "./app.css";
 
 interface AppProps {
-  readonly journal: JournalClient;
+  readonly journal: Journal.JournalClient;
 }
 
 interface PlantHistory {
-  readonly plant: Plant;
-  readonly operations: readonly Operation[];
+  readonly plant: Journal.Plant;
+  readonly operations: readonly Journal.Operation[];
 }
 
 type ViewState = "loading" | "failed" | "loaded";
@@ -30,10 +21,10 @@ type ViewState = "loading" | "failed" | "loaded";
 export const App: Component<AppProps> = (props) => {
   const [view, setView] = createSignal<ViewState>("loading");
   const [histories, setHistories] = createSignal<readonly PlantHistory[]>([]);
-  const [substrateComponents, setSubstrateComponents] = createSignal<readonly SubstrateComponent[]>(
-    [],
-  );
-  const [pesticides, setPesticides] = createSignal<readonly Pesticide[]>([]);
+  const [substrateComponents, setSubstrateComponents] = createSignal<
+    readonly Journal.SubstrateComponent[]
+  >([]);
+  const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
 
@@ -77,7 +68,7 @@ export const App: Component<AppProps> = (props) => {
     await displayJournalUpdate(animate && formTarget() === undefined, display);
   };
 
-  const saveOperation = async (target: OperationTarget, details: OperationDetails) => {
+  const saveOperation = async (target: OperationTarget, details: Journal.OperationDetails) => {
     const setTargetError = (message: string) => formTarget() === target && setSaveError(message);
     try {
       if (target.kind === "log") {
@@ -113,13 +104,16 @@ export const App: Component<AppProps> = (props) => {
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
   };
 
-  const addSubstrateComponent = async (data: SubstrateComponentData) => {
+  const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
     const result = await props.journal.addSubstrateComponent(data);
     if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
     return result;
   };
 
-  const editSubstrateComponent: JournalClient["editSubstrateComponent"] = async (id, data) => {
+  const editSubstrateComponent: Journal.JournalClient["editSubstrateComponent"] = async (
+    id,
+    data,
+  ) => {
     const result = await props.journal.editSubstrateComponent(id, data);
     if (result.kind === "edited")
       setSubstrateComponents((current) =>
@@ -128,13 +122,13 @@ export const App: Component<AppProps> = (props) => {
     return result;
   };
 
-  const addPesticide = async (data: PesticideData) => {
+  const addPesticide = async (data: Journal.PesticideData) => {
     const result = await props.journal.addPesticide(data);
     if (result.kind === "added") setPesticides((current) => [...current, result.entry]);
     return result;
   };
 
-  const editPesticide: JournalClient["editPesticide"] = async (id, data) => {
+  const editPesticide: Journal.JournalClient["editPesticide"] = async (id, data) => {
     const result = await props.journal.editPesticide(id, data);
     if (result.kind === "edited")
       setPesticides((current) =>
@@ -206,4 +200,4 @@ export const App: Component<AppProps> = (props) => {
   );
 };
 
-const name = (plant: Plant) => plant.details.maybeNickname ?? plant.details.species;
+const name = (plant: Journal.Plant) => plant.details.maybeNickname ?? plant.details.species;

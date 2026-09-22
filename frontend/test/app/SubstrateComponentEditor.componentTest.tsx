@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
+import * as Testing from "@solidjs/testing-library";
+import * as Vitest from "vitest";
 import { SubstrateComponentEditor } from "../../src/app/SubstrateComponentEditor";
 import { nomenclatureInfo, nomenclatureName, substrateComponentId } from "../../src/domain/Journal";
 
@@ -12,14 +12,14 @@ const perlite = {
   },
 };
 
-describe("SubstrateComponentEditor", () => {
-  it("should add a component with multiline information", async () => {
-    const onAdd = vi
+Vitest.describe("SubstrateComponentEditor", () => {
+  Vitest.it("should add a component with multiline information", async () => {
+    const onAdd = Vitest.vi
       .fn()
       .mockResolvedValueOnce({ kind: "addFailed", reason: new Error("private") })
       .mockResolvedValueOnce({ kind: "added", entry: perlite });
-    const onClose = vi.fn();
-    render(() => (
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
       <SubstrateComponentEditor
         component={undefined}
         onAdd={onAdd}
@@ -28,79 +28,84 @@ describe("SubstrateComponentEditor", () => {
       />
     ));
 
-    expect(screen.getAllByRole("heading")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Add substrate component" })).toBeInTheDocument();
-    const form = screen.getByRole("form", { name: "Add substrate component" });
-    fireEvent.submit(form);
-    expect(screen.getByRole("alert")).toHaveTextContent("Enter a component name.");
-    fireEvent.input(screen.getByRole("textbox", { name: "Name" }), {
+    Vitest.expect(Testing.screen.getAllByRole("heading")).toHaveLength(1);
+    Vitest.expect(
+      Testing.screen.getByRole("heading", { name: "Add substrate component" }),
+    ).toBeInTheDocument();
+    const form = Testing.screen.getByRole("form", { name: "Add substrate component" });
+    Testing.fireEvent.submit(form);
+    Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent("Enter a component name.");
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: " Pumice " },
     });
-    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Info" }), {
       target: { value: " Lightweight.\nRinse first. " },
     });
-    fireEvent.submit(form);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    Testing.fireEvent.submit(form);
+    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
       "The substrate component could not be saved.",
     );
-    fireEvent.submit(form);
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledOnce();
+    Testing.fireEvent.submit(form);
+    await Testing.waitFor(() => {
+      Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
-    expect(onAdd).toHaveBeenLastCalledWith({
+    Vitest.expect(onAdd).toHaveBeenLastCalledWith({
       name: nomenclatureName("Pumice"),
       maybeInfo: nomenclatureInfo("Lightweight.\nRinse first."),
     });
   });
 
-  it("should edit a component and distinguish missing entries from save failures", async () => {
-    const onEdit = vi
-      .fn()
-      .mockResolvedValueOnce({ kind: "recordMissing" })
-      .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
-      .mockResolvedValueOnce({ kind: "edited", entry: perlite });
-    const onClose = vi.fn();
-    render(() => (
-      <SubstrateComponentEditor
-        component={perlite}
-        onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
-        onEdit={onEdit}
-        onClose={onClose}
-      />
-    ));
+  Vitest.it(
+    "should edit a component and distinguish missing entries from save failures",
+    async () => {
+      const onEdit = Vitest.vi
+        .fn()
+        .mockResolvedValueOnce({ kind: "recordMissing" })
+        .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
+        .mockResolvedValueOnce({ kind: "edited", entry: perlite });
+      const onClose = Vitest.vi.fn();
+      Testing.render(() => (
+        <SubstrateComponentEditor
+          component={perlite}
+          onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
+          onEdit={onEdit}
+          onClose={onClose}
+        />
+      ));
 
-    const form = screen.getByRole("form", { name: "Edit Perlite" });
-    const name = screen.getByRole("textbox", { name: "Name" });
-    fireEvent.input(name, { target: { value: " " } });
-    fireEvent.submit(form);
-    expect(screen.getByRole("alert")).toHaveTextContent("Enter a component name.");
-    fireEvent.input(name, { target: { value: " Fine perlite " } });
-    fireEvent.submit(form);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This substrate component no longer exists.",
-    );
-    fireEvent.submit(form);
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "The substrate component could not be saved.",
-      ),
-    );
-    fireEvent.input(screen.getByRole("textbox", { name: "Info" }), {
-      target: { value: " Small grain. " },
-    });
-    fireEvent.submit(form);
-    await waitFor(() => {
-      expect(onClose).toHaveBeenCalledOnce();
-    });
-    expect(onEdit).toHaveBeenLastCalledWith(perliteId, {
-      name: nomenclatureName("Fine perlite"),
-      maybeInfo: nomenclatureInfo("Small grain."),
-    });
-  });
+      const form = Testing.screen.getByRole("form", { name: "Edit Perlite" });
+      const name = Testing.screen.getByRole("textbox", { name: "Name" });
+      Testing.fireEvent.input(name, { target: { value: " " } });
+      Testing.fireEvent.submit(form);
+      Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent("Enter a component name.");
+      Testing.fireEvent.input(name, { target: { value: " Fine perlite " } });
+      Testing.fireEvent.submit(form);
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "This substrate component no longer exists.",
+      );
+      Testing.fireEvent.submit(form);
+      await Testing.waitFor(() =>
+        Vitest.expect(Testing.screen.getByRole("alert")).toHaveTextContent(
+          "The substrate component could not be saved.",
+        ),
+      );
+      Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Info" }), {
+        target: { value: " Small grain. " },
+      });
+      Testing.fireEvent.submit(form);
+      await Testing.waitFor(() => {
+        Vitest.expect(onClose).toHaveBeenCalledOnce();
+      });
+      Vitest.expect(onEdit).toHaveBeenLastCalledWith(perliteId, {
+        name: nomenclatureName("Fine perlite"),
+        maybeInfo: nomenclatureInfo("Small grain."),
+      });
+    },
+  );
 
-  it("should collapse without saving", () => {
-    const onClose = vi.fn();
-    render(() => (
+  Vitest.it("should collapse without saving", () => {
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
       <SubstrateComponentEditor
         component={perlite}
         onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
@@ -109,7 +114,9 @@ describe("SubstrateComponentEditor", () => {
       />
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse substrate editor" }));
-    expect(onClose).toHaveBeenCalledOnce();
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", { name: "Collapse substrate editor" }),
+    );
+    Vitest.expect(onClose).toHaveBeenCalledOnce();
   });
 });

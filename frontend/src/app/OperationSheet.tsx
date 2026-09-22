@@ -1,69 +1,53 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  CatalogAddResult,
-  CatalogEditResult,
-  Operation,
-  OperationDetails,
-  Pesticide,
-  PesticideData,
-  PesticideId,
-  PlantId,
-  SubstrateComponent,
-  SubstrateComponentData,
-  SubstrateComponentId,
-} from "../domain/Journal";
-import {
-  addPesticideControlId,
-  addSubstrateComponentControlId,
-  editOperationControlId,
-  editPesticideControlId,
-  logOperationControlId,
-} from "./OperationControlIds";
+import type * as Journal from "../domain/Journal";
+import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
 import { PesticideEditor } from "./PesticideEditor";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
 
 export type OperationTarget =
-  | { readonly kind: "log"; readonly plantId: PlantId }
-  | { readonly kind: "edit"; readonly operation: Operation };
+  | { readonly kind: "log"; readonly plantId: Journal.PlantId }
+  | { readonly kind: "edit"; readonly operation: Journal.Operation };
 
 export const operationControlId = (target: OperationTarget) =>
   target.kind === "log"
-    ? logOperationControlId(target.plantId)
-    : editOperationControlId(target.operation.id);
+    ? Controls.logOperationControlId(target.plantId)
+    : Controls.editOperationControlId(target.operation.id);
 
 interface OperationSheetProps {
   readonly target: OperationTarget;
-  readonly substrateComponents: readonly SubstrateComponent[];
-  readonly pesticides: readonly Pesticide[];
+  readonly substrateComponents: readonly Journal.SubstrateComponent[];
+  readonly pesticides: readonly Journal.Pesticide[];
   readonly saveError: string | undefined;
-  readonly onSubmit: (details: OperationDetails) => Promise<void>;
+  readonly onSubmit: (details: Journal.OperationDetails) => Promise<void>;
   readonly onAddSubstrateComponent: (
-    data: SubstrateComponentData,
-  ) => Promise<CatalogAddResult<SubstrateComponent>>;
+    data: Journal.SubstrateComponentData,
+  ) => Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>>;
   readonly onEditSubstrateComponent: (
-    id: SubstrateComponentId,
-    data: SubstrateComponentData,
-  ) => Promise<CatalogEditResult<SubstrateComponent>>;
-  readonly onAddPesticide: (data: PesticideData) => Promise<CatalogAddResult<Pesticide>>;
+    id: Journal.SubstrateComponentId,
+    data: Journal.SubstrateComponentData,
+  ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  readonly onAddPesticide: (
+    data: Journal.PesticideData,
+  ) => Promise<Journal.CatalogAddResult<Journal.Pesticide>>;
   readonly onEditPesticide: (
-    id: PesticideId,
-    data: PesticideData,
-  ) => Promise<CatalogEditResult<Pesticide>>;
+    id: Journal.PesticideId,
+    data: Journal.PesticideData,
+  ) => Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
   readonly onCancel: () => void;
 }
 
 type NomenclatureEditor =
   | {
       readonly kind: "substrate";
-      readonly component: SubstrateComponent | undefined;
+      readonly component: Journal.SubstrateComponent | undefined;
       readonly returnFocusId: string;
     }
   | {
       readonly kind: "pesticide";
-      readonly pesticide: Pesticide | undefined;
+      readonly pesticide: Journal.Pesticide | undefined;
       readonly returnFocusId: string;
     };
 
@@ -191,7 +175,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
             setEditor({
               kind: "substrate",
               component: undefined,
-              returnFocusId: addSubstrateComponentControlId,
+              returnFocusId: Controls.addSubstrateComponentControlId,
             });
           }}
           onEditSubstrateComponent={(component, controlId) => {
@@ -201,14 +185,14 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
             setEditor({
               kind: "pesticide",
               pesticide: undefined,
-              returnFocusId: addPesticideControlId,
+              returnFocusId: Controls.addPesticideControlId,
             });
           }}
           onEditPesticide={(pesticide) => {
             setEditor({
               kind: "pesticide",
               pesticide,
-              returnFocusId: editPesticideControlId(pesticide.id),
+              returnFocusId: Controls.editPesticideControlId(pesticide.id),
             });
           }}
           onCancel={closeOperation}

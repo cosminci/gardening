@@ -1,21 +1,17 @@
 import { Show, createSignal, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  CatalogAddResult,
-  CatalogEditResult,
-  SubstrateComponent,
-  SubstrateComponentData,
-} from "../domain/Journal";
-import { nomenclatureInfo, nomenclatureName } from "../domain/Journal";
+import * as Journal from "../domain/Journal";
 import "./nomenclature-editor.css";
 
 interface SubstrateComponentEditorProps {
-  readonly component: SubstrateComponent | undefined;
-  readonly onAdd: (data: SubstrateComponentData) => Promise<CatalogAddResult<SubstrateComponent>>;
+  readonly component: Journal.SubstrateComponent | undefined;
+  readonly onAdd: (
+    data: Journal.SubstrateComponentData,
+  ) => Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>>;
   readonly onEdit: (
-    id: SubstrateComponent["id"],
-    data: SubstrateComponentData,
-  ) => Promise<CatalogEditResult<SubstrateComponent>>;
+    id: Journal.SubstrateComponent["id"],
+    data: Journal.SubstrateComponentData,
+  ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
   readonly onClose: () => void;
 }
 
@@ -34,8 +30,8 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
     }
     const trimmedInfo = info().trim();
     const data = {
-      name: nomenclatureName(trimmedName),
-      maybeInfo: trimmedInfo === "" ? null : nomenclatureInfo(trimmedInfo),
+      name: Journal.nomenclatureName(trimmedName),
+      maybeInfo: trimmedInfo === "" ? null : Journal.nomenclatureInfo(trimmedInfo),
     };
     const result =
       props.component === undefined

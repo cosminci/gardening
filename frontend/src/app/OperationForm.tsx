@@ -1,13 +1,6 @@
 import { Show, createSignal, untrack } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  ActionType,
-  OperationDetails,
-  Pesticide,
-  PesticideId,
-  SubstrateComponent,
-} from "../domain/Journal";
-import { note, percentage, substrate } from "../domain/Journal";
+import * as Journal from "../domain/Journal";
 import { CareFields } from "./CareFields";
 import { SubstrateFields } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
@@ -15,14 +8,17 @@ import "./form-fields.css";
 import "./operation-form.css";
 
 interface OperationFormProps {
-  readonly initial: OperationDetails | undefined;
-  readonly substrateComponents: readonly SubstrateComponent[];
-  readonly pesticides: readonly Pesticide[];
-  readonly onSubmit: (details: OperationDetails) => Promise<void>;
+  readonly initial: Journal.OperationDetails | undefined;
+  readonly substrateComponents: readonly Journal.SubstrateComponent[];
+  readonly pesticides: readonly Journal.Pesticide[];
+  readonly onSubmit: (details: Journal.OperationDetails) => Promise<void>;
   readonly onAddSubstrateComponent: () => void;
-  readonly onEditSubstrateComponent: (component: SubstrateComponent, returnFocusId: string) => void;
+  readonly onEditSubstrateComponent: (
+    component: Journal.SubstrateComponent,
+    returnFocusId: string,
+  ) => void;
   readonly onAddPesticide: () => void;
-  readonly onEditPesticide: (pesticide: Pesticide) => void;
+  readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
   readonly inactive?: boolean;
   readonly onCancel: () => void;
 }
@@ -33,14 +29,14 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
   const [actions, setActions] = createSignal(
     props.initial?.kind === "care"
       ? new Set([...props.initial.actions].filter((action) => action !== "noAction"))
-      : new Set<ActionType>(),
+      : new Set<Journal.ActionType>(),
   );
   const [moisture, setMoisture] = createSignal(
     props.initial?.kind === "care" ? props.initial.moisture : "noReading",
   );
-  const [selectedPesticides, setSelectedPesticides] = createSignal<ReadonlySet<PesticideId>>(
-    props.initial?.kind === "care" ? new Set(props.initial.pesticides) : new Set(),
-  );
+  const [selectedPesticides, setSelectedPesticides] = createSignal<
+    ReadonlySet<Journal.PesticideId>
+  >(props.initial?.kind === "care" ? new Set(props.initial.pesticides) : new Set());
   const [parts, setParts] = createSignal<SubstratePartInput[]>(
     props.initial?.kind === "repot"
       ? props.initial.substrate.map((part) => ({ component: part.component, share: part.share }))
@@ -52,16 +48,16 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
   const [validationError, setValidationError] = createSignal<string>();
   const [submitting, setSubmitting] = createSignal(false);
 
-  const toggleAction = (action: ActionType, checked: boolean) =>
+  const toggleAction = (action: Journal.ActionType, checked: boolean) =>
     setActions((current) => {
       const updated = new Set(current);
       if (checked) updated.add(action);
       else updated.delete(action);
-      if (!checked && action === "pesticide") setSelectedPesticides(new Set<PesticideId>());
+      if (!checked && action === "pesticide") setSelectedPesticides(new Set<Journal.PesticideId>());
       return updated;
     });
 
-  const togglePesticide = (pesticide: PesticideId, checked: boolean) =>
+  const togglePesticide = (pesticide: Journal.PesticideId, checked: boolean) =>
     setSelectedPesticides((current) => {
       const updated = new Set(current);
       if (checked) updated.add(pesticide);
@@ -75,8 +71,8 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
     setValidationError(error);
     if (error !== undefined) return;
 
-    const maybeNote = notes().trim() === "" ? null : note(notes().trim());
-    const details: OperationDetails =
+    const maybeNote = notes().trim() === "" ? null : Journal.note(notes().trim());
+    const details: Journal.OperationDetails =
       kind() === "care"
         ? {
             kind: "care",
@@ -87,8 +83,11 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
           }
         : {
             kind: "repot",
-            substrate: substrate(
-              parts().map((part) => ({ component: part.component, share: percentage(part.share) })),
+            substrate: Journal.substrate(
+              parts().map((part) => ({
+                component: part.component,
+                share: Journal.percentage(part.share),
+              })),
             ),
             maybeNote,
           };
@@ -127,7 +126,9 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
             aria-label="Operation type"
             disabled={props.initial !== undefined}
             value={kind()}
-            onChange={(event) => setKind(event.currentTarget.value as OperationDetails["kind"])}
+            onChange={(event) =>
+              setKind(event.currentTarget.value as Journal.OperationDetails["kind"])
+            }
           >
             <option value="care">Care</option>
             <option value="repot">Repot</option>

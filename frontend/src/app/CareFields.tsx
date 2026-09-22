@@ -1,25 +1,24 @@
 import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
-import type { ActionType, MoistureLevel, Pesticide, PesticideId } from "../domain/Journal";
-import { actionTypes, moistureLevels } from "../domain/Journal";
+import * as Journal from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
 import { actionLabels, moistureLabels, pesticideTypeLabels } from "./JournalLabels";
 import { addPesticideControlId, editPesticideControlId } from "./OperationControlIds";
 
 interface CareFieldsProps {
-  readonly actions: ReadonlySet<ActionType>;
-  readonly moisture: MoistureLevel;
-  readonly pesticides: readonly Pesticide[];
-  readonly selectedPesticides: ReadonlySet<PesticideId>;
-  readonly onActionChange: (action: ActionType, checked: boolean) => void;
-  readonly onMoistureChange: (moisture: MoistureLevel) => void;
-  readonly onPesticideChange: (pesticide: PesticideId, checked: boolean) => void;
+  readonly actions: ReadonlySet<Journal.ActionType>;
+  readonly moisture: Journal.MoistureLevel;
+  readonly pesticides: readonly Journal.Pesticide[];
+  readonly selectedPesticides: ReadonlySet<Journal.PesticideId>;
+  readonly onActionChange: (action: Journal.ActionType, checked: boolean) => void;
+  readonly onMoistureChange: (moisture: Journal.MoistureLevel) => void;
+  readonly onPesticideChange: (pesticide: Journal.PesticideId, checked: boolean) => void;
   readonly onAddPesticide: () => void;
-  readonly onEditPesticide: (pesticide: Pesticide) => void;
+  readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
 }
 
-const selectableActions: readonly ActionType[] = [
-  ...actionTypes.filter((action) => action !== "noAction" && action !== "pesticide"),
+const selectableActions: readonly Journal.ActionType[] = [
+  ...Journal.actionTypes.filter((action) => action !== "noAction" && action !== "pesticide"),
   "pesticide",
 ];
 
@@ -50,10 +49,10 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         aria-label="Moisture"
         value={props.moisture}
         onChange={(event) => {
-          props.onMoistureChange(event.currentTarget.value as MoistureLevel);
+          props.onMoistureChange(event.currentTarget.value as Journal.MoistureLevel);
         }}
       >
-        <For each={moistureLevels}>
+        <For each={Journal.moistureLevels}>
           {(level) => <option value={level}>{moistureLabels[level]}</option>}
         </For>
       </select>

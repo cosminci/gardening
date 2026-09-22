@@ -1,23 +1,18 @@
 import { For, Show, createSignal, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
-import type {
-  CatalogAddResult,
-  CatalogEditResult,
-  Pesticide,
-  PesticideData,
-  PesticideType,
-} from "../domain/Journal";
-import { nomenclatureInfo, nomenclatureName, pesticideTypes } from "../domain/Journal";
+import * as Journal from "../domain/Journal";
 import { pesticideTypeLabels } from "./JournalLabels";
 import "./nomenclature-editor.css";
 
 interface PesticideEditorProps {
-  readonly pesticide: Pesticide | undefined;
-  readonly onAdd: (data: PesticideData) => Promise<CatalogAddResult<Pesticide>>;
+  readonly pesticide: Journal.Pesticide | undefined;
+  readonly onAdd: (
+    data: Journal.PesticideData,
+  ) => Promise<Journal.CatalogAddResult<Journal.Pesticide>>;
   readonly onEdit: (
-    id: Pesticide["id"],
-    data: PesticideData,
-  ) => Promise<CatalogEditResult<Pesticide>>;
+    id: Journal.Pesticide["id"],
+    data: Journal.PesticideData,
+  ) => Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
   readonly onClose: () => void;
 }
 
@@ -25,7 +20,9 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
   let panel!: HTMLElement;
   const initial = untrack(() => props.pesticide);
   const [name, setName] = createSignal<string>(initial?.data.name ?? "");
-  const [type, setType] = createSignal<PesticideType>(initial?.data.pesticideType ?? "fungicide");
+  const [type, setType] = createSignal<Journal.PesticideType>(
+    initial?.data.pesticideType ?? "fungicide",
+  );
   const [info, setInfo] = createSignal(initial?.data.maybeInfo ?? "");
   const [error, setError] = createSignal<string>();
 
@@ -37,9 +34,9 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
     }
     const trimmedInfo = info().trim();
     const data = {
-      name: nomenclatureName(trimmedName),
+      name: Journal.nomenclatureName(trimmedName),
       pesticideType: type(),
-      maybeInfo: trimmedInfo === "" ? null : nomenclatureInfo(trimmedInfo),
+      maybeInfo: trimmedInfo === "" ? null : Journal.nomenclatureInfo(trimmedInfo),
     };
     const result =
       props.pesticide === undefined
@@ -112,10 +109,10 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
             aria-label="Type"
             value={type()}
             onChange={(event) => {
-              setType(event.currentTarget.value as PesticideType);
+              setType(event.currentTarget.value as Journal.PesticideType);
             }}
           >
-            <For each={pesticideTypes}>
+            <For each={Journal.pesticideTypes}>
               {(value) => <option value={value}>{pesticideTypeLabels[value]}</option>}
             </For>
           </select>
