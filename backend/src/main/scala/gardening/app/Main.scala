@@ -1,5 +1,6 @@
 package gardening.app
 
+import cats.syntax.either.*
 import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
 import gardening.adapters.persistence.SqliteLocation
 import gardening.domain.attention.{PlantAttentionService, RefreshAttentionResult}
@@ -8,7 +9,6 @@ import ox.{EitherMode, forkError, sleep, supervisedError}
 import ox.either.*
 import sttp.tapir.server.netty.sync.NettySyncServer
 
-import scala.annotation.tailrec
 import scala.concurrent.duration.*
 import scala.util.Using
 
@@ -37,7 +37,7 @@ object Main:
             plantAttentionService = programs.plantAttentionService,
             awaitNext = () =>
               sleep(5.minutes)
-              Right(())
+              ().asRight
           )
         .orThrow
 
@@ -45,21 +45,21 @@ object Main:
       http: () => Unit,
       plantAttentionService: PlantAttentionService,
       awaitNext: () => Either[Throwable, Unit]
-  ): Either[Throwable, Unit] =
+  ) =
     supervisedError(EitherMode[Throwable]()):
       val _ = forkError(pollPlantAttention(plantAttentionService, awaitNext))
-      Right(http())
+      http().asRight
 
-  @tailrec
   private def pollPlantAttention(
       plantAttentionService: PlantAttentionService,
       awaitNext: () => Either[Throwable, Unit]
-  ): Either[Throwable, Unit] =
-    awaitNext().flatMap(_ => refreshPlantAttention(plantAttentionService)) match
-      case failure @ Left(_) => failure
-      case Right(_)          => pollPlantAttention(plantAttentionService, awaitNext)
+  ) =
+    Iterator
+      .continually(awaitNext().flatMap(_ => refreshPlantAttention(plantAttentionService)))
+      .collectFirst { case failure @ Left(_) => failure }
+      .fold[Either[Throwable, Unit]](().asRight)(identity)
 
-  private def refreshPlantAttention(plantAttentionService: PlantAttentionService): Either[Throwable, Unit] =
+  private def refreshPlantAttention(plantAttentionService: PlantAttentionService) =
     plantAttentionService.refreshAll match
-      case RefreshAttentionResult.Refreshed(_)          => Right(())
-      case RefreshAttentionResult.RefreshFailed(reason) => Left(reason)
+      case RefreshAttentionResult.Refreshed(_)          => ().asRight
+      case RefreshAttentionResult.RefreshFailed(reason) => reason.asLeft

@@ -1,5 +1,6 @@
 package gardening.app
 
+import cats.syntax.either.*
 import gardening.domain.attention.*
 
 import java.time.Instant
@@ -17,10 +18,10 @@ class MainComponentTest extends munit.FunSuite:
     val result = Main.start(
       http = () => assertEquals(attention.current, projection),
       plantAttentionService = attention,
-      awaitNext = () => Left(stop)
+      awaitNext = () => stop.asLeft
     )
 
-    assertEquals(result, Left(stop))
+    assertEquals(result, ().asRight)
 
   test("should cancel the HTTP server when attention refresh fails"):
     val httpStarted = CountDownLatch(1)
@@ -39,8 +40,8 @@ class MainComponentTest extends munit.FunSuite:
       plantAttentionService = attention,
       awaitNext = () =>
         val _ = httpStarted.await(1, TimeUnit.SECONDS)
-        Right(())
+        ().asRight
     )
 
-    assertEquals(result, Left(failure))
+    assertEquals(result, failure.asLeft)
     assert(httpStopped.await(1, TimeUnit.SECONDS))

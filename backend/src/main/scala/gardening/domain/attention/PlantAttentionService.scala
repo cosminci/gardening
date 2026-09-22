@@ -1,5 +1,7 @@
 package gardening.domain.attention
 
+import cats.syntax.either.*
+import cats.syntax.traverse.*
 import gardening.domain.*
 import gardening.domain.journal.*
 import io.github.iltotore.iron.autoRefine
@@ -8,7 +10,6 @@ import language.experimental.captureChecking
 
 import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicReference
-import scala.annotation.tailrec
 
 trait PlantAttentionService:
   def current: AttentionProjection
@@ -34,38 +35,30 @@ object PlantAttentionService:
           currentProjection.set(projection)
           RefreshAttentionResult.Refreshed(projection)
 
-  private def computeProjection()(using store: PlantJournalStore^, clock: Clock^): Either[Throwable, AttentionProjection] =
+  private def computeProjection()(using store: PlantJournalStore^, clock: Clock^) =
     store.getPlants match
-      case GetPlantsResult.ReadFailed(reason) => Left(reason)
+      case GetPlantsResult.ReadFailed(reason) => reason.asLeft
       case GetPlantsResult.Read(plants)       =>
         readSamples(plants).map(projectionFor)
 
-  private def readSamples(plants: Vector[Plant])(using store: PlantJournalStore^): Either[Throwable, Vector[SampledPlant]] =
-    @tailrec
-    def loop(remaining: List[Plant], samples: Vector[SampledPlant]): Either[Throwable, Vector[SampledPlant]] =
-      remaining match
-        case Nil           => Right(samples)
-        case plant :: tail =>
-          readSample(plant) match
-            case Left(reason)  => Left(reason)
-            case Right(sample) => loop(tail, samples.appended(sample))
-    loop(plants.toList, Vector.empty)
+  private def readSamples(plants: Vector[Plant])(using store: PlantJournalStore^) =
+    plants.traverse(readSample)
 
-  private def readSample(plant: Plant)(using store: PlantJournalStore^): Either[Throwable, SampledPlant] =
+  private def readSample(plant: Plant)(using store: PlantJournalStore^) =
     store.getOperations(
       plant.id,
       OperationSelection.Watering,
       OperationWindow(offset = 0, size = 20)
     ) match
-      case GetOperationsResult.ReadFailed(reason) => Left(reason)
-      case GetOperationsResult.Read(page)         => Right(SampledPlant(plant, page.operations.map(_.date)))
+      case GetOperationsResult.ReadFailed(reason) => reason.asLeft
+      case GetOperationsResult.Read(page)         => SampledPlant(plant, page.operations.map(_.date)).asRight
 
-  private def projectionFor(samples: Vector[SampledPlant])(using clock: Clock^): AttentionProjection =
+  private def projectionFor(samples: Vector[SampledPlant])(using clock: Clock^) =
     val measuredAt = clock.now()
     val plants     = samples.iterator.map(attentionFor(_, measuredAt)).toVector.sortWith(precedes)
     AttentionProjection(measuredAt, plants)
 
-  private def attentionFor(sample: SampledPlant, measuredAt: Instant): PlantAttention =
+  private def attentionFor(sample: SampledPlant, measuredAt: Instant) =
     val dates        = sample.wateringDates
     val maybeElapsed = dates.headOption.map(Duration.between(_, measuredAt))
     val cadence      =
@@ -73,10 +66,9 @@ object PlantAttentionService:
       else inferredCadence(dates, measuredAt)
     PlantAttention(sample.plant, cadence)
 
-  private def inferredCadence(dates: Vector[Instant], measuredAt: Instant): WateringCadence =
-    val chronological = dates.reverse
-    val intervals     = chronological.zip(chronological.drop(1)).map: (previous, current) =>
-      Duration.between(previous, current)
+  private def inferredCadence(dates: Vector[Instant], measuredAt: Instant) =
+    val intervals = dates.reverse.sliding(2).map: interval =>
+      Duration.between(interval.head, interval.last)
     val average = intervals.foldLeft(Duration.ZERO)(_.plus(_)).dividedBy(dates.size - 1L)
     val elapsed = Duration.between(dates.head, measuredAt)
     val urgency =
@@ -85,12 +77,12 @@ object PlantAttentionService:
       else Urgency.Finite(elapsed, average)
     WateringCadence.Inferred(dates.size, average, elapsed, urgency, wateringState(elapsed, average))
 
-  private def wateringState(elapsed: Duration, average: Duration): WateringState =
+  private def wateringState(elapsed: Duration, average: Duration) =
     if elapsed.compareTo(average.plus(Duration.ofHours(24))) >= 0 then WateringState.RedAlert
     else if elapsed.compareTo(average) > 0 then WateringState.Overdue
     else WateringState.Current
 
-  private def precedes(first: PlantAttention, second: PlantAttention): Boolean =
+  private def precedes(first: PlantAttention, second: PlantAttention) =
     compareCadence(first.cadence, second.cadence) match
       case 0 =>
         Ordering
@@ -104,7 +96,7 @@ object PlantAttentionService:
           .compare(first.plant, second.plant) < 0
       case comparison => comparison < 0
 
-  private def compareCadence(first: WateringCadence, second: WateringCadence): Int =
+  private def compareCadence(first: WateringCadence, second: WateringCadence) =
     (first, second) match
       case (_: WateringCadence.Unavailable, _: WateringCadence.Inferred)                                             => -1
       case (_: WateringCadence.Inferred, _: WateringCadence.Unavailable)                                             => 1
