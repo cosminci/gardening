@@ -38,6 +38,31 @@ Gate: the spec passes the Change Specs checklist and the Spec PR has been review
 before code starts. The `superpowers:brainstorming` and `superpowers:writing-plans` skills are
 available when the design is non-obvious.
 
+### Spec authoring discipline
+
+Before drafting:
+
+- Read the governing change-spec template from its exact source. Do not recreate it from memory.
+- Read the closest approved spec for altitude and density. For domain or port changes, use the archived care-journal spec as the reference.
+- Use the governing template for structure; mimic precedent for concision, not obsolete headings or details.
+
+Write each fact once:
+
+- **What & Why:** current behaviour → new behaviour; missing capability and intent.
+- **Domain / Design Notes:** changed domain contracts, ports, and boundaries.
+- **Acceptance Criteria:** the smallest externally observable proof set, including relevant failure and accessibility outcomes.
+- **Doc Sync:** only the living-document sections that must change.
+
+Keep the proposal proportional:
+
+- Start with required sections. Add an optional section only when it contributes new information.
+- Use short technical bullets. Avoid narrative paragraphs and introductory filler.
+- Do not restate What & Why or Domain / Design Notes as acceptance criteria.
+- Group cohesive outcomes into one criterion; do not create a criterion per sentence or implementation branch.
+- Compare the final proposal with the closest approved spec. If a small change approaches a foundational spec's size or criterion count, cut it.
+
+Gate: every sentence has one section that owns it; removing any sentence would lose information.
+
 ### Change-spec template
 
 Use this structure for `specs/changes/<slug>/proposal.md`. The `What & Why`,
