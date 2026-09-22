@@ -38,6 +38,76 @@ Gate: the spec passes the Change Specs checklist and the Spec PR has been review
 before code starts. The `superpowers:brainstorming` and `superpowers:writing-plans` skills are
 available when the design is non-obvious.
 
+### Change-spec template
+
+Use this structure for `specs/changes/<slug>/proposal.md`. The `What & Why`,
+`Acceptance Criteria`, and `Doc Sync` sections are required. Include the other sections
+only when they carry useful, non-duplicated information. High-level domain and design notes use a dedicated `Domain / Design Notes` section whenever
+the change evolves domain contracts, ports, or system boundaries; otherwise they belong in
+`What & Why`, as in the original care-journal spec. Keep that section at contract altitude: ports, core
+domain evolution, and boundary responsibilities are allowed, but not implementation
+walkthroughs. Do not add free-floating risk or open-question sections.
+
+```markdown
+# <Title>
+
+> Standard: [Agentic Engineering Standards](https://github.com/Adobe-AIFoundations/agentic-workflow-standards) v<version>.
+> Lifetime: open from creation through implementation, archived in the [sync docs & archive step](../../agentic-workflows.md#a-structured-development-skills).
+
+<!-- Boundary clarifications or risk callouts attach inline to the section they qualify. -->
+
+**Date:** <YYYY-MM-DD>
+
+<!-- One sentence describing the change. -->
+
+## What & Why
+
+<!-- State current behavior → new behavior and why. Include domain evolution, ports,
+core contracts, and boundary design notes here when applicable. Keep it at behavior,
+intent, and domain-contract altitude: no file paths, class names, private wiring,
+implementation walkthroughs, or endpoint/schema field details. -->
+
+## Domain / Design Notes
+
+<!-- Required when the change evolves domain contracts, ports, service contracts, or
+backend/frontend boundaries. Otherwise omit it. This is a little "how", but must
+remain at contract altitude: no file paths, class names, private wiring, library
+choices, or diff walkthroughs. -->
+
+## Alternatives Considered
+
+<!-- Optional. Include only real alternatives and why they were rejected. -->
+
+## Invariants
+
+<!-- Optional. Pre-existing guarantees that must remain true. Use pass/fail language.
+The change's own rules belong in Acceptance Criteria. -->
+
+- <invariant>
+
+## Tradeoffs Accepted
+
+<!-- Optional. State what becomes worse or more constrained and why it is acceptable. -->
+
+## Acceptance Criteria
+
+<!-- Required. Each item must be externally observable or testable. Include fallback,
+rollback, loading, failure, boundary, and accessibility behavior where relevant. -->
+
+- <criterion>
+
+## Doc Sync
+
+<!-- Required. Name each affected living document and the section or property to update.
+Omit only when no living document changes. -->
+
+- <doc> — <section or property that changes>
+
+## Out of Scope
+
+<!-- Optional. Maximum two bullets in functional/business language. Omit if unnecessary. -->
+```
+
 ## Phase 3 — Tests projected from the spec
 
 Derive tests from the spec's behaviour and acceptance criteria, before implementation. Never reverse-engineer tests from code — a test must trace to a spec statement, and fail only when a stated behaviour changes. Follow the testing conventions in CONTRIBUTING.md (MUnit / Vitest tiers, naming, mocking). `superpowers:test-driven-development` is available.
