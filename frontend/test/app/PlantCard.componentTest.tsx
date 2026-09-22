@@ -36,11 +36,11 @@ describe("plant operation controls", () => {
     ));
 
     const firstEdit = screen.getByRole("button", {
-      name: "Edit care operation 1 from 2026-03-03",
+      name: "Edit recent care operation 1 from 2026-03-03",
     });
     expect(firstEdit).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Edit care operation 2 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent care operation 2 from 2026-03-03" }),
     ).toBeInTheDocument();
     fireEvent.click(firstEdit);
     expect(onEdit).toHaveBeenCalledOnce();

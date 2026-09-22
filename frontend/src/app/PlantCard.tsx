@@ -25,43 +25,57 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
 
   return (
     <article class="plant-card" aria-label={name()}>
-      <div class="plant-summary">
-        <header class="plant-card__header">
-          <div>
-            <p class="eyebrow">{props.plant.details.location}</p>
-            <h2>{name()}</h2>
-            <p class="plant-card__species">{props.plant.details.species}</p>
-          </div>
-        </header>
-        <dl class="plant-facts">
-          <dt>Substrate</dt>
-          <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
-        </dl>
+      <div class="plant-card__row">
+        <div class="plant-summary">
+          <header class="plant-card__header">
+            <div>
+              <p class="eyebrow">{props.plant.details.location}</p>
+              <h2>{name()}</h2>
+              <p class="plant-card__species">{props.plant.details.species}</p>
+            </div>
+          </header>
+          <dl class="plant-facts">
+            <dt>Substrate</dt>
+            <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
+          </dl>
+        </div>
+        <Show
+          when={recentOperations().length > 0}
+          fallback={
+            <p class="empty-history">
+              <span>No operations yet.</span>
+            </p>
+          }
+        >
+          <ol class="operation-list" aria-label="Recent operations" role="list">
+            <For each={recentOperations()}>
+              {(operation, index) => (
+                <OperationCell
+                  operation={operation}
+                  position={index() + 1}
+                  substrateComponents={props.substrateComponents}
+                  pesticides={props.pesticides}
+                  onEdit={() => {
+                    props.onEdit(operation);
+                  }}
+                />
+              )}
+            </For>
+          </ol>
+        </Show>
+        <button
+          id={logOperationControlId(props.plant.id)}
+          class="add-operation"
+          type="button"
+          aria-label={`Log operation for ${name()}`}
+          title={`Add operation for ${name()}`}
+          onClick={() => {
+            props.onLog();
+          }}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
       </div>
-      <Show
-        when={recentOperations().length > 0}
-        fallback={
-          <p class="empty-history">
-            <span>No operations yet.</span>
-          </p>
-        }
-      >
-        <ol class="operation-list" aria-label="Recent operations" role="list">
-          <For each={recentOperations()}>
-            {(operation, index) => (
-              <OperationCell
-                operation={operation}
-                position={index() + 1}
-                substrateComponents={props.substrateComponents}
-                pesticides={props.pesticides}
-                onEdit={() => {
-                  props.onEdit(operation);
-                }}
-              />
-            )}
-          </For>
-        </ol>
-      </Show>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory
           plantId={props.plant.id}
@@ -72,18 +86,6 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
           onEdit={props.onEdit}
         />
       </Show>
-      <button
-        id={logOperationControlId(props.plant.id)}
-        class="add-operation"
-        type="button"
-        aria-label={`Log operation for ${name()}`}
-        title={`Add operation for ${name()}`}
-        onClick={() => {
-          props.onLog();
-        }}
-      >
-        <span aria-hidden="true">+</span>
-      </button>
     </article>
   );
 };

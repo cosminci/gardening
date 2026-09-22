@@ -1,10 +1,19 @@
 .plant-card {
+  --plant-card-columns: minmax(13rem, 1.3fr) minmax(0, 3fr) 3.25rem;
+
   display: grid;
-  grid-template-columns: minmax(13rem, 1.3fr) minmax(0, 3fr) 3.25rem;
+  grid-template-columns: var(--plant-card-columns);
+}
+
+.plant-card__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-columns: var(--plant-card-columns);
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: rgb(255 253 247 / 92%);
+  border-radius: var(--card-radius);
+  background: var(--card-surface);
   box-shadow: var(--shadow);
 }
 
@@ -75,7 +84,7 @@
 
 @media (max-width: 46rem) {
   .plant-card {
-    grid-template-columns: 1fr 3rem;
+    --plant-card-columns: 1fr 3rem;
   }
 
   .plant-summary {

@@ -3,7 +3,7 @@ import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
-import type { OperationHistoryChange } from "./OperationHistory";
+import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
@@ -29,7 +29,6 @@ export const App: Component<AppProps> = (props) => {
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
   const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
-  let operationRevision = 0;
 
   const loadJournal = async (animate = false) => {
     const journal = props.journal;
@@ -52,7 +51,10 @@ export const App: Component<AppProps> = (props) => {
     const results = await Promise.all(
       plantsResult.plants.map(async (plant) => ({
         plant,
-        operationsResult: await journal.getOperations(plant.id, { offset: 0, size: 3 }),
+        operationsResult: await journal.getOperations(plant.id, {
+          offset: 0,
+          size: recentOperationCount,
+        }),
       })),
     );
     const loaded: PlantHistory[] = [];
@@ -105,11 +107,10 @@ export const App: Component<AppProps> = (props) => {
     await loadJournal(target.kind === "log").catch(() => {
       setView("failed");
     });
-    operationRevision += 1;
     setOperationChange(
       editedOperation === undefined
-        ? { kind: "logged", revision: operationRevision }
-        : { kind: "edited", revision: operationRevision, operation: editedOperation },
+        ? { kind: "logged" }
+        : { kind: "edited", operation: editedOperation },
     );
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
   };

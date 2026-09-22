@@ -26,7 +26,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
           id={editOperationControlId(props.operation.id)}
           class="operation__edit"
           type="button"
-          aria-label={`Edit ${props.operation.details.kind} operation ${String(props.position)} from ${date()}`}
+          aria-label={Labels.operationEditLabel(props.operation, props.position, "recent")}
           onClick={() => {
             props.onEdit();
           }}

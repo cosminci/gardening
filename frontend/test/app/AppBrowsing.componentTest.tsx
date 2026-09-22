@@ -97,7 +97,9 @@ describe("browsing the journal", () => {
       window: { offset: 3, size: 10 },
     });
     fireEvent.click(
-      within(history).getByRole("button", { name: "Edit care operation from 2026-04-05" }),
+      within(history).getByRole("button", {
+        name: "Edit historical care operation 1 from 2026-04-05",
+      }),
     );
     expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
   });

@@ -9,6 +9,7 @@ import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
 import sttp.model.StatusCode
 import sttp.shared.Identity
 import sttp.tapir.*
+import sttp.tapir.Codec as TapirCodec
 import sttp.tapir.generic.Configuration as TapirConfiguration
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
@@ -28,8 +29,8 @@ object JournalApi:
   private val getOperationsEndpoint =
     journalEndpoint.get
       .in("plants" / path[String]("plantId") / "operations")
-      .in(query[Int]("offset").default(0).validate(Validator.min(0)))
-      .in(query[Int]("pageSize").default(3).validate(Validator.min(1).and(Validator.max(10))))
+      .in(query[OperationOffset]("offset").default(0))
+      .in(query[OperationPageSize]("pageSize").default(3))
       .out(jsonBody[OperationPage])
       .summary("List a bounded page of plant operations")
 
@@ -82,12 +83,7 @@ object JournalApi:
           case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
-        // Tapir validates both query parameters before invoking this handler.
-        val window = OperationWindow(
-          offset.refineUnsafe[GreaterEqual[0]],
-          pageSize.refineUnsafe[Interval.Closed[1, 10]]
-        )
-        journal.getOperations(PlantId(plantId), window) match
+        journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
           case GetOperationsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
@@ -156,6 +152,32 @@ object JournalApi:
       discriminator = Some("kind"),
       toDiscriminatorValue = name => lowerCamel(name.fullName.split('.').last.stripSuffix("$"))
     )
+
+  // Tapir only reads these inverse mappings while generating the OpenAPI contract.
+  // $COVERAGE-OFF$
+  private lazy val operationOffsetSchema = Schema.schemaForInt
+    .validate(Validator.min(0))
+    .map(_.refineOption[GreaterEqual[0]])(value => value)
+  private lazy val operationPageSizeSchema = Schema.schemaForInt
+    .validate(Validator.min(1).and(Validator.max(10)))
+    .map(_.refineOption[Interval.Closed[1, 10]])(value => value)
+  // $COVERAGE-ON$
+
+  private given TapirCodec.PlainCodec[OperationOffset] = TapirCodec.int
+    .mapDecode(value =>
+      value.refineOption[GreaterEqual[0]] match
+        case Some(offset) => DecodeResult.Value(offset)
+        case None         => DecodeResult.Error(value.toString, IllegalArgumentException("offset must be at least 0"))
+    )(value => value)
+    .schema(operationOffsetSchema)
+
+  private given TapirCodec.PlainCodec[OperationPageSize] = TapirCodec.int
+    .mapDecode(value =>
+      value.refineOption[Interval.Closed[1, 10]] match
+        case Some(size) => DecodeResult.Value(size)
+        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 10"))
+    )(value => value)
+    .schema(operationPageSizeSchema)
 
   // Tapir requires bidirectional codecs for output bodies even though these values are never decoded by the server.
   // $COVERAGE-OFF$

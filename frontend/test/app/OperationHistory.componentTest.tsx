@@ -8,7 +8,7 @@ import { care, operationsPage } from "./JournalTestSupport";
 const recent = care({ id: "o4", date: "2026-04-04T00:00:00Z", moisture: "wet" });
 const older = [
   care({ id: "o3", date: "2026-03-03T00:00:00Z", moisture: "moderatePlus" }),
-  care({ id: "o2", date: "2026-02-02T00:00:00Z", moisture: "dry", maybeNote: "Long note" }),
+  care({ id: "o2", date: "2026-03-03T00:00:00Z", moisture: "dry", maybeNote: "Long note" }),
 ];
 
 Vitest.describe("operation history", () => {
@@ -53,13 +53,17 @@ Vitest.describe("operation history", () => {
 
     Testing.fireEvent.click(
       Testing.within(table).getByRole("button", {
-        name: "Edit care operation from 2026-03-03",
+        name: "Edit historical care operation 1 from 2026-03-03",
       }),
     );
+    Vitest.expect(
+      Testing.within(table).getByRole("button", {
+        name: "Edit historical care operation 2 from 2026-03-03",
+      }),
+    ).toBeInTheDocument();
     Vitest.expect(edited).toEqual([older[0]]);
     setOperationChange({
       kind: "edited",
-      revision: 1,
       operation: {
         ...older[0]!,
         details: { ...older[0]!.details, maybeNote: Journal.note("Updated note") },
@@ -68,21 +72,28 @@ Vitest.describe("operation history", () => {
     Vitest.expect(await Testing.screen.findByText("Updated note")).toBeInTheDocument();
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
-    await Testing.screen.findByText("Page 2");
+    const pageTwo = await Testing.screen.findByText("Page 2");
+    await Testing.waitFor(() => {
+      Vitest.expect(pageTwo).toHaveFocus();
+    });
     Vitest.expect(windows).toEqual([
       { offset: 3, size: 10 },
       { offset: 13, size: 10 },
     ]);
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Previous" }));
-    await Testing.screen.findByText("Page 1");
+    const pageOne = await Testing.screen.findByText("Page 1");
+    await Testing.waitFor(() => {
+      Vitest.expect(pageOne).toHaveFocus();
+    });
     Vitest.expect(windows.at(-1)).toEqual({ offset: 3, size: 10 });
 
-    setOperationChange({ kind: "logged", revision: 2 });
+    setOperationChange({ kind: "logged" });
     await Testing.waitFor(() => {
       Vitest.expect(getOperations).toHaveBeenCalledTimes(4);
     });
     setOperationChange(undefined);
 
+    hide.focus();
     Testing.fireEvent.click(hide);
     await Testing.waitFor(() =>
       Vitest.expect(
@@ -93,11 +104,11 @@ Vitest.describe("operation history", () => {
       "aria-hidden",
       "true",
     );
-    setOperationChange({ kind: "logged", revision: 3 });
+    setOperationChange({ kind: "logged" });
     Vitest.expect(getOperations).toHaveBeenCalledTimes(4);
   });
 
-  Vitest.it("should retry a failed page and show an empty result", async () => {
+  Vitest.it("should preserve disclosure focus while retrying a failed page", async () => {
     const getOperations = Vitest.vi
       .fn<(window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>>()
       .mockResolvedValueOnce({ kind: "readFailed", reason: new Error("private") })
@@ -117,6 +128,9 @@ Vitest.describe("operation history", () => {
     Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
       "Operation history could not be loaded.",
     );
+    Vitest.expect(
+      Testing.screen.getByRole("button", { name: "Hide operation history" }),
+    ).toHaveFocus();
     Vitest.expect(Testing.screen.queryByText("private")).not.toBeInTheDocument();
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Retry" }));
@@ -149,7 +163,7 @@ Vitest.describe("operation history", () => {
       Vitest.expect(
         await Testing.screen.findByText("Loading operation history…"),
       ).toBeInTheDocument();
-      setOperationChange({ kind: "edited", revision: 1, operation: recent });
+      setOperationChange({ kind: "edited", operation: recent });
       Vitest.expect(Testing.screen.getByText("Loading operation history…")).toBeInTheDocument();
 
       rejectRequest(new Error("private"));
@@ -187,12 +201,51 @@ Vitest.describe("operation history", () => {
     ));
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
-    setOperationChange({ kind: "logged", revision: 1 });
+    setOperationChange({ kind: "logged" });
     Vitest.expect(await Testing.screen.findByText("Refreshed")).toBeInTheDocument();
 
     resolveFirst(operationsPage(older));
     await Promise.resolve();
     Vitest.expect(Testing.screen.getByText("Refreshed")).toBeInTheDocument();
     Vitest.expect(Testing.screen.queryByText("Long note")).not.toBeInTheDocument();
+  });
+
+  Vitest.it("should focus a failed navigation and retry its requested page", async () => {
+    const secondPage = care({
+      id: "o1",
+      date: "2026-01-01T00:00:00Z",
+      moisture: "wet",
+    });
+    const getOperations = Vitest.vi
+      .fn<(window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>>()
+      .mockResolvedValueOnce(operationsPage(older, true))
+      .mockResolvedValueOnce({ kind: "readFailed", reason: new Error("private") })
+      .mockResolvedValueOnce(operationsPage([secondPage]));
+    Testing.render(() => (
+      <OperationHistory
+        plantId={recent.plantId}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={undefined}
+        onEdit={() => undefined}
+      />
+    ));
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByRole("table");
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
+    const failure = await Testing.screen.findByRole("alert");
+    await Testing.waitFor(() => {
+      Vitest.expect(failure).toHaveFocus();
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Retry" }));
+
+    const pageTwo = await Testing.screen.findByText("Page 2");
+    await Testing.waitFor(() => {
+      Vitest.expect(pageTwo).toHaveFocus();
+    });
+    Vitest.expect(getOperations).toHaveBeenNthCalledWith(2, { offset: 13, size: 10 });
+    Vitest.expect(getOperations).toHaveBeenNthCalledWith(3, { offset: 13, size: 10 });
   });
 });

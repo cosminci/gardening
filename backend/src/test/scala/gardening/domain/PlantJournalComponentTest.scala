@@ -279,21 +279,23 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(buildJournal(store).editOperation(existingRepot.id, amended), editResult)
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
-  test("should read bounded pages when checking the latest repot"):
+  test("should update the plant after amending its latest repot despite newer care operations"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
-    val store         = StoreStub(
+    val newerCare     = Vector.tabulate(10)(index =>
+      Operation(OperationId(s"care-$index"), PlantId("p1"), date.plusSeconds(index.toLong + 1), care)
+    )
+    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amended      = OperationDetails.Repot(newSubstrate, maybeNote = none)
+    val editResult   = EditOperationResult.Edited(existingRepot.copy(details = amended))
+    val store        = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingCare), hasNextPage = true)),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(newerCare, hasNextPage = true)),
       nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)).some,
-      updateOperationResult = EditOperationResult.Edited(existingRepot)
+      updateOperationResult = editResult
     )
 
-    assertEquals(buildJournal(store).editOperation(existingRepot.id, repot), EditOperationResult.Edited(existingRepot))
-    assertEquals(
-      store.requestedOperationWindows.get(),
-      Vector(PlantId("p1") -> OperationWindow(0, 10), PlantId("p1") -> OperationWindow(10, 10))
-    )
+    assertEquals(buildJournal(store).editOperation(existingRepot.id, amended), editResult)
+    assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should amend an older repot without changing the plant"):
     val olderRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)

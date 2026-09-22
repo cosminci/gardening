@@ -14,7 +14,9 @@ describe("operation edit failures", () => {
     render(() => <App journal={journal} />);
     await screen.findByText("2026-03-03");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("This operation no longer exists.");
@@ -30,7 +32,9 @@ describe("operation edit failures", () => {
     render(() => <App journal={journal} />);
     await screen.findByText("2026-03-03");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -49,7 +53,9 @@ describe("operation edit failures", () => {
     render(() => <App journal={journal} />);
     await screen.findByText("2026-03-03");
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The operation could not be saved.");

@@ -5,6 +5,7 @@ import gardening.domain.*
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.MigrationVersion
 
 import com.augustnagro.magnum.Transactor
 import java.sql.Connection
@@ -98,14 +99,14 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
           assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
         case other => fail(s"expected one plant, got $other")
 
-  test("should page operations newest first with a stable identifier tie-breaker"):
+  test("should page operations by timestamp descending with an identifier tie-breaker"):
     withStore: (dataSource, store) =>
       seedPlant(dataSource, id = "p1")
       val operations = Vector(
         Operation(OperationId("o1"), PlantId("p1"), date, care),
-        Operation(OperationId("o2"), PlantId("p1"), date.plusSeconds(1), care),
-        Operation(OperationId("o3"), PlantId("p1"), date.plusSeconds(1), care),
-        Operation(OperationId("o4"), PlantId("p1"), date.plusSeconds(2), care)
+        Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), care),
+        Operation(OperationId("o3"), PlantId("p1"), date.plusNanos(100_500_000), care),
+        Operation(OperationId("o4"), PlantId("p1"), date.plusNanos(100_500_000), care)
       )
       operations.foreach(operation => assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id)))
 
@@ -117,6 +118,35 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         store.getOperations(PlantId("p1"), OperationWindow(offset = 3, size = 3)),
         GetOperationsResult.Read(OperationPage(Vector(operations.head), hasNextPage = false))
       )
+      assertEquals(
+        store.getOperations(PlantId("p1"), OperationWindow(offset = 4, size = 3)),
+        GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+      )
+
+  test("should retain chronological operation order after migrating existing timestamps"):
+    val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    try
+      val _ = Flyway
+        .configure()
+        .dataSource(connection.dataSource)
+        .target(MigrationVersion.fromVersion("2"))
+        .load()
+        .migrate()
+      seedPlant(connection.dataSource, id = "p1")
+      val details = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
+      val older   = Operation(OperationId("o1"), PlantId("p1"), date, details)
+      val newer   = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
+      val payload = """{"actions":[],"pesticides":[],"moisture":"Wet","note":null}"""
+      insertOperation(connection.dataSource, older.id.value, older.plantId.value, older.date.toString, "Care", payload)
+      insertOperation(connection.dataSource, newer.id.value, newer.plantId.value, newer.date.toString, "Care", payload)
+
+      val _     = Flyway.configure().dataSource(connection.dataSource).load().migrate()
+      val store = SqlitePlantJournalStore.make(connection.transactor)
+      assertEquals(
+        store.getOperations(PlantId("p1"), fullWindow),
+        GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false))
+      )
+    finally connection.close()
 
   test("should round-trip a care observation without actions"):
     withStore: (dataSource, store) =>

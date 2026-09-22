@@ -71,7 +71,15 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should reject invalid operation windows"):
     assertEquals(getOperations(buildJournal(), offset = -1, pageSize = 3).code, StatusCode.BadRequest)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 0).code, StatusCode.BadRequest)
     assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 11).code, StatusCode.BadRequest)
+
+  test("should use the recent-operation window by default"):
+    val requestedWindows = AtomicReference(Vector.empty[OperationWindow])
+    val response         = get(s"/plants/${plant.id.value}/operations", buildJournal(requestedWindows = requestedWindows))
+
+    assertEquals(response.code, StatusCode.Ok)
+    assertEquals(requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
   test("should log care and replace the details of an existing repot"):
     val logged  = AtomicReference(Vector.empty[(PlantId, OperationDetails)])

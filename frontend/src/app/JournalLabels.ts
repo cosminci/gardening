@@ -38,6 +38,13 @@ export const pesticideLabel = (
 export const operationKindLabel = (details: Journal.OperationDetails) =>
   details.kind === "care" ? "Care" : "Repot";
 
+export const operationEditLabel = (
+  operation: Journal.Operation,
+  position: number,
+  section: "recent" | "historical",
+) =>
+  `Edit ${section} ${operation.details.kind} operation ${String(position)} from ${formatLocalDate(operation.date)}`;
+
 export const operationDetailRows = (
   details: Journal.OperationDetails,
   components: readonly Journal.SubstrateComponent[],
@@ -46,25 +53,21 @@ export const operationDetailRows = (
   switch (details.kind) {
     case "care": {
       const actions = [...details.actions].filter((action) => action !== "noAction");
+      const actionSummary =
+        actions.length === 0
+          ? "None recorded"
+          : actions.map((action) => actionLabels[action]).join(", ");
       const rows = [
         { label: "Moisture", value: moistureLabels[details.moisture] },
-        {
-          label: "Actions",
-          value:
-            actions.length === 0
-              ? "None recorded"
-              : actions.map((action) => actionLabels[action]).join(", "),
-        },
+        { label: "Actions", value: actionSummary },
       ];
-      return details.pesticides.size === 0
-        ? rows
-        : [
-            ...rows,
-            {
-              label: "Pesticides",
-              value: [...details.pesticides].map((id) => pesticideLabel(id, pesticides)).join(", "),
-            },
-          ];
+      if (details.pesticides.size > 0) {
+        const pesticideSummary = [...details.pesticides]
+          .map((id) => pesticideLabel(id, pesticides))
+          .join(", ");
+        rows.push({ label: "Pesticides", value: pesticideSummary });
+      }
+      return rows;
     }
     case "repot":
       return [{ label: "Substrate", value: formatSubstrate(details.substrate, components) }];

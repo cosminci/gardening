@@ -122,25 +122,33 @@ object PlantJournal:
         case _: OperationDetails.Care      => ().asRight
         case repot: OperationDetails.Repot =>
           for
-            operations <- readOperations(operation.plantId)
-            _          <- isLatestRepot(operation, operations.filterNot(_.id.value.equals(operation.id.value))).orSkip
-            plant      <- readPlant(operation.plantId)
-            updated    <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
+            maybeLatestRepot <- readLatestOtherRepot(operation)
+            _                <- maybeLatestRepot.forall(other => isNewer(operation, other)).orSkip
+            plant            <- readPlant(operation.plantId)
+            updated          <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def readOperations(plantId: PlantId) =
+    private def readLatestOtherRepot(operation: Operation) =
       @tailrec
-      def read(window: OperationWindow, operations: Vector[Operation]): Either[PlantUpdateInterruption, Vector[Operation]] =
-        store.getOperations(plantId, window) match
-          case GetOperationsResult.Read(page) if page.hasNextPage =>
-            val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
-            read(OperationWindow(nextOffset, window.size), operations ++ page.operations)
+      def read(window: OperationWindow): Either[PlantUpdateInterruption, Option[Operation]] =
+        store.getOperations(operation.plantId, window) match
           case GetOperationsResult.Read(page) =>
-            (operations ++ page.operations).asRight
+            page.operations
+              .find(other => !other.id.value.equals(operation.id.value) && isRepot(other)) match
+              case found @ Some(_)          => found.asRight
+              case None if page.hasNextPage =>
+                val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
+                read(OperationWindow(nextOffset, window.size))
+              case None => Option.empty[Operation].asRight
           case GetOperationsResult.ReadFailed(reason) =>
             PlantUpdateInterruption.Failed(reason).asLeft
 
-      read(OperationWindow(offset = 0, size = 10), Vector.empty)
+      read(OperationWindow(offset = 0, size = 10))
+
+    private def isRepot(operation: Operation) =
+      operation.details match
+        case _: OperationDetails.Repot => true
+        case _: OperationDetails.Care  => false
 
     private def readPlant(plantId: PlantId) =
       store.getPlant(plantId) match
@@ -153,13 +161,9 @@ object PlantJournal:
         case UpdatePlantResult.Updated              => ().asRight
         case UpdatePlantResult.UpdateFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
 
-    private def isLatestRepot(operation: Operation, others: Vector[Operation]) =
-      others.forall: other =>
-        other.details match
-          case _: OperationDetails.Repot =>
-            operation.date.isAfter(other.date) ||
-            operation.date.equals(other.date) && operation.id.value.compareTo(other.id.value) > 0
-          case _ => true
+    private def isNewer(operation: Operation, other: Operation) =
+      operation.date.isAfter(other.date) ||
+        operation.date.equals(other.date) && operation.id.value.compareTo(other.id.value) > 0
 
     extension (result: Either[PlantUpdateInterruption, Unit])
       private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =

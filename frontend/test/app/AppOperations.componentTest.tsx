@@ -92,7 +92,7 @@ Vitest.describe("changing the journal", () => {
     await Testing.screen.findByText("2026-03-03");
 
     const trigger = Testing.screen.getByRole("button", {
-      name: "Edit repot operation 1 from 2026-03-03",
+      name: "Edit recent repot operation 1 from 2026-03-03",
     });
     trigger.focus();
     Testing.fireEvent.click(trigger);
@@ -119,7 +119,9 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(await Testing.screen.findByText("Less perlite")).toBeInTheDocument();
     await Testing.waitFor(() => {
       Vitest.expect(
-        Testing.screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }),
+        Testing.screen.getByRole("button", {
+          name: "Edit recent repot operation 1 from 2026-03-03",
+        }),
       ).toHaveFocus();
     });
   });
