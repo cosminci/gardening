@@ -234,6 +234,10 @@
   font-weight: 750;
 }
 
+.operation-history td:nth-child(4) {
+  white-space: pre-wrap;
+}
+
 .operation-history__row .operation__edit {
   display: block;
   margin-top: 0.4rem;
