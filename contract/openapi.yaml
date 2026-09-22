@@ -44,12 +44,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttentionProjectionResponse'
-        default:
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
   /plants/{plantId}/operations:
     get:
       summary: List a bounded page of plant operations

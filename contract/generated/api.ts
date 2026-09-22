@@ -377,14 +377,6 @@ export interface operations {
                     "application/json": components["schemas"]["AttentionProjectionResponse"];
                 };
             };
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
         };
     };
     getPlantsPlantidOperations: {

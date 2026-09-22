@@ -41,7 +41,7 @@ object JournalApi:
     journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
 
   private val getAttentionEndpoint =
-    journalEndpoint.get.in("attention").out(jsonBody[AttentionProjectionResponse]).summary("Read plant attention")
+    endpoint.get.in("attention").out(jsonBody[AttentionProjectionResponse]).summary("Read plant attention")
 
   private val getOperationsEndpoint =
     journalEndpoint.get
@@ -100,12 +100,7 @@ object JournalApi:
           case GetPlantsResult.Read(plants)  => plants.asRight
           case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
-      getAttentionEndpoint.handle: _ =>
-        attention.current match
-          case GetAttentionProjectionResult.Read(projection) =>
-            toResponse(projection).asRight
-          case GetAttentionProjectionResult.Unavailable =>
-            (StatusCode.ServiceUnavailable, ApiError("plant attention is not available")).asLeft,
+      getAttentionEndpoint.handleSuccess(_ => toResponse(attention.current)),
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight

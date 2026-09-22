@@ -12,9 +12,10 @@ final case class Programs(
 
 object Programs:
 
-  def make(resources: AppResources): Programs =
+  def make(resources: AppResources): Either[Throwable, Programs] =
     val store = SqlitePlantJournalStore.make(resources.transactor)
-    Programs(
-      plantJournal = PlantJournal.make(using store, UuidIdGenerator, SystemClock),
-      plantAttentionService = PlantAttentionService.make(using store, SystemClock)
-    )
+    PlantAttentionService.make(using store, SystemClock).map: plantAttentionService =>
+      Programs(
+        plantJournal = PlantJournal.make(using store, UuidIdGenerator, SystemClock),
+        plantAttentionService
+      )

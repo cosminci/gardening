@@ -22,31 +22,33 @@ object Main:
     val dbPath    = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
 
     Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
-      val _         = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      val programs  = Programs.make(resources)
-      val endpoints =
-        List(HealthApi.serverEndpoint(version)) ++
-          JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionService) ++
-          List(StaticSite.endpoint(staticDir))
-      start(
-        http = () =>
-          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-        ,
-        plantAttentionService = programs.plantAttentionService,
-        awaitNext = () =>
-          sleep(5.minutes)
-          Right(())
-      ).orThrow
+      val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
+      Programs
+        .make(resources)
+        .flatMap: programs =>
+          val endpoints =
+            List(HealthApi.serverEndpoint(version)) ++
+              JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionService) ++
+              List(StaticSite.endpoint(staticDir))
+          start(
+            http = () =>
+              val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
+            ,
+            plantAttentionService = programs.plantAttentionService,
+            awaitNext = () =>
+              sleep(5.minutes)
+              Right(())
+          )
+        .orThrow
 
   private[app] def start(
       http: () => Unit,
       plantAttentionService: PlantAttentionService,
       awaitNext: () => Either[Throwable, Unit]
   ): Either[Throwable, Unit] =
-    refreshPlantAttention(plantAttentionService).flatMap: _ =>
-      supervisedError(EitherMode[Throwable]()):
-        val _ = forkError(pollPlantAttention(plantAttentionService, awaitNext))
-        Right(http())
+    supervisedError(EitherMode[Throwable]()):
+      val _ = forkError(pollPlantAttention(plantAttentionService, awaitNext))
+      Right(http())
 
   @tailrec
   private def pollPlantAttention(

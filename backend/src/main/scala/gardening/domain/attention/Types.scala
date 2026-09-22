@@ -39,10 +39,6 @@ enum WateringCadence:
 final case class PlantAttention(plant: Plant, cadence: WateringCadence)
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
 
-enum GetAttentionProjectionResult:
-  case Read(projection: AttentionProjection)
-  case Unavailable
-
 enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)
   case RefreshFailed(reason: Throwable)
