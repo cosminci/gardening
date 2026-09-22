@@ -19,6 +19,11 @@ object OperationId:
   def apply(value: String): OperationId         = value
   extension (id: OperationId) def value: String = id
 
+type OperationOffset   = Int :| GreaterEqual[0]
+type OperationPageSize = Int :| Interval.Closed[1, 10]
+final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
+final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
+
 opaque type Species = String
 object Species:
   def apply(value: String): Species              = value
@@ -163,7 +168,7 @@ enum GetOperationResult:
   case ReadFailed(reason: Throwable)
 
 enum GetOperationsResult:
-  case Read(operations: Vector[Operation])
+  case Read(page: OperationPage)
   case ReadFailed(reason: Throwable)
 
 enum LogOperationResult:

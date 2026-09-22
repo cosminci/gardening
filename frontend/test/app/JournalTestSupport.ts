@@ -67,6 +67,14 @@ export const repot = (id: string, date: string): Journal.Operation => ({
   },
 });
 
+export const operationsPage = (
+  operations: readonly Journal.Operation[] = [],
+  hasNextPage = false,
+): Journal.GetOperationsResult => ({
+  kind: "read",
+  page: { operations, hasNextPage },
+});
+
 export const buildJournal = ({
   getPlantsResult = { kind: "read", plants: [] },
   getOperationsByPlantId = {},
@@ -84,6 +92,7 @@ export const buildJournal = ({
   editedComponents = [],
   addedPesticides = [],
   editedPesticides = [],
+  operationWindows = [],
 }: {
   getPlantsResult?: Journal.GetPlantsResult;
   getOperationsByPlantId?: Readonly<
@@ -106,12 +115,14 @@ export const buildJournal = ({
   }[];
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
+  operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): Journal.JournalClient => {
   const operationReads = new Map<string, number>();
 
   return {
     getPlants: () => Promise.resolve(getPlantsResult),
-    getOperations: (id) => {
+    getOperations: (id, window) => {
+      operationWindows.push({ plantId: id, window });
       const results = getOperationsByPlantId[id];
       if (results === undefined)
         return Promise.reject(new Error(`missing getOperations response for ${id}`));

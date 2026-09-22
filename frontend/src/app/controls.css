@@ -51,6 +51,11 @@
     background: var(--sage);
   }
 
+  .compact-action:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
   .text-action {
     padding: 0.1rem 0;
     color: var(--leaf);

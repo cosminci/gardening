@@ -34,7 +34,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val plantsJson =
     """[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}}]"""
   private val operationsJson =
-    """[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}]"""
+    """{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
   private val repotJson =
     """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
   private val componentId       = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
@@ -51,11 +51,15 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
 
   test("should return active plants and the requested plant's care history"):
-    val requestedPlants = AtomicReference(Vector.empty[PlantId])
-    val journal         = buildJournal(
+    val requestedPlants  = AtomicReference(Vector.empty[PlantId])
+    val requestedWindows = AtomicReference(Vector.empty[OperationWindow])
+    val journal          = buildJournal(
       getPlantsResult = GetPlantsResult.Read(Vector(plant)),
-      getOperationsResult = GetOperationsResult.Read(Vector(careOperation, repotOperation)),
-      requestedPlants = requestedPlants
+      getOperationsResult = GetOperationsResult.Read(
+        OperationPage(Vector(careOperation, repotOperation), hasNextPage = true)
+      ),
+      requestedPlants = requestedPlants,
+      requestedWindows = requestedWindows
     )
 
     val plantsResponse             = getPlants(journal)
@@ -63,6 +67,19 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(plantsResponse.code     -> jsonBody(plantsResponse), StatusCode.Ok     -> json(plantsJson))
     assertEquals(operationsResponse.code -> jsonBody(operationsResponse), StatusCode.Ok -> json(operationsJson))
     assertEquals(requestedPlants.get(), Vector(plant.id))
+    assertEquals(requestedWindows.get(), Vector(OperationWindow(offset = 3, size = 10)))
+
+  test("should reject invalid operation windows"):
+    assertEquals(getOperations(buildJournal(), offset = -1, pageSize = 3).code, StatusCode.BadRequest)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 0).code, StatusCode.BadRequest)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 11).code, StatusCode.BadRequest)
+
+  test("should use the recent-operation window by default"):
+    val requestedWindows = AtomicReference(Vector.empty[OperationWindow])
+    val response         = get(s"/plants/${plant.id.value}/operations", buildJournal(requestedWindows = requestedWindows))
+
+    assertEquals(response.code, StatusCode.Ok)
+    assertEquals(requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
   test("should log care and replace the details of an existing repot"):
     val logged  = AtomicReference(Vector.empty[(PlantId, OperationDetails)])
@@ -188,8 +205,10 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def getPlants(journal: PlantJournal) =
     basicRequest.get(uri"http://test/plants").send(backend(journal))
 
-  private def getOperations(journal: PlantJournal) =
-    basicRequest.get(uri"http://test/plants/${plant.id.value}/operations").send(backend(journal))
+  private def getOperations(journal: PlantJournal, offset: Int = 3, pageSize: Int = 10) =
+    basicRequest
+      .get(uri"http://test/plants/${plant.id.value}/operations?offset=$offset&pageSize=$pageSize")
+      .send(backend(journal))
 
   private def logOperation(body: String, journal: PlantJournal) =
     basicRequest.post(uri"http://test/plants/${plant.id.value}/operations").body(body).contentType("application/json").send(backend(journal))
@@ -216,10 +235,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   private def buildJournal(
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
-      getOperationsResult: GetOperationsResult = GetOperationsResult.Read(Vector.empty),
+      getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
       requestedPlants: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
+      requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
       loggedOperations: AtomicReference[Vector[(PlantId, OperationDetails)]] = AtomicReference(Vector.empty),
       editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty),
       componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
@@ -229,8 +249,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) = new PlantJournal:
-    override def getPlants: GetPlantsResult                           = getPlantsResult
-    override def getOperations(plantId: PlantId): GetOperationsResult = requestedPlants.updateAndGet(_ :+ plantId).pipe(_ => getOperationsResult)
+    override def getPlants: GetPlantsResult                                                    = getPlantsResult
+    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
+      requestedPlants.updateAndGet(_ :+ plantId)
+      requestedWindows.updateAndGet(_ :+ window)
+      getOperationsResult
     override def logOperation(plantId: PlantId, details: OperationDetails): LogOperationResult =
       loggedOperations.updateAndGet(_ :+ (plantId -> details)).pipe(_ => logOperationResult)
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =

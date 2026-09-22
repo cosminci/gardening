@@ -20,6 +20,8 @@
   --line: #d9d8cc;
   --danger: #9b3d2e;
   --shadow: 0 16px 40px rgb(31 55 44 / 8%);
+  --card-radius: 1rem;
+  --card-surface: rgb(255 253 247 / 92%);
 }
 
 * {

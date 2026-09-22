@@ -5,6 +5,7 @@ import gardening.domain.*
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.MigrationVersion
 
 import com.augustnagro.magnum.Transactor
 import java.sql.Connection
@@ -22,6 +23,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
   private val lecaId      = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
   private val vertabId    = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
   private val neemOilId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
+  private val fullWindow  = OperationWindow(offset = 0, size = 10)
 
   private val care = OperationDetails.Care(
     actions = Set(ActionType.Watered, ActionType.Fertilized),
@@ -88,11 +90,63 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
 
       assertEquals(readOperationKind(dataSource, operation.id.value), "Care")
-      assertEquals(store.getOperations(PlantId("p1")), GetOperationsResult.Read(Vector(operation)))
+      assertEquals(
+        store.getOperations(PlantId("p1"), fullWindow),
+        GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false))
+      )
       store.getPlants match
         case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
         case other => fail(s"expected one plant, got $other")
+
+  test("should page operations by timestamp descending with an identifier tie-breaker"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val operations = Vector(
+        Operation(OperationId("o1"), PlantId("p1"), date, care),
+        Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), care),
+        Operation(OperationId("o3"), PlantId("p1"), date.plusNanos(100_500_000), care),
+        Operation(OperationId("o4"), PlantId("p1"), date.plusNanos(100_500_000), care)
+      )
+      operations.foreach(operation => assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id)))
+
+      assertEquals(
+        store.getOperations(PlantId("p1"), OperationWindow(offset = 0, size = 3)),
+        GetOperationsResult.Read(OperationPage(Vector(operations(3), operations(2), operations(1)), hasNextPage = true))
+      )
+      assertEquals(
+        store.getOperations(PlantId("p1"), OperationWindow(offset = 3, size = 3)),
+        GetOperationsResult.Read(OperationPage(Vector(operations.head), hasNextPage = false))
+      )
+      assertEquals(
+        store.getOperations(PlantId("p1"), OperationWindow(offset = 4, size = 3)),
+        GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+      )
+
+  test("should retain chronological operation order after migrating existing timestamps"):
+    val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    try
+      val _ = Flyway
+        .configure()
+        .dataSource(connection.dataSource)
+        .target(MigrationVersion.fromVersion("2"))
+        .load()
+        .migrate()
+      seedPlant(connection.dataSource, id = "p1")
+      val details = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
+      val older   = Operation(OperationId("o1"), PlantId("p1"), date, details)
+      val newer   = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
+      val payload = """{"actions":[],"pesticides":[],"moisture":"Wet","note":null}"""
+      insertOperation(connection.dataSource, older.id.value, older.plantId.value, older.date.toString, "Care", payload)
+      insertOperation(connection.dataSource, newer.id.value, newer.plantId.value, newer.date.toString, "Care", payload)
+
+      val _     = Flyway.configure().dataSource(connection.dataSource).load().migrate()
+      val store = SqlitePlantJournalStore.make(connection.transactor)
+      assertEquals(
+        store.getOperations(PlantId("p1"), fullWindow),
+        GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false))
+      )
+    finally connection.close()
 
   test("should round-trip a care observation without actions"):
     withStore: (dataSource, store) =>
@@ -105,7 +159,10 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
 
       assertEquals(store.addOperation(observation), LogOperationResult.Logged(observation.id))
-      assertEquals(store.getOperations(PlantId("p1")), GetOperationsResult.Read(Vector(observation)))
+      assertEquals(
+        store.getOperations(PlantId("p1"), fullWindow),
+        GetOperationsResult.Read(OperationPage(Vector(observation), hasNextPage = false))
+      )
 
   test("should persist a repot without changing the plant"):
     withStore: (dataSource, store) =>
@@ -128,21 +185,6 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
         case GetPlantsResult.Read(Vector(plant)) =>
           assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
         case other => fail(s"expected one plant, got $other")
-
-  test("should require operation timestamps to be unique only within a plant"):
-    withStore: (dataSource, store) =>
-      seedPlant(dataSource, id = "p1")
-      seedPlant(dataSource, id = "p2")
-      val firstPlantOperation  = Operation(OperationId("p1-o1"), PlantId("p1"), date, care)
-      val secondPlantOperation = Operation(OperationId("p2-o1"), PlantId("p2"), date, care)
-      val timestampCollision   = Operation(OperationId("p1-o2"), PlantId("p1"), date, care)
-
-      assertEquals(store.addOperation(firstPlantOperation), LogOperationResult.Logged(firstPlantOperation.id))
-      assertEquals(store.addOperation(secondPlantOperation), LogOperationResult.Logged(secondPlantOperation.id))
-      store.addOperation(timestampCollision) match
-        case LogOperationResult.LoggingFailed(reason) =>
-          assert(reason.getMessage.contains("UNIQUE constraint failed: operation.plant_id, operation.date"))
-        case other => fail(s"expected LoggingFailed, got $other")
 
   test("should reject unknown operation kinds and malformed JSON payloads"):
     withStore: (dataSource, _) =>
@@ -180,7 +222,10 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
   test("should return no operation for an unknown id"):
     withStore: (_, store) =>
       assertEquals(store.getOperation(OperationId("missing")), GetOperationResult.RecordMissing)
-      assertEquals(store.getOperations(PlantId("missing")), GetOperationsResult.Read(Vector.empty))
+      assertEquals(
+        store.getOperations(PlantId("missing"), fullWindow),
+        GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+      )
 
   test("should fail when stored operation data is corrupt"):
     withStore: (dataSource, store) =>
@@ -199,7 +244,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
           s"""{"substrate":[{"component":"${perliteId.value}","share":60},{"component":"${perliteId.value}","share":60}]}"""
       )
 
-      val operations = intercept[DatabaseCorruption](store.getOperations(PlantId("p1")))
+      val operations = intercept[DatabaseCorruption](store.getOperations(PlantId("p1"), fullWindow))
       assertEquals(operations.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
 
       val operation = intercept[DatabaseCorruption](store.getOperation(repot.id))
@@ -429,7 +474,7 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       val store = SqlitePlantJournalStore.make(connection.transactor)
       List(
         store.getPlants,
-        store.getOperations(PlantId("p1"))
+        store.getOperations(PlantId("p1"), fullWindow)
       ).foreach:
         case GetPlantsResult.ReadFailed(_) | GetOperationsResult.ReadFailed(_) => ()
         case other                                                             => fail(s"expected ReadFailed, got $other")

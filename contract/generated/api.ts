@@ -45,7 +45,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List a plant's operations */
+        /** List a bounded page of plant operations */
         get: operations["getPlantsPlantidOperations"];
         put?: never;
         /** Log a plant operation */
@@ -192,6 +192,11 @@ export interface components {
         };
         /** OperationDetails */
         OperationDetails: components["schemas"]["Care"] | components["schemas"]["Repot"];
+        /** OperationPage */
+        OperationPage: {
+            operations: components["schemas"]["Operation"][];
+            hasNextPage: boolean;
+        };
         /** Pesticide */
         Pesticide: {
             /** Format: uuid */
@@ -312,7 +317,10 @@ export interface operations {
     };
     getPlantsPlantidOperations: {
         parameters: {
-            query?: never;
+            query?: {
+                offset?: number;
+                pageSize?: number;
+            };
             header?: never;
             path: {
                 plantId: string;
@@ -326,7 +334,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Operation"][];
+                    "application/json": components["schemas"]["OperationPage"];
+                };
+            };
+            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
             default: {

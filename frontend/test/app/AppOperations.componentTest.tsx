@@ -23,18 +23,15 @@ Vitest.describe("changing the journal", () => {
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
         p1: [
-          { kind: "read", operations: [] },
-          {
-            kind: "read",
-            operations: [
-              JournalFixtures.care({
-                id: "new",
-                date: "2026-05-05T00:00:00Z",
-                moisture: "wet",
-                maybeNote: "Recovered",
-              }),
-            ],
-          },
+          JournalFixtures.operationsPage(),
+          JournalFixtures.operationsPage([
+            JournalFixtures.care({
+              id: "new",
+              date: "2026-05-05T00:00:00Z",
+              moisture: "wet",
+              maybeNote: "Recovered",
+            }),
+          ]),
         ],
       },
       logOperationResult: { kind: "logged", id: Journal.operationId("new") },
@@ -86,10 +83,7 @@ Vitest.describe("changing the journal", () => {
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
-        p1: [
-          { kind: "read", operations: [existing] },
-          { kind: "read", operations: [updated] },
-        ],
+        p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([updated])],
       },
       editOperationResult: { kind: "edited", operation: updated },
       edited,
@@ -98,7 +92,7 @@ Vitest.describe("changing the journal", () => {
     await Testing.screen.findByText("2026-03-03");
 
     const trigger = Testing.screen.getByRole("button", {
-      name: "Edit repot operation 1 from 2026-03-03",
+      name: "Edit recent repot operation 1 from 2026-03-03",
     });
     trigger.focus();
     Testing.fireEvent.click(trigger);
@@ -125,7 +119,9 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(await Testing.screen.findByText("Less perlite")).toBeInTheDocument();
     await Testing.waitFor(() => {
       Vitest.expect(
-        Testing.screen.getByRole("button", { name: "Edit repot operation 1 from 2026-03-03" }),
+        Testing.screen.getByRole("button", {
+          name: "Edit recent repot operation 1 from 2026-03-03",
+        }),
       ).toHaveFocus();
     });
   });
@@ -133,7 +129,7 @@ Vitest.describe("changing the journal", () => {
   Vitest.it("should close the operation editor with Escape", async () => {
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const { container } = Testing.render(() => <App journal={journal} />);
     const current = Testing.within(container);
@@ -172,7 +168,7 @@ Vitest.describe("changing the journal", () => {
     const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
       componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
       addedComponents,
@@ -267,7 +263,7 @@ Vitest.describe("changing the journal", () => {
     });
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [existingOperation] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
       pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
       pesticideEditResult: { kind: "edited", entry: { id: neemId, data: editedPesticide } },

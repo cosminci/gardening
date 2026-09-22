@@ -104,12 +104,22 @@ export interface Operation {
   readonly details: OperationDetails;
 }
 
+export interface OperationWindow {
+  readonly offset: number;
+  readonly size: number;
+}
+
+export interface OperationPage {
+  readonly operations: readonly Operation[];
+  readonly hasNextPage: boolean;
+}
+
 export type GetPlantsResult =
   | { readonly kind: "read"; readonly plants: readonly Plant[] }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type GetOperationsResult =
-  | { readonly kind: "read"; readonly operations: readonly Operation[] }
+  | { readonly kind: "read"; readonly page: OperationPage }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type LogOperationResult =
@@ -137,7 +147,7 @@ export type CatalogEditResult<A> =
 
 export interface JournalClient {
   getPlants(): Promise<GetPlantsResult>;
-  getOperations(plantId: PlantId): Promise<GetOperationsResult>;
+  getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
   logOperation(plantId: PlantId, details: OperationDetails): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
   getSubstrateComponents(): Promise<CatalogReadResult<SubstrateComponent>>;

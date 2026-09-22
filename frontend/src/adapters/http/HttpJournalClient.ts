@@ -21,14 +21,23 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async getOperations(id): Promise<Journal.GetOperationsResult> {
+    async getOperations(id, window): Promise<Journal.GetOperationsResult> {
       try {
         const { data, error } = await client.GET("/plants/{plantId}/operations", {
-          params: { path: { plantId: id } },
+          params: {
+            path: { plantId: id },
+            query: { offset: window.offset, pageSize: window.size },
+          },
         });
         return data === undefined
           ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", operations: data.map(toOperation) };
+          : {
+              kind: "read",
+              page: {
+                operations: data.operations.map(toOperation),
+                hasNextPage: data.hasNextPage,
+              },
+            };
       } catch (error) {
         return { kind: "readFailed", reason: requestFailure(error) };
       }

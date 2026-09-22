@@ -5,10 +5,11 @@ import gardening.domain.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.Interval
+import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
 import sttp.model.StatusCode
 import sttp.shared.Identity
 import sttp.tapir.*
+import sttp.tapir.Codec as TapirCodec
 import sttp.tapir.generic.Configuration as TapirConfiguration
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
@@ -26,7 +27,12 @@ object JournalApi:
     journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
 
   private val getOperationsEndpoint =
-    journalEndpoint.get.in("plants" / path[String]("plantId") / "operations").out(jsonBody[Vector[Operation]]).summary("List a plant's operations")
+    journalEndpoint.get
+      .in("plants" / path[String]("plantId") / "operations")
+      .in(query[OperationOffset]("offset").default(0))
+      .in(query[OperationPageSize]("pageSize").default(3))
+      .out(jsonBody[OperationPage])
+      .summary("List a bounded page of plant operations")
 
   private val logOperationEndpoint =
     journalEndpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[OperationDetails])
@@ -76,10 +82,10 @@ object JournalApi:
           case GetPlantsResult.Read(plants)  => plants.asRight
           case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
-      getOperationsEndpoint.handle: plantId =>
-        journal.getOperations(PlantId(plantId)) match
-          case GetOperationsResult.Read(operations) => operations.asRight
-          case GetOperationsResult.ReadFailed(_)    =>
+      getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
+        journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
+          case GetOperationsResult.Read(page)    => page.asRight
+          case GetOperationsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       logOperationEndpoint.handle: (plantId, details) =>
         journal.logOperation(PlantId(plantId), details) match
@@ -147,6 +153,32 @@ object JournalApi:
       toDiscriminatorValue = name => lowerCamel(name.fullName.split('.').last.stripSuffix("$"))
     )
 
+  // Tapir only reads these inverse mappings while generating the OpenAPI contract.
+  // $COVERAGE-OFF$
+  private lazy val operationOffsetSchema = Schema.schemaForInt
+    .validate(Validator.min(0))
+    .map(_.refineOption[GreaterEqual[0]])(value => value)
+  private lazy val operationPageSizeSchema = Schema.schemaForInt
+    .validate(Validator.min(1).and(Validator.max(10)))
+    .map(_.refineOption[Interval.Closed[1, 10]])(value => value)
+  // $COVERAGE-ON$
+
+  private given TapirCodec.PlainCodec[OperationOffset] = TapirCodec.int
+    .mapDecode(value =>
+      value.refineOption[GreaterEqual[0]] match
+        case Some(offset) => DecodeResult.Value(offset)
+        case None         => DecodeResult.Error(value.toString, IllegalArgumentException("offset must be at least 0"))
+    )(value => value)
+    .schema(operationOffsetSchema)
+
+  private given TapirCodec.PlainCodec[OperationPageSize] = TapirCodec.int
+    .mapDecode(value =>
+      value.refineOption[Interval.Closed[1, 10]] match
+        case Some(size) => DecodeResult.Value(size)
+        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 10"))
+    )(value => value)
+    .schema(operationPageSizeSchema)
+
   // Tapir requires bidirectional codecs for output bodies even though these values are never decoded by the server.
   // $COVERAGE-OFF$
   private given Codec[PlantId]     = stringCodec(PlantId.apply, _.value)
@@ -213,6 +245,9 @@ object JournalApi:
     .derived[OperationDetails.Repot]
     .modify(_.substrate)(_.copy(isOptional = false))
     .modify(_.maybeNote)(_.copy(isOptional = false).nullable)
+  private given Schema[OperationPage] = Schema
+    .derived[OperationPage]
+    .modify(_.operations)(_.copy(isOptional = false))
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
   private given Schema[PesticideData] = Schema.derived[PesticideData]

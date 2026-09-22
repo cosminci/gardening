@@ -1,7 +1,8 @@
-import { render, screen, within } from "@solidjs/testing-library";
+import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import { nomenclatureName, pesticideId } from "../../src/domain/Journal";
+import type { OperationWindow, PlantId } from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
 
 describe("browsing the journal", () => {
@@ -38,16 +39,23 @@ describe("browsing the journal", () => {
         },
       },
     ];
+    const operationWindows: {
+      plantId: PlantId;
+      window: OperationWindow;
+    }[] = [];
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: {
         kind: "read",
         plants: [JournalFixtures.monstera(), JournalFixtures.ficus()],
       },
       getOperationsByPlantId: {
-        p1: [{ kind: "read", operations }],
-        p2: [{ kind: "read", operations: [] }],
+        p1: [
+          JournalFixtures.operationsPage([operations[0]!, operations[2]!, operations[1]!], true),
+        ],
+        p2: [JournalFixtures.operationsPage()],
       },
       getPesticidesResult: { kind: "read", entries: pesticideCatalog },
+      operationWindows,
     });
 
     render(() => <App journal={journal} />);
@@ -72,17 +80,34 @@ describe("browsing the journal", () => {
     expect(
       screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
     ).toEqual(["Fern", "Monstera deliciosa"]);
+    expect(operationWindows).toEqual([
+      { plantId: "p2", window: { offset: 0, size: 3 } },
+      { plantId: "p1", window: { offset: 0, size: 3 } },
+    ]);
     expect(
       within(screen.getByRole("article", { name: "Monstera deliciosa" })).getByText(
         "No operations yet.",
       ),
     ).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Show operation history" }));
+    const history = await within(card).findByRole("table");
+    expect(operationWindows.at(-1)).toEqual({
+      plantId: "p1",
+      window: { offset: 3, size: 10 },
+    });
+    fireEvent.click(
+      within(history).getByRole("button", {
+        name: "Edit historical care operation 1 from 2026-04-05",
+      }),
+    );
+    expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
   });
 
   it("should identify a journal containing one active plant", async () => {
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
     render(() => <App journal={journal} />);

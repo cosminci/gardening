@@ -13,10 +13,13 @@ import io.circe.syntax.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
+import java.time.format.DateTimeFormatterBuilder
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
 object SqlitePlantJournalStore:
+
+  private val operationDateFormatter = DateTimeFormatterBuilder().appendInstant(9).toFormatter
 
   def make(transactor: Transactor): PlantJournalStore = LiveSqlitePlantJournalStore(transactor)
 
@@ -54,14 +57,21 @@ object SqlitePlantJournalStore:
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
 
-    override def getOperations(plantId: PlantId): GetOperationsResult =
+    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       try
-        val operations = trust(connect(transactor)(selectOperationsForPlant(plantId.value).query[OperationRow].run()).traverse(toOperation))
-        GetOperationsResult.Read(operations)
+        val rows       = connect(transactor)(selectOperationsForPlant(plantId.value, window).query[OperationRow].run())
+        val operations = trust(rows.traverse(toOperation))
+        GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
 
-    private def selectOperationsForPlant(plantId: String): Frag =
-      sql"select id, plant_id, date, kind, payload from operation where plant_id = $plantId"
+    private def selectOperationsForPlant(plantId: String, window: OperationWindow): Frag =
+      val readSize: Int = window.size + 1
+      val offset: Int   = window.offset
+      sql"""select id, plant_id, date, kind, payload
+            from operation
+            where plant_id = $plantId
+            order by date desc, id desc
+            limit $readSize offset $offset"""
 
     override def getOperation(id: OperationId): GetOperationResult =
       try
@@ -87,7 +97,8 @@ object SqlitePlantJournalStore:
 
     private def insertOperationRow(operation: Operation): Frag =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
-      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, ${operation.date.toString}, $operationKind, $payload)"
+      val storedDate               = operationDateFormatter.format(operation.date)
+      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
