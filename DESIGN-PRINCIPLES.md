@@ -24,15 +24,16 @@ The domain is modelled explicitly and made hard to misuse:
 The system reads the same at every zoom level: `main` is the most zoomed-out view, and you can descend — composition root → service → domain → method — with each level staying small and single- purpose. Concretely:
 
 - **One responsibility per unit**, one reason to change.
-- **One abstraction level per method** — don't mix high-level orchestration with low-level detail in the same body. Methods stay short (roughly 7–10 lines).
+- **One abstraction level per method** — don't mix high-level orchestration with low-level detail in the same body. Methods stay short (roughly 7–10 lines). Keep control flow linear and information-dense: name derived values once, make conditions explicit, and avoid expressions whose formatting contributes more lines than meaning.
 - **Most-important-first ordering, everywhere.** Public entrypoints come before private helpers; the critical parameters of a function before the incidental ones; the defining fields of a case class before the rest. Someone opening a file should meet its purpose first, not its plumbing. A file that greets the reader with private helpers is ordered backwards.
 - **Locality of Behavior over structural deduplication.** Keep behavior beside the state and UI that it governs. Similar-looking code is not sufficient reason to share an abstraction when the use cases may evolve independently.
 - **DRY applies to knowledge, not lines.** Centralize a rule, decision, or contract when independent divergence would be a bug. Allow incidental code similarity when the duplicated code represents separate knowledge or responsibilities.
 - **Every abstraction must own a real seam.** Extract an interface, component, or helper only when it names a stable responsibility and has real consumers. Do not replace local code with configuration bags, pass-through layers, or generic frameworks that merely hide differences.
+- **Layout follows content constraints, not one viewport.** UI components own their structural boxes, use fluid bounds, and define narrow-width behavior. Decorative layers must not stand in for structure that controls layout.
 
 ## 4. Anti-Corruption Layer
 
-External models are translated into internal ones at the edge, so no foreign shape or semantics leak into the domain. Two data worlds are kept distinct: **wire DTOs** (the tapir request/response types, single-sourced into the OpenAPI contract) and **domain models**. Adapters translate between them, and validators reject malformed input before it crosses inward. The import path that ingests the Romanian source records is the largest instance of this: it maps a foreign vocabulary into the English domain.
+External models are translated into internal ones at the edge, so no foreign shape or semantics leak into the domain. Two data worlds are kept distinct: **wire DTOs** (the tapir request/response types, single-sourced into the OpenAPI contract) and **domain models**. Adapters translate between them, and validators reject malformed input before it crosses inward. Boundary encodings must preserve domain semantics used outside the core: if storage compares encoded values, their canonical representation must preserve domain ordering, including across migrated data. The import path that ingests the Romanian source records is the largest instance of this: it maps a foreign vocabulary into the English domain.
 
 ## 5. Indirection Layers
 
