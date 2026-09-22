@@ -32,7 +32,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 | `.dagger/` | TypeScript Dagger CI module. |
 | `specs/` | Living design / contracts / testing / operational docs, and change specs. |
 | `ci/specs/` | The pipeline's own docs. |
-| `.claude/skills/sdd/` | The spec-driven development skill. |
+| `.agents/skills/` | Shared coding-agent skills, including spec-driven development. |
 | `plants/`, `guides/`, `shopping-list.md`, `GARDEN-GUIDE.md` | Import source for a later feature, not part of the app. |
 
 ## Documentation style
@@ -68,12 +68,16 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 ## Development workflow — SDD
 
-Every change goes through the **SDD skill** at [`.claude/skills/sdd/SKILL.md`](.claude/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:
+Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.agents/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:
 
 - **Feature** (planned change, refactor, migration): a change spec states current → new behavior, acceptance criteria, invariants, and tradeoffs; then tests projected from the spec; then implementation.
 - **Investigation** (bug, incident): a hypotheses-and-evidence trail leads to a proven root cause; the archived spec records the root cause and the rejected hypotheses.
 
-Its five phases are **classify → spec → tests → implement → sync & archive**. The spec is reviewed before code is written. The final phase syncs the living docs and archives the change spec.
+Its five phases are **classify → spec → tests → implement → sync & archive**. The workflow is
+split into three PR stages: a **Spec PR** containing only the reviewed proposal, one or more
+**Implementation PRs** after the Spec PR merges, and a final **Archive + Living Docs PR** after
+all implementation PRs merge. The final PR only archives the proposal and synchronizes living
+documentation; it introduces no new product behavior.
 
 - **Specs live in-repo** under [`specs/changes/<slug>/proposal.md`](specs/changes/), archived to `specs/changes/archive/YYYY-MM-DD-<slug>/`. The living docs are `specs/{design,contracts,testing,operational}.md` (the pipeline's are `ci/specs/`); each follows a strict template in [`specs/templates/`](specs/templates/) — one fact in one place, empty sections omitted — so they stay lean as the app grows.
 - **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored, never reviewed).
@@ -85,7 +89,9 @@ Its five phases are **classify → spec → tests → implement → sync & archi
 
 ## Pull requests
 
-- Size a PR for a single focused review session — split on ease of reviewing, not on line count. When a change is large enough that reviewing intent and code together would exceed one session, the spec is its own PR ahead of the implementation PR.
+- Every change uses the three-stage SDD PR sequence: Spec PR → Implementation PR(s) → Archive + Living Docs PR.
+- The Spec PR must merge before implementation begins. The Archive + Living Docs PR must wait until all implementation PRs merge.
+- Size each Implementation PR for a single focused review session — split on separable seams, not to bypass quality gates.
 - A PR references its change spec and calls out what the reviewer should focus on.
 - Automated review runs on every PR; a human approves intent and domain correctness, since the gates already catch mechanical issues.
 

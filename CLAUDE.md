@@ -2,7 +2,7 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 
-The engineering standard here is written for everyone, not just agents: [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) is how the code is designed and built, and [CONTRIBUTING.md](CONTRIBUTING.md) covers conventions, workflow, and the definition of done. Read those first and hold to them as any engineer would; this file only adds the operational guardrails an agent needs on top. Further orientation: [README.md](README.md) (purpose, commands, repo map), [specs/](specs/) and [ci/specs/](ci/specs/) (how the service and pipeline work), [GLOSSARY.md](GLOSSARY.md) (domain terms), and the SDD skill at [.claude/skills/sdd/SKILL.md](.claude/skills/sdd/SKILL.md).
+The engineering standard here is written for everyone, not just agents: [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md) is how the code is designed and built, and [CONTRIBUTING.md](CONTRIBUTING.md) covers conventions, workflow, and the definition of done. Read those first and hold to them as any engineer would; this file only adds the operational guardrails an agent needs on top. Further orientation: [README.md](README.md) (purpose, commands, repo map), [specs/](specs/) and [ci/specs/](ci/specs/) (how the service and pipeline work), [GLOSSARY.md](GLOSSARY.md) (domain terms), and the shared SDD skill at [.agents/skills/sdd/SKILL.md](.agents/skills/sdd/SKILL.md).
 
 ## How work happens here
 
