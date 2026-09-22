@@ -5,6 +5,7 @@ import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
+import { orderPlantAttention } from "./PlantAttentionOrdering";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
 
@@ -49,7 +50,7 @@ export const App: Component<AppProps> = (props) => {
     setPesticides(pesticidesResult.entries);
 
     const results = await Promise.all(
-      attentionResult.projection.plants.map(async (attention) => ({
+      orderPlantAttention(attentionResult.projection.plants).map(async (attention) => ({
         attention,
         operationsResult: await journal.getOperations(attention.plant.id, {
           offset: 0,

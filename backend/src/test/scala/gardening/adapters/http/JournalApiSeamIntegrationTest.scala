@@ -78,7 +78,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 20).code, StatusCode.Ok)
     assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 21).code, StatusCode.BadRequest)
 
-  test("should expose the ordered attention projection"):
+  test("should expose the attention projection"):
     val unknownPlant     = plant.copy(id = PlantId("unknown"))
     val zeroAveragePlant = plant.copy(id = PlantId("zero-average"))
     val attention        = new PlantAttentionService:

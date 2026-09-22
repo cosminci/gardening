@@ -40,6 +40,7 @@ export const unavailableAttention = (
 export const inferredAttention = (
   plant: Journal.Plant,
   state: Journal.WateringState = "current",
+  urgency: Journal.Urgency = { kind: "finite", numeratorNanos: "1", denominatorNanos: "1" },
 ): Journal.PlantAttention => ({
   plant,
   cadence: {
@@ -49,7 +50,7 @@ export const inferredAttention = (
     elapsed: Journal.duration(
       state === "current" ? "PT12H" : state === "overdue" ? "PT25H" : "PT49H",
     ),
-    urgency: { kind: "finite", numeratorNanos: "1", denominatorNanos: "1" },
+    urgency,
     state,
   },
 });

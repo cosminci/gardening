@@ -9,16 +9,18 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 class MainComponentTest extends munit.FunSuite:
 
   test("should start HTTP with the materialized attention projection"):
-    val projection = AttentionProjection(Instant.EPOCH, Vector.empty)
-    val stop       = RuntimeException("stop")
-    val attention  = new PlantAttentionService:
+    val projection  = AttentionProjection(Instant.EPOCH, Vector.empty)
+    val keepPolling = CountDownLatch(1)
+    val attention   = new PlantAttentionService:
       override def current: AttentionProjection       = projection
       override def refreshAll: RefreshAttentionResult = fail("interval did not elapse")
 
     val result = Main.start(
       http = () => assertEquals(attention.current, projection),
       plantAttentionService = attention,
-      awaitNext = () => stop.asLeft
+      awaitNext = () =>
+        val _ = keepPolling.await()
+        ().asRight
     )
 
     assertEquals(result, ().asRight)

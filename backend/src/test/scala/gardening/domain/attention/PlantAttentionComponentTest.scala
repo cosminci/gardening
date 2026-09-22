@@ -87,63 +87,7 @@ class PlantAttentionComponentTest extends munit.FunSuite:
     clock.current.set(start.plusNanos(1))
     assertEquals(inferredUrgency(attention.refreshAll), Urgency.Unbounded)
 
-    val ordering = summon[Ordering[Urgency]]
-    assertEquals(ordering.compare(Urgency.Unbounded, Urgency.Unbounded), 0)
-    assert(ordering.compare(Urgency.Unbounded, Urgency.Finite(Duration.ZERO, Duration.ZERO)) > 0)
-    assert(ordering.compare(Urgency.Finite(Duration.ZERO, Duration.ZERO), Urgency.Unbounded) < 0)
-
-  test("should order unknown cadence first and use urgency then plant fields"):
-    val unknownFirst      = plant("z", "Balcony", "Ficus", none)
-    val unknownLast       = plant("y", "Kitchen", "Anthurium", none)
-    val urgentLater       = plant("c", "Office", "Ficus", none)
-    val tiedLocationFirst = plant("f", "Balcony", "Zamioculcas", none)
-    val urgentSooner      = plant("b", "Office", "Ficus", none)
-    val tiedNoName        = plant("a", "Office", "Monstera", none)
-    val tiedWithName      = plant("d", "Office", "Monstera", Nickname("Monty").some)
-    val sameNamedLast     = plant("e", "Office", "Monstera", Nickname("Monty").some)
-    val tiedOtherName     = plant("g", "Office", "Monstera", Nickname("Zed").some)
-    val store             = StoreStub(
-      Vector(
-        tiedOtherName,
-        sameNamedLast,
-        tiedWithName,
-        tiedNoName,
-        urgentSooner,
-        tiedLocationFirst,
-        urgentLater,
-        unknownLast,
-        unknownFirst
-      ),
-      Map(
-        unknownFirst.id      -> wateringOperations(unknownFirst.id, 4, Duration.ofDays(2)),
-        unknownLast.id       -> wateringOperations(unknownLast.id, 4, Duration.ofDays(2)),
-        urgentLater.id       -> wateringOperations(urgentLater.id, 5, Duration.ofDays(1), latest = start.minus(Duration.ofDays(2))),
-        tiedLocationFirst.id -> wateringOperations(tiedLocationFirst.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2))),
-        urgentSooner.id      -> wateringOperations(urgentSooner.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2))),
-        tiedNoName.id        -> wateringOperations(tiedNoName.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2))),
-        tiedWithName.id      -> wateringOperations(tiedWithName.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2))),
-        sameNamedLast.id     -> wateringOperations(sameNamedLast.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2))),
-        tiedOtherName.id     -> wateringOperations(tiedOtherName.id, 5, Duration.ofDays(2), latest = start.minus(Duration.ofDays(2)))
-      )
-    )
-    val attention = PlantAttentionService.make(using store, FixedClock(start)).getOrElse(fail("initial attention failed"))
-
-    assertEquals(
-      attention.current.plants.map(_.plant.id),
-      Vector(
-        unknownFirst.id,
-        unknownLast.id,
-        urgentLater.id,
-        tiedLocationFirst.id,
-        urgentSooner.id,
-        tiedNoName.id,
-        tiedWithName.id,
-        sameNamedLast.id,
-        tiedOtherName.id
-      )
-    )
-
-  test("should reorder with time and no new operations"):
+  test("should recompute urgency with time and no new operations"):
     val fast  = plant("fast", "Office", "Ficus", none)
     val slow  = plant("slow", "Office", "Monstera", none)
     val clock = MutableClock(start)
@@ -156,9 +100,33 @@ class PlantAttentionComponentTest extends munit.FunSuite:
     )
     val attention = PlantAttentionService.make(using store, clock).getOrElse(fail("initial attention failed"))
 
-    assertEquals(attention.current.plants.map(_.plant.id), Vector(slow.id, fast.id))
+    assertEquals(
+      attention.current.plants.map(entry => entry.plant.id -> entry.cadence),
+      Vector(
+        fast.id -> WateringCadence.Inferred(
+          sampleCount = 5,
+          averageInterval = Duration.ofDays(10),
+          elapsed = Duration.ofDays(1),
+          urgency = Urgency.Finite(Duration.ofDays(1), Duration.ofDays(10)),
+          state = WateringState.Current
+        ),
+        slow.id -> WateringCadence.Inferred(
+          sampleCount = 5,
+          averageInterval = Duration.ofDays(20),
+          elapsed = Duration.ofDays(10),
+          urgency = Urgency.Finite(Duration.ofDays(10), Duration.ofDays(20)),
+          state = WateringState.Current
+        )
+      )
+    )
     clock.current.set(start.plus(Duration.ofDays(20)))
-    assertEquals(refreshedPlantIds(attention.refreshAll), Vector(fast.id, slow.id))
+    assertEquals(
+      refreshedCadences(attention.refreshAll),
+      Vector(
+        fast.id -> Urgency.Finite(Duration.ofDays(21), Duration.ofDays(10)),
+        slow.id -> Urgency.Finite(Duration.ofDays(30), Duration.ofDays(20))
+      )
+    )
 
   test("should recompute after stored edits add or remove a watering"):
     val caredFor  = plant("p1", "Office", "Ficus", none)
@@ -222,10 +190,13 @@ class PlantAttentionComponentTest extends munit.FunSuite:
         urgency
       case other => fail(s"expected one inferred cadence, got $other")
 
-  private def refreshedPlantIds(result: RefreshAttentionResult): Vector[PlantId] =
+  private def refreshedCadences(result: RefreshAttentionResult) =
     result match
-      case RefreshAttentionResult.Refreshed(projection) => projection.plants.map(_.plant.id)
-      case other                                        => fail(s"expected refreshed projection, got $other")
+      case RefreshAttentionResult.Refreshed(projection) =>
+        projection.plants.map:
+          case PlantAttention(plant, WateringCadence.Inferred(_, _, _, urgency, _)) => plant.id -> urgency
+          case other                                                                => fail(s"expected inferred cadence, got $other")
+      case other => fail(s"expected refreshed projection, got $other")
 
   private def assertUnavailable(result: RefreshAttentionResult): Unit =
     result match
