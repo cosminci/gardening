@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { PesticideCatalog, PesticideCatalogEditor } from "../../src/app/PesticideCatalog";
+import { PesticideEditor } from "../../src/app/PesticideEditor";
 import { nomenclatureInfo, nomenclatureName, pesticideId } from "../../src/domain/Journal";
 
 const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
@@ -13,32 +13,7 @@ const neem = {
   },
 };
 
-describe("PesticideCatalog", () => {
-  it("should list pesticides read-only and request nested editors", () => {
-    const onAdd = vi.fn();
-    const onEdit = vi.fn();
-    const onClose = vi.fn();
-    render(() => (
-      <PesticideCatalog pesticides={[neem]} onAdd={onAdd} onEdit={onEdit} onClose={onClose} />
-    ));
-
-    const table = screen.getByRole("table", { name: "Pesticides" });
-    expect(within(table).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Type" })).toBeInTheDocument();
-    expect(within(table).getByText("Insecticide")).toBeInTheDocument();
-    expect(within(table).getByText(/Dilute before use/)).toHaveTextContent(
-      "Dilute before use. Apply weekly.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Edit Neem oil" }));
-    expect(onEdit).toHaveBeenCalledWith(neem);
-    fireEvent.click(screen.getByRole("button", { name: "Add pesticide" }));
-    expect(onAdd).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse pesticide catalog" }));
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-});
-
-describe("PesticideCatalogEditor", () => {
+describe("PesticideEditor", () => {
   it("should add a pesticide through constrained and multiline fields", async () => {
     const onAdd = vi
       .fn()
@@ -46,7 +21,7 @@ describe("PesticideCatalogEditor", () => {
       .mockResolvedValueOnce({ kind: "added", entry: neem });
     const onClose = vi.fn();
     render(() => (
-      <PesticideCatalogEditor
+      <PesticideEditor
         pesticide={undefined}
         onAdd={onAdd}
         onEdit={() => Promise.resolve({ kind: "edited", entry: neem })}
@@ -54,6 +29,8 @@ describe("PesticideCatalogEditor", () => {
       />
     ));
 
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Add pesticide" })).toBeInTheDocument();
     const form = screen.getByRole("form", { name: "Add pesticide" });
     fireEvent.submit(form);
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a pesticide name.");
@@ -92,7 +69,7 @@ describe("PesticideCatalogEditor", () => {
       .mockResolvedValueOnce({ kind: "edited", entry: neem });
     const onClose = vi.fn();
     render(() => (
-      <PesticideCatalogEditor
+      <PesticideEditor
         pesticide={neem}
         onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
         onEdit={onEdit}
@@ -133,7 +110,7 @@ describe("PesticideCatalogEditor", () => {
   it("should collapse without saving", () => {
     const onClose = vi.fn();
     render(() => (
-      <PesticideCatalogEditor
+      <PesticideEditor
         pesticide={neem}
         onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
         onEdit={() => Promise.resolve({ kind: "edited", entry: neem })}

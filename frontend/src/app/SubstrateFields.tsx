@@ -1,7 +1,12 @@
 import { For, Index, Show } from "solid-js";
 import type { Component } from "solid-js";
 import type { SubstrateComponent, SubstrateComponentId } from "../domain/Journal";
+import { InfoControl } from "./InfoControl";
 import { substrateComponentLabel } from "./JournalLabels";
+import {
+  addSubstrateComponentControlId,
+  editSubstrateComponentControlId,
+} from "./OperationControlIds";
 
 export interface SubstratePartInput {
   readonly component: SubstrateComponentId;
@@ -12,7 +17,8 @@ interface SubstrateFieldsProps {
   readonly parts: readonly SubstratePartInput[];
   readonly components: readonly SubstrateComponent[];
   readonly onChange: (parts: SubstratePartInput[]) => void;
-  readonly onManageComponents: () => void;
+  readonly onAddComponent: () => void;
+  readonly onEditComponent: (component: SubstrateComponent, returnFocusId: string) => void;
 }
 
 export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
@@ -36,56 +42,48 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
         {(part, index) => (
           <div class="substrate-row">
             <div class="substrate-component">
-              <label class="field">
-                <span>Component</span>
-                <select
-                  aria-label={`Component ${String(index + 1)}`}
-                  value={part().component}
-                  onChange={(event) => {
-                    updatePart(index, {
-                      component: event.currentTarget.value as SubstrateComponentId,
-                    });
-                  }}
-                >
-                  <For each={props.components}>
-                    {(component) => (
-                      <option value={component.id}>
-                        {substrateComponentLabel(component.id, props.components)}
-                      </option>
-                    )}
-                  </For>
-                </select>
-              </label>
+              <select
+                aria-label={`Component ${String(index + 1)}`}
+                value={part().component}
+                onChange={(event) => {
+                  updatePart(index, {
+                    component: event.currentTarget.value as SubstrateComponentId,
+                  });
+                }}
+              >
+                <For each={props.components}>
+                  {(component) => (
+                    <option value={component.id}>
+                      {substrateComponentLabel(component.id, props.components)}
+                    </option>
+                  )}
+                </For>
+              </select>
               <Show when={selectedComponent(part().component)}>
-                {(component) => (
-                  <span class="info-control">
-                    <button
-                      class="info-control__trigger"
-                      type="button"
-                      aria-label={`Information about ${component().data.name}`}
-                      aria-describedby={`substrate-info-${String(index)}-${component().id}`}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          event.stopPropagation();
-                          event.currentTarget.blur();
-                        }
-                      }}
-                    >
-                      i
-                    </button>
-                    <span
-                      id={`substrate-info-${String(index)}-${component().id}`}
-                      class="info-control__content"
-                      role="tooltip"
-                    >
-                      {component().data.maybeInfo ?? "No notes."}
-                    </span>
-                  </span>
-                )}
+                {(component) => {
+                  const editControlId = editSubstrateComponentControlId(index, component().id);
+                  return (
+                    <>
+                      <InfoControl
+                        id={`substrate-info-${String(index)}-${component().id}`}
+                        label={`Information about ${component().data.name}`}
+                        notes={component().data.maybeInfo}
+                      />
+                      <button
+                        id={editControlId}
+                        class="inline-icon-action inline-icon-action--edit"
+                        type="button"
+                        aria-label={`Edit ${component().data.name}`}
+                        onClick={() => {
+                          props.onEditComponent(component(), editControlId);
+                        }}
+                      />
+                    </>
+                  );
+                }}
               </Show>
             </div>
-            <label class="field field--share">
-              <span>Share</span>
+            <div class="percentage-input">
               <input
                 aria-label={`Component ${String(index + 1)} share`}
                 type="number"
@@ -97,7 +95,8 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
                   updatePart(index, { share: event.currentTarget.valueAsNumber });
                 }}
               />
-            </label>
+              <span aria-hidden="true">%</span>
+            </div>
             <button
               class="icon-action"
               type="button"
@@ -113,11 +112,11 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           </div>
         )}
       </Index>
-      <div class="field-group__actions">
+      <div class="field-group__actions catalog-actions">
         <button
-          class="secondary-action add-component"
+          class="compact-action"
           type="button"
-          aria-label="Add component"
+          aria-label="Extend mix"
           disabled={availableComponent() === undefined}
           onClick={() => {
             const component = availableComponent();
@@ -125,17 +124,17 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
               props.onChange([...props.parts, { component: component.id, share: 1 }]);
           }}
         >
-          + Add component
+          Extend mix
         </button>
         <button
-          id="manage-substrate-components"
-          class="compact-action"
+          id={addSubstrateComponentControlId}
+          class="compact-action catalog-action--define"
           type="button"
           onClick={() => {
-            props.onManageComponents();
+            props.onAddComponent();
           }}
         >
-          Manage
+          Define new component
         </button>
       </div>
     </fieldset>

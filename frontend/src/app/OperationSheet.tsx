@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type {
   CatalogAddResult,
@@ -13,11 +13,16 @@ import type {
   SubstrateComponentData,
   SubstrateComponentId,
 } from "../domain/Journal";
-import { editOperationControlId, logOperationControlId } from "./OperationControlIds";
+import {
+  addPesticideControlId,
+  addSubstrateComponentControlId,
+  editOperationControlId,
+  editPesticideControlId,
+  logOperationControlId,
+} from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
-import { PesticideCatalog, PesticideCatalogEditor } from "./PesticideCatalog";
-import { SubstrateCatalog, SubstrateCatalogEditor } from "./SubstrateCatalog";
-import "./catalog-form.css";
+import { PesticideEditor } from "./PesticideEditor";
+import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
 
 export type OperationTarget =
@@ -50,54 +55,78 @@ interface OperationSheetProps {
   readonly onCancel: () => void;
 }
 
-type CatalogEditor =
-  | { readonly kind: "substrate"; readonly component: SubstrateComponent | undefined }
-  | { readonly kind: "pesticide"; readonly pesticide: Pesticide | undefined };
+type NomenclatureEditor =
+  | {
+      readonly kind: "substrate";
+      readonly component: SubstrateComponent | undefined;
+      readonly returnFocusId: string;
+    }
+  | {
+      readonly kind: "pesticide";
+      readonly pesticide: Pesticide | undefined;
+      readonly returnFocusId: string;
+    };
+
+type Sheet = "editor" | "operation";
+
+const sheetTransitionMilliseconds = 180;
 
 export const OperationSheet: Component<OperationSheetProps> = (props) => {
   let dialog!: HTMLElement;
-  const [catalog, setCatalog] = createSignal<"substrate" | "pesticide">();
-  const [editor, setEditor] = createSignal<CatalogEditor>();
+  const [editor, setEditor] = createSignal<NomenclatureEditor>();
+  const [closingSheet, setClosingSheet] = createSignal<Sheet>();
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
 
-  const closeCatalog = () => {
-    const controlId =
-      catalog() === "substrate" ? "manage-substrate-components" : "manage-pesticides";
-    setEditor(undefined);
-    setCatalog(undefined);
+  const waitForSheetTransition = () =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, sheetTransitionMilliseconds);
+    });
+
+  const restoreFocus = (controlId: string) => {
     queueMicrotask(() => {
       document.getElementById(controlId)?.focus();
     });
   };
 
-  const closeEditor = (current: CatalogEditor) => {
-    const controlId =
-      current.kind === "substrate"
-        ? current.component === undefined
-          ? "add-substrate-component"
-          : `edit-substrate-component-${current.component.id}`
-        : current.pesticide === undefined
-          ? "add-pesticide"
-          : `edit-pesticide-${current.pesticide.id}`;
-    setEditor(undefined);
-    queueMicrotask(() => {
-      document.getElementById(controlId)?.focus();
-    });
+  const closeSheets = async (target: Sheet, currentEditor = editor()) => {
+    if (closingSheet() !== undefined) return;
+
+    if (currentEditor !== undefined) {
+      setClosingSheet("editor");
+      await waitForSheetTransition();
+      setEditor(undefined);
+      if (target === "editor") {
+        setClosingSheet(undefined);
+        restoreFocus(currentEditor.returnFocusId);
+        return;
+      }
+    }
+
+    setClosingSheet("operation");
+    await waitForSheetTransition();
+    props.onCancel();
+  };
+
+  const closeEditor = (current: NomenclatureEditor) => {
+    void closeSheets("editor", current);
+  };
+
+  const closeOperation = () => {
+    void closeSheets("operation");
   };
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
     const currentEditor = editor();
     if (currentEditor !== undefined) closeEditor(currentEditor);
-    else if (catalog() === undefined) props.onCancel();
-    else closeCatalog();
+    else closeOperation();
   };
 
-  const editorContent = (current: CatalogEditor) =>
+  const editorContent = (current: NomenclatureEditor) =>
     current.kind === "substrate" ? (
-      <SubstrateCatalogEditor
+      <SubstrateComponentEditor
         component={current.component}
         onAdd={props.onAddSubstrateComponent}
         onEdit={props.onEditSubstrateComponent}
@@ -106,7 +135,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
         }}
       />
     ) : (
-      <PesticideCatalogEditor
+      <PesticideEditor
         pesticide={current.pesticide}
         onAdd={props.onAddPesticide}
         onEdit={props.onEditPesticide}
@@ -136,8 +165,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     <div
       class="sheet-layer"
       classList={{
-        "sheet-layer--managing": catalog() !== undefined,
-        "sheet-layer--editing-catalog": editor() !== undefined,
+        "sheet-layer--editing": editor() !== undefined && closingSheet() !== "editor",
       }}
     >
       <div class="sheet-layer__scrim" aria-hidden="true" />
@@ -145,9 +173,11 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
         ref={(element) => {
           dialog = element;
         }}
-        class="sheet sheet--operation"
+        class="sheet sheet--operation sheet--entering"
+        classList={{ "sheet--closing": closingSheet() === "operation" }}
+        inert={closingSheet() === "operation"}
         aria-label="Operation editor"
-        aria-modal={catalog() === undefined ? "true" : undefined}
+        aria-modal={editor() === undefined ? "true" : undefined}
         role="dialog"
         tabIndex="-1"
       >
@@ -156,14 +186,32 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           onSubmit={props.onSubmit}
-          inactive={catalog() !== undefined}
-          onManageSubstrateComponents={() => {
-            setCatalog("substrate");
+          inactive={editor() !== undefined}
+          onAddSubstrateComponent={() => {
+            setEditor({
+              kind: "substrate",
+              component: undefined,
+              returnFocusId: addSubstrateComponentControlId,
+            });
           }}
-          onManagePesticides={() => {
-            setCatalog("pesticide");
+          onEditSubstrateComponent={(component, controlId) => {
+            setEditor({ kind: "substrate", component, returnFocusId: controlId });
           }}
-          onCancel={props.onCancel}
+          onAddPesticide={() => {
+            setEditor({
+              kind: "pesticide",
+              pesticide: undefined,
+              returnFocusId: addPesticideControlId,
+            });
+          }}
+          onEditPesticide={(pesticide) => {
+            setEditor({
+              kind: "pesticide",
+              pesticide,
+              returnFocusId: editPesticideControlId(pesticide.id),
+            });
+          }}
+          onCancel={closeOperation}
         />
         <Show when={props.saveError}>
           {(message) => (
@@ -173,47 +221,12 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           )}
         </Show>
       </aside>
-      <Show when={catalog()}>
-        <aside
-          class="sheet sheet--catalog"
-          aria-label={catalog() === "substrate" ? "Substrate catalog" : "Pesticide catalog"}
-          aria-modal={editor() === undefined ? "true" : undefined}
-          role="dialog"
-        >
-          <Switch>
-            <Match when={catalog() === "substrate"}>
-              <SubstrateCatalog
-                components={props.substrateComponents}
-                inactive={editor() !== undefined}
-                onAdd={() => {
-                  setEditor({ kind: "substrate", component: undefined });
-                }}
-                onEdit={(component) => {
-                  setEditor({ kind: "substrate", component });
-                }}
-                onClose={closeCatalog}
-              />
-            </Match>
-            <Match when={catalog() === "pesticide"}>
-              <PesticideCatalog
-                pesticides={props.pesticides}
-                inactive={editor() !== undefined}
-                onAdd={() => {
-                  setEditor({ kind: "pesticide", pesticide: undefined });
-                }}
-                onEdit={(pesticide) => {
-                  setEditor({ kind: "pesticide", pesticide });
-                }}
-                onClose={closeCatalog}
-              />
-            </Match>
-          </Switch>
-        </aside>
-      </Show>
       <Show keyed when={editor()}>
         {(current) => (
           <aside
-            class="sheet sheet--catalog-editor"
+            class="sheet sheet--nomenclature-editor"
+            classList={{ "sheet--closing": closingSheet() === "editor" }}
+            inert={closingSheet() === "editor"}
             aria-label={
               current.kind === "substrate" ? "Substrate component editor" : "Pesticide editor"
             }

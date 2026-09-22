@@ -2,7 +2,9 @@ import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
 import type { ActionType, MoistureLevel, Pesticide, PesticideId } from "../domain/Journal";
 import { actionTypes, moistureLevels } from "../domain/Journal";
+import { InfoControl } from "./InfoControl";
 import { actionLabels, moistureLabels, pesticideTypeLabels } from "./JournalLabels";
+import { addPesticideControlId, editPesticideControlId } from "./OperationControlIds";
 
 interface CareFieldsProps {
   readonly actions: ReadonlySet<ActionType>;
@@ -12,7 +14,8 @@ interface CareFieldsProps {
   readonly onActionChange: (action: ActionType, checked: boolean) => void;
   readonly onMoistureChange: (moisture: MoistureLevel) => void;
   readonly onPesticideChange: (pesticide: PesticideId, checked: boolean) => void;
-  readonly onManagePesticides: () => void;
+  readonly onAddPesticide: () => void;
+  readonly onEditPesticide: (pesticide: Pesticide) => void;
 }
 
 const selectableActions: readonly ActionType[] = [
@@ -41,65 +44,6 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         </For>
       </div>
     </fieldset>
-    <Show when={props.actions.has("pesticide")}>
-      <fieldset class="field-group">
-        <legend>Pesticides</legend>
-        <div class="choice-grid">
-          <For each={props.pesticides}>
-            {(pesticide) => (
-              <div class="choice-with-info">
-                <label class="choice">
-                  <input
-                    type="checkbox"
-                    checked={props.selectedPesticides.has(pesticide.id)}
-                    onChange={(event) => {
-                      props.onPesticideChange(pesticide.id, event.currentTarget.checked);
-                    }}
-                  />
-                  <span>{pesticide.data.name}</span>
-                </label>
-                <span class="info-control">
-                  <button
-                    class="info-control__trigger"
-                    type="button"
-                    aria-label={`Information about ${pesticide.data.name}`}
-                    aria-describedby={`pesticide-info-${pesticide.id}`}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.stopPropagation();
-                        event.currentTarget.blur();
-                      }
-                    }}
-                  >
-                    i
-                  </button>
-                  <span
-                    id={`pesticide-info-${pesticide.id}`}
-                    class="info-control__content"
-                    role="tooltip"
-                  >
-                    <strong>{pesticideTypeLabels[pesticide.data.pesticideType]}</strong>{" "}
-                    {pesticide.data.maybeInfo ?? "No notes."}
-                  </span>
-                </span>
-              </div>
-            )}
-          </For>
-        </div>
-        <div class="field-group__actions">
-          <button
-            id="manage-pesticides"
-            class="compact-action"
-            type="button"
-            onClick={() => {
-              props.onManagePesticides();
-            }}
-          >
-            Manage
-          </button>
-        </div>
-      </fieldset>
-    </Show>
     <label class="field">
       <span>Moisture reading</span>
       <select
@@ -114,5 +58,62 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         </For>
       </select>
     </label>
+    <Show when={props.actions.has("pesticide")}>
+      <fieldset class="field-group">
+        <legend>Pesticides</legend>
+        <div class="choice-grid">
+          <For each={props.pesticides}>
+            {(pesticide) => (
+              <div class="pesticide-choice">
+                <span
+                  class={`pesticide-type pesticide-type--${pesticide.data.pesticideType}`}
+                  role="img"
+                  aria-label={pesticideTypeLabels[pesticide.data.pesticideType]}
+                  title={pesticideTypeLabels[pesticide.data.pesticideType]}
+                >
+                  {pesticideTypeLabels[pesticide.data.pesticideType].slice(0, 1)}
+                </span>
+                <label class="choice">
+                  <input
+                    type="checkbox"
+                    checked={props.selectedPesticides.has(pesticide.id)}
+                    onChange={(event) => {
+                      props.onPesticideChange(pesticide.id, event.currentTarget.checked);
+                    }}
+                  />
+                  <span>{pesticide.data.name}</span>
+                </label>
+                <InfoControl
+                  id={`pesticide-info-${pesticide.id}`}
+                  label={`Information about ${pesticide.data.name}`}
+                  notes={pesticide.data.maybeInfo}
+                />
+                <button
+                  id={editPesticideControlId(pesticide.id)}
+                  class="inline-icon-action inline-icon-action--edit"
+                  type="button"
+                  aria-label={`Edit ${pesticide.data.name}`}
+                  onClick={() => {
+                    props.onEditPesticide(pesticide);
+                  }}
+                />
+              </div>
+            )}
+          </For>
+        </div>
+        <div class="field-group__actions catalog-actions">
+          <button
+            id={addPesticideControlId}
+            class="compact-action catalog-action--define"
+            type="button"
+            onClick={() => {
+              props.onAddPesticide();
+            }}
+          >
+            Define new pesticide
+          </button>
+        </div>
+      </fieldset>
+    </Show>
   </>
 );

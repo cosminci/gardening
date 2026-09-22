@@ -1,18 +1,6 @@
-.operation-form {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 1.15rem;
-  min-height: 100%;
-  padding: 2rem;
-}
+@import "./form-fields.css";
 
-.operation-form__body {
-  display: grid;
-  align-content: start;
-  gap: 1.15rem;
-}
-
-.operation-form__header {
+.nomenclature-editor__header {
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -21,29 +9,46 @@
   border-bottom: 1px solid var(--line);
 }
 
-.operation-form__header h2 {
+.nomenclature-editor__header h2 {
   margin: 0;
   font-size: 2rem;
   letter-spacing: -0.025em;
 }
 
-.operation-form [role="alert"] {
+.nomenclature-editor {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  min-height: 100%;
+  padding: 2rem;
+}
+
+.nomenclature-editor__form {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.nomenclature-editor textarea {
+  min-height: 14rem;
+}
+
+.nomenclature-editor [role="alert"] {
   margin: 0;
   color: var(--danger);
   font-size: 0.78rem;
 }
 
-.operation-form__actions {
+.nomenclature-editor__actions {
   display: flex;
   justify-content: center;
-  gap: 0.6rem;
   margin-top: auto;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
 }
 
 @media (max-width: 28rem) {
-  .operation-form {
+  .nomenclature-editor {
     padding: 1.25rem;
   }
 }

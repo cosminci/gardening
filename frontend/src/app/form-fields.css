@@ -68,11 +68,60 @@ select:disabled {
   position: relative;
 }
 
-.choice-with-info {
+.pesticide-choice {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2rem;
+  grid-template-columns: 1.65rem minmax(0, 1fr) repeat(2, 1.65rem);
   align-items: center;
   gap: 0.35rem;
+}
+
+.pesticide-type {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.pesticide-type--fungicide {
+  background: #39795e;
+}
+
+.pesticide-type--insecticide {
+  background: #a85824;
+}
+
+.pesticide-type--treatment {
+  background: #6f61a8;
+}
+
+.inline-icon-action {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--leaf);
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.inline-icon-action:hover,
+.inline-icon-action:focus-visible {
+  border-color: var(--leaf);
+  background: var(--sage);
+}
+
+.inline-icon-action--edit::before {
+  content: "\1f527";
+  font-size: 0.72rem;
+  line-height: 1;
 }
 
 .choice input {
@@ -104,89 +153,66 @@ select:disabled {
   outline-offset: 2px;
 }
 
-.info-control {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-}
-
-.info-control__trigger {
-  display: grid;
-  width: 1.65rem;
-  height: 1.65rem;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  color: var(--leaf);
-  background: #fff;
-  font-family: Georgia, serif;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.info-control__trigger:hover,
-.info-control__trigger:focus-visible {
-  border-color: var(--leaf);
-  background: var(--sage);
-}
-
-.info-control__content {
-  position: absolute;
-  z-index: 3;
-  top: 100%;
-  right: 0;
-  width: max-content;
-  max-width: min(20rem, 78vw);
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 0.55rem;
-  visibility: hidden;
-  opacity: 0;
-  color: var(--ink);
-  background: #fff;
-  box-shadow: 0 8px 24px rgb(14 37 28 / 16%);
-  font-size: 0.75rem;
-  font-weight: 400;
-  line-height: 1.4;
-  pointer-events: auto;
-  white-space: pre-wrap;
-  transition: opacity 120ms ease;
-}
-
-.info-control:hover .info-control__content,
-.info-control:focus-within .info-control__content {
-  visibility: visible;
-  opacity: 1;
-}
-
 .substrate-row {
   display: grid;
   grid-template-columns: 1fr 5rem 2.4rem;
-  align-items: end;
+  align-items: center;
   gap: 0.5rem;
 }
 
 .substrate-component {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2rem;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 1.65rem);
+  align-items: center;
   gap: 0.35rem;
 }
 
 .substrate-component .info-control {
-  min-height: 2.7rem;
+  align-self: center;
 }
 
-.add-component {
-  font-size: 0.76rem;
+.substrate-component > .inline-icon-action {
+  align-self: center;
+}
+
+.percentage-input {
+  position: relative;
+}
+
+.percentage-input input {
+  padding-right: 1.7rem;
+}
+
+.percentage-input span {
+  position: absolute;
+  top: 50%;
+  right: 0.65rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .field-group__actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.catalog-actions {
+  flex-wrap: nowrap;
+}
+
+.catalog-action--define {
+  margin-left: auto;
+  color: #4b3700;
+  background: #f2c66d;
+  box-shadow: inset 0 0 0 1px #cc9d3d;
+}
+
+.catalog-action--define:hover {
+  background: #e7b54f;
 }
 
 @media (max-width: 28rem) {

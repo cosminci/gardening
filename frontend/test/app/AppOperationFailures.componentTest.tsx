@@ -23,7 +23,9 @@ describe("operation failures", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The operation could not be saved.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Collapse operation editor" }));
-    expect(screen.queryByRole("form", { name: "Log operation" })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("form", { name: "Log operation" })).not.toBeInTheDocument();
+    });
   });
 
   it("should report an unexpectedly rejected write", async () => {

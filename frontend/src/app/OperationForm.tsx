@@ -19,8 +19,10 @@ interface OperationFormProps {
   readonly substrateComponents: readonly SubstrateComponent[];
   readonly pesticides: readonly Pesticide[];
   readonly onSubmit: (details: OperationDetails) => Promise<void>;
-  readonly onManageSubstrateComponents: () => void;
-  readonly onManagePesticides: () => void;
+  readonly onAddSubstrateComponent: () => void;
+  readonly onEditSubstrateComponent: (component: SubstrateComponent, returnFocusId: string) => void;
+  readonly onAddPesticide: () => void;
+  readonly onEditPesticide: (pesticide: Pesticide) => void;
   readonly inactive?: boolean;
   readonly onCancel: () => void;
 }
@@ -105,11 +107,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
       onSubmit={(event) => void submit(event)}
     >
       <header class="operation-form__header">
-        <div>
-          <p class="eyebrow">{props.initial === undefined ? "New journal entry" : "Amend entry"}</p>
-          <h2>{props.initial === undefined ? "Log plant care" : "Edit operation"}</h2>
-          <p>Record what changed while the details are still fresh.</p>
-        </div>
+        <h2>{props.initial === undefined ? "Log operation" : "Edit operation"}</h2>
         <button
           class="icon-action sheet-collapse"
           type="button"
@@ -118,7 +116,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
             props.onCancel();
           }}
         >
-          <span aria-hidden="true">×</span>
+          <span class="sheet-collapse__icon" aria-hidden="true" />
         </button>
       </header>
 
@@ -143,7 +141,8 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
               parts={parts()}
               components={props.substrateComponents}
               onChange={setParts}
-              onManageComponents={props.onManageSubstrateComponents}
+              onAddComponent={props.onAddSubstrateComponent}
+              onEditComponent={props.onEditSubstrateComponent}
             />
           }
         >
@@ -155,7 +154,8 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
             onActionChange={toggleAction}
             onMoistureChange={setMoisture}
             onPesticideChange={togglePesticide}
-            onManagePesticides={props.onManagePesticides}
+            onAddPesticide={props.onAddPesticide}
+            onEditPesticide={props.onEditPesticide}
           />
         </Show>
 

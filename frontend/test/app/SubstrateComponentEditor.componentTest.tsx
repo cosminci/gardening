@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
-import { SubstrateCatalog, SubstrateCatalogEditor } from "../../src/app/SubstrateCatalog";
+import { SubstrateComponentEditor } from "../../src/app/SubstrateComponentEditor";
 import { nomenclatureInfo, nomenclatureName, substrateComponentId } from "../../src/domain/Journal";
 
 const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
@@ -12,31 +12,7 @@ const perlite = {
   },
 };
 
-describe("SubstrateCatalog", () => {
-  it("should list components read-only and request nested editors", () => {
-    const onAdd = vi.fn();
-    const onEdit = vi.fn();
-    const onClose = vi.fn();
-    render(() => (
-      <SubstrateCatalog components={[perlite]} onAdd={onAdd} onEdit={onEdit} onClose={onClose} />
-    ));
-
-    const table = screen.getByRole("table", { name: "Substrate components" });
-    expect(within(table).queryByRole("textbox")).not.toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Info" })).toBeInTheDocument();
-    expect(within(table).getByText(/Improves drainage/)).toHaveTextContent(
-      "Improves drainage. Use up to 30%.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
-    expect(onEdit).toHaveBeenCalledWith(perlite);
-    fireEvent.click(screen.getByRole("button", { name: "Add substrate component" }));
-    expect(onAdd).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse substrate catalog" }));
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-});
-
-describe("SubstrateCatalogEditor", () => {
+describe("SubstrateComponentEditor", () => {
   it("should add a component with multiline information", async () => {
     const onAdd = vi
       .fn()
@@ -44,7 +20,7 @@ describe("SubstrateCatalogEditor", () => {
       .mockResolvedValueOnce({ kind: "added", entry: perlite });
     const onClose = vi.fn();
     render(() => (
-      <SubstrateCatalogEditor
+      <SubstrateComponentEditor
         component={undefined}
         onAdd={onAdd}
         onEdit={() => Promise.resolve({ kind: "edited", entry: perlite })}
@@ -52,6 +28,8 @@ describe("SubstrateCatalogEditor", () => {
       />
     ));
 
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Add substrate component" })).toBeInTheDocument();
     const form = screen.getByRole("form", { name: "Add substrate component" });
     fireEvent.submit(form);
     expect(screen.getByRole("alert")).toHaveTextContent("Enter a component name.");
@@ -83,7 +61,7 @@ describe("SubstrateCatalogEditor", () => {
       .mockResolvedValueOnce({ kind: "edited", entry: perlite });
     const onClose = vi.fn();
     render(() => (
-      <SubstrateCatalogEditor
+      <SubstrateComponentEditor
         component={perlite}
         onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
         onEdit={onEdit}
@@ -123,7 +101,7 @@ describe("SubstrateCatalogEditor", () => {
   it("should collapse without saving", () => {
     const onClose = vi.fn();
     render(() => (
-      <SubstrateCatalogEditor
+      <SubstrateComponentEditor
         component={perlite}
         onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
         onEdit={() => Promise.resolve({ kind: "edited", entry: perlite })}

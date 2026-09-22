@@ -15,7 +15,6 @@ import { displayJournalUpdate } from "./JournalTransition";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
-import "./controls.css";
 
 interface AppProps {
   readonly journal: JournalClient;

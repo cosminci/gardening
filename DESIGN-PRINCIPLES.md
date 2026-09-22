@@ -26,6 +26,9 @@ The system reads the same at every zoom level: `main` is the most zoomed-out vie
 - **One responsibility per unit**, one reason to change.
 - **One abstraction level per method** — don't mix high-level orchestration with low-level detail in the same body. Methods stay short (roughly 7–10 lines).
 - **Most-important-first ordering, everywhere.** Public entrypoints come before private helpers; the critical parameters of a function before the incidental ones; the defining fields of a case class before the rest. Someone opening a file should meet its purpose first, not its plumbing. A file that greets the reader with private helpers is ordered backwards.
+- **Locality of Behavior over structural deduplication.** Keep behavior beside the state and UI that it governs. Similar-looking code is not sufficient reason to share an abstraction when the use cases may evolve independently.
+- **DRY applies to knowledge, not lines.** Centralize a rule, decision, or contract when independent divergence would be a bug. Allow incidental code similarity when the duplicated code represents separate knowledge or responsibilities.
+- **Every abstraction must own a real seam.** Extract an interface, component, or helper only when it names a stable responsibility and has real consumers. Do not replace local code with configuration bags, pass-through layers, or generic frameworks that merely hide differences.
 
 ## 4. Anti-Corruption Layer
 

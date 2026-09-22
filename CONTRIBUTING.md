@@ -47,6 +47,11 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 - `Either`-typed fields, vals, and params are suffixed `Result` — `editResult: Either[…, …]`.
 - Name an argument when its value does not reveal its role at the call site — for example `maybeNote = None`, `date = Instant.parse(…)`, or `share = 100`. Keep self-describing variables and value wrappers positional.
 
+## Composition and abstraction
+
+- Apply [Locality of Behavior and knowledge-based DRY](DESIGN-PRINCIPLES.md#3-fractal-design): deduplicate a rule or contract whose divergence would be a bug, not code that merely has the same shape today. Keep genuinely independent use cases local even when that means repeated lines.
+- Before extracting shared code, name the responsibility it owns and the callers that must obey the same invariant. If the extraction mainly replaces straightforward code with callbacks, options, or configuration, keep the behavior local.
+
 ## Scala composition
 
 - Trait methods return explicit result ADTs, never `Either`. Adapt those results to `Either` only inside a concrete implementation when dependent steps need composition.
