@@ -34,7 +34,7 @@ class OpenApiDocsComponentTest extends munit.FunSuite:
     val paths    = document.hcursor.downField("paths")
 
     assertEquals(responseCodes(paths, "/plants", "get"), Set("200", "default"))
-    assertEquals(responseCodes(paths, "/plants/{plantId}/operations", "get"), Set("200", "default"))
+    assertEquals(responseCodes(paths, "/plants/{plantId}/operations", "get"), Set("200", "400", "default"))
     assertEquals(responseCodes(paths, "/plants/{plantId}/operations", "post"), Set("201", "400", "default"))
     assertEquals(responseCodes(paths, "/operations/{operationId}", "put"), Set("200", "400", "404", "409", "500"))
     assertEquals(responseCodes(paths, "/substrate-components", "get"), Set("200", "default"))

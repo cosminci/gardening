@@ -4,24 +4,24 @@ import type * as Journal from "../domain/Journal";
 import { formatSubstrate, plantDisplayName } from "./JournalLabels";
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
+import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
 import "./plant-card.css";
 import "./plant-history.css";
 
 interface PlantCardProps {
   readonly plant: Journal.Plant;
-  readonly operations: readonly Journal.Operation[];
+  readonly operationPage: Journal.OperationPage;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
+  readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
+  readonly operationChange: OperationHistoryChange | undefined;
   readonly onLog: () => void;
   readonly onEdit: (operation: Journal.Operation) => void;
 }
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const name = () => plantDisplayName(props.plant);
-  const recentOperations = () =>
-    [...props.operations]
-      .sort((first, second) => Date.parse(first.date) - Date.parse(second.date))
-      .slice(-3);
+  const recentOperations = () => [...props.operationPage.operations].reverse();
 
   return (
     <article class="plant-card" aria-label={name()}>
@@ -61,6 +61,16 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
             )}
           </For>
         </ol>
+      </Show>
+      <Show when={props.operationPage.hasNextPage}>
+        <OperationHistory
+          plantId={props.plant.id}
+          substrateComponents={props.substrateComponents}
+          pesticides={props.pesticides}
+          getOperations={props.getOperations}
+          operationChange={props.operationChange}
+          onEdit={props.onEdit}
+        />
       </Show>
       <button
         id={logOperationControlId(props.plant.id)}

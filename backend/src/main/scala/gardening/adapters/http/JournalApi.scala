@@ -5,7 +5,7 @@ import gardening.domain.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.Interval
+import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
 import sttp.model.StatusCode
 import sttp.shared.Identity
 import sttp.tapir.*
@@ -26,7 +26,12 @@ object JournalApi:
     journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
 
   private val getOperationsEndpoint =
-    journalEndpoint.get.in("plants" / path[String]("plantId") / "operations").out(jsonBody[Vector[Operation]]).summary("List a plant's operations")
+    journalEndpoint.get
+      .in("plants" / path[String]("plantId") / "operations")
+      .in(query[Int]("offset").default(0).validate(Validator.min(0)))
+      .in(query[Int]("pageSize").default(3).validate(Validator.min(1).and(Validator.max(10))))
+      .out(jsonBody[OperationPage])
+      .summary("List a bounded page of plant operations")
 
   private val logOperationEndpoint =
     journalEndpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[OperationDetails])
@@ -76,10 +81,15 @@ object JournalApi:
           case GetPlantsResult.Read(plants)  => plants.asRight
           case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
-      getOperationsEndpoint.handle: plantId =>
-        journal.getOperations(PlantId(plantId)) match
-          case GetOperationsResult.Read(operations) => operations.asRight
-          case GetOperationsResult.ReadFailed(_)    =>
+      getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
+        // Tapir validates both query parameters before invoking this handler.
+        val window = OperationWindow(
+          offset.refineUnsafe[GreaterEqual[0]],
+          pageSize.refineUnsafe[Interval.Closed[1, 10]]
+        )
+        journal.getOperations(PlantId(plantId), window) match
+          case GetOperationsResult.Read(page)    => page.asRight
+          case GetOperationsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       logOperationEndpoint.handle: (plantId, details) =>
         journal.logOperation(PlantId(plantId), details) match
@@ -213,6 +223,9 @@ object JournalApi:
     .derived[OperationDetails.Repot]
     .modify(_.substrate)(_.copy(isOptional = false))
     .modify(_.maybeNote)(_.copy(isOptional = false).nullable)
+  private given Schema[OperationPage] = Schema
+    .derived[OperationPage]
+    .modify(_.operations)(_.copy(isOptional = false))
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
   private given Schema[PesticideData] = Schema.derived[PesticideData]

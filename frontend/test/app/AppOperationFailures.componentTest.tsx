@@ -2,7 +2,7 @@ import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import { operationId } from "../../src/domain/Journal";
-import { buildJournal, ficus } from "./JournalTestSupport";
+import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
@@ -11,7 +11,7 @@ Vitest.describe("operation failures", () => {
     const reason = new Error("private details");
     const journal = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "loggingFailed", reason },
     });
     Testing.render(() => <App journal={journal} />);
@@ -38,7 +38,7 @@ Vitest.describe("operation failures", () => {
     const journal = {
       ...buildJournal({
         getPlantsResult: { kind: "read", plants: [ficus()] },
-        getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+        getOperationsByPlantId: { p1: [operationsPage()] },
       }),
       logOperation: () => Promise.reject(new Error("private details")),
     };
@@ -57,7 +57,7 @@ Vitest.describe("operation failures", () => {
   Vitest.it("should report when the journal cannot refresh after saving", async () => {
     const base = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });
     let plantReads = 0;
@@ -96,7 +96,7 @@ Vitest.describe("operation failures", () => {
     );
     const base = buildJournal({
       getPlantsResult: { kind: "read", plants: [ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [operationsPage()] },
     });
     let plantReads = 0;
     const journal = {

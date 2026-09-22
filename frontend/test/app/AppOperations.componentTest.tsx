@@ -23,18 +23,15 @@ Vitest.describe("changing the journal", () => {
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
         p1: [
-          { kind: "read", operations: [] },
-          {
-            kind: "read",
-            operations: [
-              JournalFixtures.care({
-                id: "new",
-                date: "2026-05-05T00:00:00Z",
-                moisture: "wet",
-                maybeNote: "Recovered",
-              }),
-            ],
-          },
+          JournalFixtures.operationsPage(),
+          JournalFixtures.operationsPage([
+            JournalFixtures.care({
+              id: "new",
+              date: "2026-05-05T00:00:00Z",
+              moisture: "wet",
+              maybeNote: "Recovered",
+            }),
+          ]),
         ],
       },
       logOperationResult: { kind: "logged", id: Journal.operationId("new") },
@@ -86,10 +83,7 @@ Vitest.describe("changing the journal", () => {
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
       getOperationsByPlantId: {
-        p1: [
-          { kind: "read", operations: [existing] },
-          { kind: "read", operations: [updated] },
-        ],
+        p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([updated])],
       },
       editOperationResult: { kind: "edited", operation: updated },
       edited,
@@ -133,7 +127,7 @@ Vitest.describe("changing the journal", () => {
   Vitest.it("should close the operation editor with Escape", async () => {
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const { container } = Testing.render(() => <App journal={journal} />);
     const current = Testing.within(container);
@@ -172,7 +166,7 @@ Vitest.describe("changing the journal", () => {
     const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
       componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
       addedComponents,
@@ -267,7 +261,7 @@ Vitest.describe("changing the journal", () => {
     });
     const journal = JournalFixtures.buildJournal({
       getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
-      getOperationsByPlantId: { p1: [{ kind: "read", operations: [existingOperation] }] },
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
       pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
       pesticideEditResult: { kind: "edited", entry: { id: neemId, data: editedPesticide } },

@@ -1,8 +1,9 @@
-import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
+import { Index, Match, Show, Switch, createSignal, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
+import type { OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
@@ -13,7 +14,7 @@ interface AppProps {
 
 interface PlantHistory {
   readonly plant: Journal.Plant;
-  readonly operations: readonly Journal.Operation[];
+  readonly page: Journal.OperationPage;
 }
 
 type ViewState = "loading" | "failed" | "loaded";
@@ -27,6 +28,8 @@ export const App: Component<AppProps> = (props) => {
   const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
+  const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
+  let operationRevision = 0;
 
   const loadJournal = async (animate = false) => {
     const journal = props.journal;
@@ -49,13 +52,12 @@ export const App: Component<AppProps> = (props) => {
     const results = await Promise.all(
       plantsResult.plants.map(async (plant) => ({
         plant,
-        operationsResult: await journal.getOperations(plant.id),
+        operationsResult: await journal.getOperations(plant.id, { offset: 0, size: 3 }),
       })),
     );
     const loaded: PlantHistory[] = [];
     for (const { plant, operationsResult } of results)
-      if (operationsResult.kind === "read")
-        loaded.push({ plant, operations: operationsResult.operations });
+      if (operationsResult.kind === "read") loaded.push({ plant, page: operationsResult.page });
       else {
         setView("failed");
         return;
@@ -70,6 +72,7 @@ export const App: Component<AppProps> = (props) => {
 
   const saveOperation = async (target: OperationTarget, details: Journal.OperationDetails) => {
     const setTargetError = (message: string) => formTarget() === target && setSaveError(message);
+    let editedOperation: Journal.Operation | undefined;
     try {
       if (target.kind === "log") {
         const result = await props.journal.logOperation(target.plantId, details);
@@ -89,6 +92,7 @@ export const App: Component<AppProps> = (props) => {
           );
           return;
         }
+        editedOperation = result.operation;
       }
     } catch {
       setTargetError("The operation could not be saved.");
@@ -101,6 +105,12 @@ export const App: Component<AppProps> = (props) => {
     await loadJournal(target.kind === "log").catch(() => {
       setView("failed");
     });
+    operationRevision += 1;
+    setOperationChange(
+      editedOperation === undefined
+        ? { kind: "logged", revision: operationRevision }
+        : { kind: "edited", revision: operationRevision, operation: editedOperation },
+    );
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
   };
 
@@ -157,16 +167,20 @@ export const App: Component<AppProps> = (props) => {
         </Match>
         <Match when={view() === "loaded"}>
           <section class="journal" aria-label="Plant journal">
-            <For each={histories()}>
+            <Index each={histories()}>
               {(history) => (
                 <PlantCard
-                  plant={history.plant}
-                  operations={history.operations}
+                  plant={history().plant}
+                  operationPage={history().page}
                   substrateComponents={substrateComponents()}
                   pesticides={pesticides()}
+                  getOperations={(window) =>
+                    props.journal.getOperations(history().plant.id, window)
+                  }
+                  operationChange={operationChange()}
                   onLog={() => {
                     setSaveError(undefined);
-                    setFormTarget({ kind: "log", plantId: history.plant.id });
+                    setFormTarget({ kind: "log", plantId: history().plant.id });
                   }}
                   onEdit={(operation) => {
                     setSaveError(undefined);
@@ -174,7 +188,7 @@ export const App: Component<AppProps> = (props) => {
                   }}
                 />
               )}
-            </For>
+            </Index>
           </section>
         </Match>
       </Switch>

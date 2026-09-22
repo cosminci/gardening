@@ -9,6 +9,8 @@
 }
 
 .plant-summary {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   padding: 0.95rem 1rem;
   border-right: 1px solid var(--line);
@@ -53,6 +55,8 @@
 
 .add-operation {
   display: grid;
+  grid-column: 3;
+  grid-row: 1;
   min-height: 100%;
   place-items: center;
   border: 0;

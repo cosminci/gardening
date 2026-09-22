@@ -1,16 +1,20 @@
 package gardening.domain
 
 import cats.syntax.either.*
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.autoRefine
+import io.github.iltotore.iron.constraint.numeric.GreaterEqual
 import monocle.syntax.all.*
 
 import language.experimental.captureChecking
 
 import java.util.concurrent.locks.ReentrantLock
+import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
   def getPlants: GetPlantsResult
-  def getOperations(plantId: PlantId): GetOperationsResult
+  def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
@@ -30,7 +34,8 @@ object PlantJournal:
 
     override def getPlants: GetPlantsResult = store.getPlants
 
-    override def getOperations(plantId: PlantId): GetOperationsResult = store.getOperations(plantId)
+    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
+      store.getOperations(plantId, window)
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] = store.getSubstrateComponents
 
@@ -55,7 +60,7 @@ object PlantJournal:
         case Right(_)     =>
           store.addOperation(operation) match
             case res: LogOperationResult.Logged =>
-              updatePlantAfterLogging(operation)
+              updatePlantIfOperationIsLatestRepot(operation)
                 .compensateWith(store.removeOperation(operation.id))
                 .leftMap(LogOperationResult.LoggingFailed.apply)
                 .fold(identity, _ => res)
@@ -82,15 +87,6 @@ object PlantJournal:
     private enum PlantUpdateInterruption:
       case NotLatestRepot
       case Failed(reason: Throwable)
-
-    private def updatePlantAfterLogging(operation: Operation) =
-      operation.details match
-        case _: OperationDetails.Care      => ().asRight
-        case repot: OperationDetails.Repot =>
-          for
-            plant   <- readPlant(operation.plantId)
-            updated <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
-          yield updated
 
     private def validateOperationDetails(details: OperationDetails) =
       details match
@@ -133,9 +129,18 @@ object PlantJournal:
           yield updated
 
     private def readOperations(plantId: PlantId) =
-      store.getOperations(plantId) match
-        case GetOperationsResult.Read(operations)   => operations.asRight
-        case GetOperationsResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
+      @tailrec
+      def read(window: OperationWindow, operations: Vector[Operation]): Either[PlantUpdateInterruption, Vector[Operation]] =
+        store.getOperations(plantId, window) match
+          case GetOperationsResult.Read(page) if page.hasNextPage =>
+            val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
+            read(OperationWindow(nextOffset, window.size), operations ++ page.operations)
+          case GetOperationsResult.Read(page) =>
+            (operations ++ page.operations).asRight
+          case GetOperationsResult.ReadFailed(reason) =>
+            PlantUpdateInterruption.Failed(reason).asLeft
+
+      read(OperationWindow(offset = 0, size = 10), Vector.empty)
 
     private def readPlant(plantId: PlantId) =
       store.getPlant(plantId) match
@@ -151,8 +156,10 @@ object PlantJournal:
     private def isLatestRepot(operation: Operation, others: Vector[Operation]) =
       others.forall: other =>
         other.details match
-          case _: OperationDetails.Repot => operation.date.isAfter(other.date)
-          case _                         => true
+          case _: OperationDetails.Repot =>
+            operation.date.isAfter(other.date) ||
+            operation.date.equals(other.date) && operation.id.value.compareTo(other.id.value) > 0
+          case _ => true
 
     extension (result: Either[PlantUpdateInterruption, Unit])
       private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =

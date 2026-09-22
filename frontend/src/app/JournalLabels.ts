@@ -35,6 +35,42 @@ export const pesticideLabel = (
   pesticides: readonly Journal.Pesticide[],
 ) => pesticides.find((pesticide) => pesticide.id === pesticideId)?.data.name ?? pesticideId;
 
+export const operationKindLabel = (details: Journal.OperationDetails) =>
+  details.kind === "care" ? "Care" : "Repot";
+
+export const operationDetailRows = (
+  details: Journal.OperationDetails,
+  components: readonly Journal.SubstrateComponent[],
+  pesticides: readonly Journal.Pesticide[],
+): readonly { readonly label: string; readonly value: string }[] => {
+  switch (details.kind) {
+    case "care": {
+      const actions = [...details.actions].filter((action) => action !== "noAction");
+      const rows = [
+        { label: "Moisture", value: moistureLabels[details.moisture] },
+        {
+          label: "Actions",
+          value:
+            actions.length === 0
+              ? "None recorded"
+              : actions.map((action) => actionLabels[action]).join(", "),
+        },
+      ];
+      return details.pesticides.size === 0
+        ? rows
+        : [
+            ...rows,
+            {
+              label: "Pesticides",
+              value: [...details.pesticides].map((id) => pesticideLabel(id, pesticides)).join(", "),
+            },
+          ];
+    }
+    case "repot":
+      return [{ label: "Substrate", value: formatSubstrate(details.substrate, components) }];
+  }
+};
+
 export const formatSubstrate = (
   value: Journal.Substrate,
   components: readonly Journal.SubstrateComponent[],
@@ -42,3 +78,11 @@ export const formatSubstrate = (
   value
     .map((part) => `${substrateComponentLabel(part.component, components)} ${String(part.share)}%`)
     .join(", ");
+
+export const formatLocalDate = (value: string) => {
+  const date = new Date(value);
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};

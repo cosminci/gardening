@@ -2,6 +2,7 @@ package gardening.domain
 
 import cats.syntax.option.*
 import io.github.iltotore.iron.*
+import io.github.iltotore.iron.autoRefine
 
 import language.experimental.captureChecking
 
@@ -47,6 +48,10 @@ class PlantJournalComponentTest extends munit.FunSuite:
   private val repot = OperationDetails.Repot(substrate, maybeNote = Note("repotted").some)
 
   private val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+  private val firstPage = OperationWindow(offset = 0, size = 3)
+
+  private def operationPage(operations: Operation*) =
+    GetOperationsResult.Read(OperationPage(operations.toVector, hasNextPage = false))
 
   private def buildJournal(
       store: PlantJournalStore^,
@@ -57,6 +62,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   test("should return plants and operation history while preserving read failures"):
     val readFailure = RuntimeException("store down")
+    val store       = StoreStub(getOperationsResult = operationPage(operation))
 
     assertEquals(
       buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))).getPlants,
@@ -67,11 +73,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
       GetPlantsResult.ReadFailed(readFailure)
     )
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.Read(Vector(operation)))).getOperations(PlantId("p1")),
-      GetOperationsResult.Read(Vector(operation))
+      buildJournal(store).getOperations(PlantId("p1"), firstPage),
+      operationPage(operation)
     )
+    assertEquals(store.requestedOperationWindows.get(), Vector(PlantId("p1") -> firstPage))
     assertEquals(
-      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(readFailure))).getOperations(PlantId("p1")),
+      buildJournal(StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(readFailure))).getOperations(PlantId("p1"), firstPage),
       GetOperationsResult.ReadFailed(readFailure)
     )
 
@@ -153,11 +160,23 @@ class PlantJournalComponentTest extends munit.FunSuite:
   test("should update a plant after recording the latest repot"):
     val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
-    val store        = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("must not read history")))
+    val store        = StoreStub()
 
     assertEquals(buildJournal(store).logOperation(PlantId("p1"), newRepot), LogOperationResult.Logged(OperationId("id-1")))
     assertEquals(store.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)))
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
+
+  test("should leave the plant unchanged when a recorded repot loses the ordering tie-break"):
+    val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val logged     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val store      = StoreStub(
+      getOperationsResult = operationPage(newerRepot, logged),
+      addOperationResult = LogOperationResult.Logged(logged.id)
+    )
+
+    assertEquals(buildJournal(store, idGen = () => logged.id.value).logOperation(plant.id, repot), LogOperationResult.Logged(logged.id))
+    assertEquals(store.updatedPlants.get(), Vector.empty)
+    assertEquals(store.removedOperations.get(), Vector.empty)
 
   test("should finish concurrent repot logs in timestamp order"):
     val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
@@ -195,12 +214,18 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(store.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
 
   test("should remove a recorded repot whenever its plant cannot reflect it"):
-    val readFailure   = RuntimeException("read failed")
-    val updateFailure = RuntimeException("update failed")
-    val missingPlant  = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
-    val unreadable    = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
-    val notUpdated    = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
+    val historyFailure    = RuntimeException("history failed")
+    val readFailure       = RuntimeException("read failed")
+    val updateFailure     = RuntimeException("update failed")
+    val unreadableHistory = StoreStub(getOperationsResult = GetOperationsResult.ReadFailed(historyFailure))
+    val missingPlant      = StoreStub(getPlantResult = GetPlantResult.RecordMissing)
+    val unreadable        = StoreStub(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val notUpdated        = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
+    assertEquals(
+      buildJournal(unreadableHistory).logOperation(PlantId("p1"), repot),
+      LogOperationResult.LoggingFailed(historyFailure)
+    )
     buildJournal(missingPlant).logOperation(PlantId("p1"), repot) match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
       case other                                    => fail(s"expected LoggingFailed, got $other")
@@ -215,6 +240,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       LogOperationResult.LoggingFailed(updateFailure)
     )
     assertEquals(notUpdated.removedOperations.get(), Vector(OperationId("id-1")))
+    assertEquals(unreadableHistory.removedOperations.get(), Vector(OperationId("id-1")))
 
   test("should report both failures when removing a recorded repot also fails"):
     val updateFailure = RuntimeException("update failed")
@@ -239,28 +265,44 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(store.removedOperations.get(), Vector.empty)
 
   test("should update a plant after amending the latest repot"):
-    val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
+    val existingRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val tiedRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val newSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot, existingCare)),
+      getOperationsResult = operationPage(existingRepot, tiedRepot),
       updateOperationResult = editResult
     )
 
     assertEquals(buildJournal(store).editOperation(existingRepot.id, amended), editResult)
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
+  test("should read bounded pages when checking the latest repot"):
+    val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val existingCare  = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
+    val store         = StoreStub(
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingCare), hasNextPage = true)),
+      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)).some,
+      updateOperationResult = EditOperationResult.Edited(existingRepot)
+    )
+
+    assertEquals(buildJournal(store).editOperation(existingRepot.id, repot), EditOperationResult.Edited(existingRepot))
+    assertEquals(
+      store.requestedOperationWindows.get(),
+      Vector(PlantId("p1") -> OperationWindow(0, 10), PlantId("p1") -> OperationWindow(10, 10))
+    )
+
   test("should amend an older repot without changing the plant"):
-    val olderRepot = Operation(OperationId("older"), PlantId("p1"), date, repot)
-    val newerRepot = Operation(OperationId("newer"), PlantId("p1"), date.plusNanos(1), repot)
+    val olderRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
     val amended    = OperationDetails.Repot(substrate, maybeNote = none)
     val editResult = EditOperationResult.Edited(olderRepot.copy(details = amended))
     val store      = StoreStub(
       getOperationResult = GetOperationResult.Read(olderRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(olderRepot, newerRepot)),
+      getOperationsResult = operationPage(olderRepot, newerRepot),
       updateOperationResult = editResult
     )
 
@@ -280,13 +322,13 @@ class PlantJournalComponentTest extends munit.FunSuite:
     )
     val unreadablePlant = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
+      getOperationsResult = operationPage(existingRepot),
       getPlantResult = GetPlantResult.ReadFailed(plantFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val plantNotUpdated = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
+      getOperationsResult = operationPage(existingRepot),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
     )
@@ -312,7 +354,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val cause         = RuntimeException("store down")
     val store         = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
+      getOperationsResult = operationPage(existingRepot),
       updateOperationResult = EditOperationResult.EditFailed(cause)
     )
 
@@ -325,7 +367,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val restoreFailure = RuntimeException("restore failed")
     val store          = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(Vector(existingRepot)),
+      getOperationsResult = operationPage(existingRepot),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
       restoreOperationResult = OperationCompensationResult.CompensationFailed(restoreFailure)
@@ -365,7 +407,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
   final private case class StoreStub(
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
-      getOperationsResult: GetOperationsResult = GetOperationsResult.Read(Vector.empty),
+      getOperationsResult: GetOperationsResult = operationPage(),
+      nextOperationsResult: Option[GetOperationsResult] = none,
       getOperationResult: GetOperationResult = GetOperationResult.Read(operation),
       addOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("id-1")),
       updateOperationResult: EditOperationResult = EditOperationResult.Edited(operation),
@@ -393,6 +436,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
       ),
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) extends PlantJournalStore:
+    private val operationReads                                                                    = AtomicInteger(0)
+    val requestedOperationWindows: AtomicReference[Vector[(PlantId, OperationWindow)]]            = AtomicReference(Vector.empty)
     val recordedOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
     val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]]               = new AtomicReference(Vector.empty)
     val removedOperations: AtomicReference[Vector[OperationId]]                                   = new AtomicReference(Vector.empty)
@@ -403,9 +448,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val addedPesticides: AtomicReference[Vector[Pesticide]]                                       = new AtomicReference(Vector.empty)
     val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
-    override def getPlant(id: PlantId): GetPlantResult                  = getPlantResult
-    override def getPlants: GetPlantsResult                             = getPlantsResult
-    override def getOperations(plantId: PlantId): GetOperationsResult   = getOperationsResult
+    override def getPlant(id: PlantId): GetPlantResult                                         = getPlantResult
+    override def getPlants: GetPlantsResult                                                    = getPlantsResult
+    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
+      requestedOperationWindows.updateAndGet(_ :+ (plantId -> window))
+      if operationReads.getAndIncrement().equals(0) then getOperationsResult
+      else nextOperationsResult.getOrElse(getOperationsResult)
     override def getOperation(id: OperationId): GetOperationResult      = getOperationResult
     override def addOperation(operation: Operation): LogOperationResult =
       recordedOperations.updateAndGet(_ :+ operation).pipe(_ => addOperationResult)

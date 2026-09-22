@@ -35,7 +35,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
   /plants/{plantId}/operations:
     get:
-      summary: List a plant's operations
+      summary: List a bounded page of plant operations
       operationId: getPlantsPlantidOperations
       parameters:
       - name: plantId
@@ -43,15 +43,37 @@ paths:
         required: true
         schema:
           type: string
+      - name: offset
+        in: query
+        required: false
+        schema:
+          default: 0
+          type: integer
+          format: int32
+          minimum: 0
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          default: 3
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 10
       responses:
         '200':
           description: ''
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Operation'
+                $ref: '#/components/schemas/OperationPage'
+        '400':
+          description: 'Invalid value for: query parameter offset, Invalid value for:
+            query parameter pageSize'
+          content:
+            text/plain:
+              schema:
+                type: string
         default:
           description: ''
           content:
@@ -420,6 +442,19 @@ components:
         mapping:
           care: '#/components/schemas/Care'
           repot: '#/components/schemas/Repot'
+    OperationPage:
+      title: OperationPage
+      type: object
+      required:
+      - operations
+      - hasNextPage
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Operation'
+        hasNextPage:
+          type: boolean
     Pesticide:
       title: Pesticide
       type: object

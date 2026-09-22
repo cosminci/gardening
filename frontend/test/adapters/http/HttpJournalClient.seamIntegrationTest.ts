@@ -13,66 +13,73 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
 describe("HttpJournalClient", () => {
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
-    const fetch = respondingWith([
-      jsonResponse([
-        {
-          id: "p1",
-          details: {
-            species: "Ficus lyrata",
-            nickname: "Fern",
-            location: "Balcony",
-            substrate: [
-              {
-                componentId: perliteId,
-                share: 100,
+    const requests: Request[] = [];
+    const fetch = respondingWith(
+      [
+        jsonResponse([
+          {
+            id: "p1",
+            details: {
+              species: "Ficus lyrata",
+              nickname: "Fern",
+              location: "Balcony",
+              substrate: [
+                {
+                  componentId: perliteId,
+                  share: 100,
+                },
+              ],
+              status: "active",
+            },
+          },
+          {
+            id: "p2",
+            details: {
+              species: "Monstera deliciosa",
+              nickname: null,
+              location: "Kitchen",
+              substrate: [
+                {
+                  componentId: pineBarkId,
+                  share: 40,
+                },
+              ],
+              status: "active",
+            },
+          },
+        ]),
+        jsonResponse({
+          operations: [
+            {
+              id: "o1",
+              plantId: "p1",
+              date: "2026-01-01T00:00:00Z",
+              details: {
+                kind: "care",
+                actions: ["watered", "pruned"],
+                pesticides: [pesticide],
+                moisture: "wet",
+                notes: "Recovered",
               },
-            ],
-            status: "active",
-          },
-        },
-        {
-          id: "p2",
-          details: {
-            species: "Monstera deliciosa",
-            nickname: null,
-            location: "Kitchen",
-            substrate: [
-              {
-                componentId: pineBarkId,
-                share: 40,
+            },
+            {
+              id: "o2",
+              plantId: "p1",
+              date: "2026-01-02T00:00:00Z",
+              details: {
+                kind: "care",
+                actions: [],
+                pesticides: [],
+                moisture: "noReading",
+                notes: null,
               },
-            ],
-            status: "active",
-          },
-        },
-      ]),
-      jsonResponse([
-        {
-          id: "o1",
-          plantId: "p1",
-          date: "2026-01-01T00:00:00Z",
-          details: {
-            kind: "care",
-            actions: ["watered", "pruned"],
-            pesticides: [pesticide],
-            moisture: "wet",
-            notes: "Recovered",
-          },
-        },
-        {
-          id: "o2",
-          plantId: "p1",
-          date: "2026-01-02T00:00:00Z",
-          details: {
-            kind: "care",
-            actions: [],
-            pesticides: [],
-            moisture: "noReading",
-            notes: null,
-          },
-        },
-      ]),
-    ]);
+            },
+          ],
+          hasNextPage: true,
+        }),
+      ],
+      requests,
+    );
     const journal = makeHttpJournalClient(fetch);
     const expectedPlants = [
       {
@@ -125,10 +132,13 @@ describe("HttpJournalClient", () => {
     ];
 
     await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: expectedPlants });
-    await expect(journal.getOperations(Journal.plantId("p1"))).resolves.toEqual({
+    await expect(
+      journal.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
+    ).resolves.toEqual({
       kind: "read",
-      operations: expectedOperations,
+      page: { operations: expectedOperations, hasNextPage: true },
     });
+    expect(requests[1]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
   it("should translate substrate component and pesticide catalogs", async () => {
@@ -376,7 +386,10 @@ describe("HttpJournalClient", () => {
     };
 
     await expectKind(httpFailures.getPlants(), "readFailed");
-    await expectKind(httpFailures.getOperations(Journal.plantId("p1")), "readFailed");
+    await expectKind(
+      httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
+      "readFailed",
+    );
     await expectKind(httpFailures.logOperation(Journal.plantId("p1"), details), "loggingFailed");
     await expectResult(httpFailures.editOperation(Journal.operationId("missing"), details), {
       kind: "operationMissing",
@@ -403,7 +416,10 @@ describe("HttpJournalClient", () => {
       expect(result).resolves.toEqual({ kind, reason });
 
     await expectNetworkFailure(networkFailures.getPlants(), "readFailed");
-    await expectNetworkFailure(networkFailures.getOperations(Journal.plantId("p1")), "readFailed");
+    await expectNetworkFailure(
+      networkFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
+      "readFailed",
+    );
     await expectNetworkFailure(
       networkFailures.logOperation(Journal.plantId("p1"), details),
       "loggingFailed",
