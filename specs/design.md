@@ -8,7 +8,7 @@ plant-journal keeps the household's plants, current substrates, and dated care h
 
 ## Domain model
 
-A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. The controlled Substrate-component, Moisture-level, and Action-type vocabularies are fixed and English; free text remains verbatim.
+A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. Substrate-components and Pesticides are editable nomenclatures with stable identifiers, names, and optional usage information; each Pesticide also has a Fungicide, Insecticide, or Treatment type. A Substrate records component identifiers and percentage shares, while a Care operation records selected pesticide identifiers. Moisture-levels, Action-types, and Pesticide types are fixed English vocabularies; free text remains verbatim.
 
 ```mermaid
 erDiagram
@@ -21,6 +21,7 @@ erDiagram
     SUBSTRATE_PART }o--|| SUBSTRATE_COMPONENT : selects
     CARE }o--o{ ACTION_TYPE : records
     CARE }o--|| MOISTURE_LEVEL : observes
+    CARE }o--o{ PESTICIDE : applies
 ```
 
 ## Processing rules
@@ -31,6 +32,8 @@ erDiagram
 - Editing may change only kind-specific operation details. Editing the latest repot also updates current substrate; editing an older repot does not. A failed latest-repot substrate update restores the previous operation details.
 - Log and edit workflows are serialized so their synchronization and compensation steps cannot interleave.
 - Operations cannot be deleted by users because they record care that already happened.
+- Substrate-component and pesticide catalogs can be listed, extended, and edited, but not deleted. Editing preserves the stable identifier used by existing substrates and operations.
+- The browser loads both catalogs for operation forms. Substrate-components are defined or edited beside a substrate mix; pesticides are defined or edited beside the pesticide choices. Each editor opens in an adjacent sheet without replacing the operation form.
 - The browser orders plants for display and shows each plant's three latest operations from oldest to newest. After a successful log or edit, it reloads the journal from the backend.
 
 ## Edge cases
@@ -38,6 +41,7 @@ erDiagram
 - An empty journal and an operation-list read for an unknown plant both return an empty collection.
 - A missing plant or operation in a single-record workflow is distinct from an empty collection.
 - Editing an operation as the other operation kind is rejected without changing the journal.
+- Editing a missing nomenclature is distinct from a catalog-access failure.
 - Independently malformed persisted rows are all reported together and attributed to their plant or operation identifiers.
 - Database-access failures are reported separately from stored-data corruption.
 - API failures remain explicit failures in the browser; the interface does not present stale writes as successful.
@@ -48,7 +52,9 @@ erDiagram
 - A Care operation carries no Substrate; a Repot operation always carries one.
 - An Operation's identifier, Plant, timestamp, and care-or-repot kind never change after logging.
 - When a Plant has repot operations, its current Substrate matches its latest repot after every successful log or edit.
-- Controlled-vocabulary values are English; free text is preserved verbatim.
+- Nomenclature identifiers remain stable when their editable name, information, or pesticide type changes.
+- Every Pesticide has exactly one supported Pesticide type.
+- Controlled-vocabulary values are English; nomenclature text and other free text are preserved verbatim.
 - Domain behavior depends on injected capabilities and never on HTTP, SQLite, clocks, or identifier implementations directly.
 
 ## Component architecture

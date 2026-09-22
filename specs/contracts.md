@@ -4,11 +4,11 @@
 
 ## HTTP API
 
-[`contract/openapi.yaml`](../contract/openapi.yaml) is the authoritative HTTP contract for liveness and the care journal. It is generated from the Tapir endpoints; request and response fields are not restated here.
+[`contract/openapi.yaml`](../contract/openapi.yaml) is the authoritative HTTP contract for liveness, plants, operations, substrate-components, and pesticides. The catalog endpoints list, create, and edit nomenclatures; plant substrates and care operations reference catalog entries by identifier. The contract is generated from the Tapir endpoints, so request and response fields are not restated here.
 
 ## Error responses
 
-The OpenAPI contract defines each endpoint's status codes and response bodies. Journal reads and writes surface backend failures explicitly, while operation editing additionally distinguishes a missing operation from an attempted care/repot kind change; clients must not treat any of these responses as success.
+The OpenAPI contract defines each endpoint's status codes and response bodies. Journal and catalog reads and writes surface backend failures explicitly. Operation editing additionally distinguishes a missing operation from an attempted care/repot kind change; catalog editing distinguishes a missing nomenclature. Clients must not treat any of these responses as success.
 
 ## Versioning & compatibility
 

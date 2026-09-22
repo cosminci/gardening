@@ -15,5 +15,7 @@ Domain terms for the house-plant care journal. Controlled vocabulary is presente
 | **Repot operation** | An operation recording the plant's new substrate and an optional note. The latest repot determines the plant's current substrate. |
 | **Action-type** | A fixed English category of care performed, such as watering, fertilizing, pesticide treatment, or pruning. |
 | **Moisture-level** | A fixed English observation of substrate moisture recorded with a care operation. |
+| **Nomenclature** | A user-editable catalog entry with a stable identifier, name, and optional usage information. Substrate-components and pesticides are nomenclatures. |
 | **Substrate** | A non-empty component mix describing the growing medium in which a plant currently sits. |
-| **Substrate-component** | A fixed English ingredient in a substrate mix, recorded with a percentage share. |
+| **Substrate-component** | An editable nomenclature selected into a substrate mix with a percentage share. |
+| **Pesticide** | An editable nomenclature that is a fungicide, insecticide, or treatment and may be selected by a care operation. |
