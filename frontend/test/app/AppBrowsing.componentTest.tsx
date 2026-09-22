@@ -44,10 +44,12 @@ describe("browsing the journal", () => {
       window: OperationWindow;
     }[] = [];
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: {
-        kind: "read",
-        plants: [JournalFixtures.monstera(), JournalFixtures.ficus()],
-      },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.monstera()),
+          JournalFixtures.inferredAttention(JournalFixtures.ficus(), "redAlert"),
+        ]),
+      ],
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage([operations[0]!, operations[2]!, operations[1]!], true),
@@ -79,7 +81,7 @@ describe("browsing the journal", () => {
     );
     expect(
       screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
-    ).toEqual(["Fern", "Monstera deliciosa"]);
+    ).toEqual(["Monstera deliciosa", "Fern"]);
     expect(operationWindows).toEqual([
       { plantId: "p2", window: { offset: 0, size: 3 } },
       { plantId: "p1", window: { offset: 0, size: 3 } },
@@ -106,7 +108,11 @@ describe("browsing the journal", () => {
 
   it("should identify a journal containing one active plant", async () => {
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
@@ -115,10 +121,10 @@ describe("browsing the journal", () => {
     expect(await screen.findByText("active plant")).toBeInTheDocument();
   });
 
-  it("should report a plant read failure without showing its reason", async () => {
+  it("should report an attention read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "readFailed", reason },
+      getAttentionResults: [{ kind: "readFailed", reason }],
     });
 
     render(() => <App journal={journal} />);
@@ -130,7 +136,11 @@ describe("browsing the journal", () => {
   it("should report an operation history read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
@@ -143,7 +153,7 @@ describe("browsing the journal", () => {
   it("should report an unexpected rejected request", async () => {
     const journal = {
       ...JournalFixtures.buildJournal(),
-      getPlants: () => Promise.reject(new Error("private details")),
+      getAttention: () => Promise.reject(new Error("private details")),
     };
 
     render(() => <App journal={journal} />);

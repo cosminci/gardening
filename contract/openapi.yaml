@@ -33,6 +33,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /attention:
+    get:
+      summary: Read plant attention
+      operationId: getAttention
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttentionProjectionResponse'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /plants/{plantId}/operations:
     get:
       summary: List a bounded page of plant operations
@@ -59,7 +76,7 @@ paths:
           type: integer
           format: int32
           minimum: 1
-          maximum: 10
+          maximum: 20
       responses:
         '200':
           description: ''
@@ -356,6 +373,19 @@ components:
       properties:
         message:
           type: string
+    AttentionProjectionResponse:
+      title: AttentionProjectionResponse
+      type: object
+      required:
+      - measuredAt
+      properties:
+        measuredAt:
+          type: string
+          format: date-time
+        plants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlantAttentionResponse'
     Care:
       title: Care
       type: object
@@ -501,6 +531,37 @@ components:
           type: string
         details:
           $ref: '#/components/schemas/PlantDetails'
+    PlantAttentionResponse:
+      title: PlantAttentionResponse
+      type: object
+      required:
+      - plant
+      - sampleCount
+      - cadenceAvailable
+      properties:
+        plant:
+          $ref: '#/components/schemas/Plant'
+        sampleCount:
+          type: integer
+          format: int32
+        cadenceAvailable:
+          type: boolean
+        averageInterval:
+          type:
+          - string
+          - 'null'
+        elapsed:
+          type:
+          - string
+          - 'null'
+        urgency:
+          anyOf:
+          - $ref: '#/components/schemas/UrgencyResponse'
+          - type: 'null'
+        state:
+          anyOf:
+          - $ref: '#/components/schemas/WateringState'
+          - type: 'null'
     PlantDetails:
       title: PlantDetails
       type: object
@@ -592,3 +653,26 @@ components:
           format: int32
           minimum: 1
           maximum: 100
+    UrgencyResponse:
+      title: UrgencyResponse
+      type: object
+      required:
+      - unbounded
+      properties:
+        unbounded:
+          type: boolean
+        numeratorNanos:
+          type:
+          - string
+          - 'null'
+        denominatorNanos:
+          type:
+          - string
+          - 'null'
+    WateringState:
+      title: WateringState
+      type: string
+      enum:
+      - current
+      - overdue
+      - redAlert

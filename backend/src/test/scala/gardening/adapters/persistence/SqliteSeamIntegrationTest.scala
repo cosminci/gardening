@@ -1,6 +1,7 @@
 package gardening.adapters.persistence
 
-import gardening.domain.{GetPlantsResult, PlantId}
+import gardening.domain.PlantId
+import gardening.domain.journal.GetPlantsResult
 import munit.FunSuite
 import org.flywaydb.core.Flyway
 

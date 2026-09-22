@@ -2,6 +2,8 @@ package gardening.adapters.http
 
 import cats.syntax.option.*
 import gardening.domain.*
+import gardening.domain.attention.*
+import gardening.domain.journal.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import sttp.client3.testing.SttpBackendStub
@@ -10,6 +12,7 @@ import sttp.model.{StatusCode, Uri}
 import sttp.tapir.server.stub.TapirStubInterpreter
 
 import java.time.Instant
+import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.util.chaining.*
@@ -72,7 +75,68 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   test("should reject invalid operation windows"):
     assertEquals(getOperations(buildJournal(), offset = -1, pageSize = 3).code, StatusCode.BadRequest)
     assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 0).code, StatusCode.BadRequest)
-    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 11).code, StatusCode.BadRequest)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 20).code, StatusCode.Ok)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 21).code, StatusCode.BadRequest)
+
+  test("should expose the ordered attention projection"):
+    val unknownPlant     = plant.copy(id = PlantId("unknown"))
+    val zeroAveragePlant = plant.copy(id = PlantId("zero-average"))
+    val attention        = new PlantAttentionProjection:
+      override def current: GetAttentionProjectionResult =
+        GetAttentionProjectionResult.Read(
+          AttentionProjection(
+            date,
+            Vector(
+              PlantAttention(unknownPlant, WateringCadence.Unavailable(sampleCount = 4, Some(Duration.ofHours(12)))),
+              PlantAttention(
+                plant,
+                WateringCadence.Inferred(
+                  sampleCount = 5,
+                  averageInterval = Duration.ofHours(24),
+                  elapsed = Duration.ofHours(49),
+                  urgency = Urgency.Finite(Duration.ofHours(49), Duration.ofHours(24)),
+                  state = WateringState.RedAlert
+                )
+              ),
+              PlantAttention(
+                zeroAveragePlant,
+                WateringCadence.Inferred(
+                  sampleCount = 5,
+                  averageInterval = Duration.ZERO,
+                  elapsed = Duration.ofNanos(1),
+                  urgency = Urgency.Unbounded,
+                  state = WateringState.Overdue
+                )
+              )
+            )
+          )
+        )
+
+    val response = get("/attention", buildJournal(), attention)
+    val body     = jsonBody(response)
+    val plants   = body.hcursor.downField("plants")
+
+    assertEquals(response.code, StatusCode.Ok)
+    assertEquals(body.hcursor.get[String]("measuredAt"), Right(date.toString))
+    assertEquals(plants.downN(0).downField("plant").get[String]("id"), Right("unknown"))
+    assertEquals(plants.downN(0).get[Int]("sampleCount"), Right(4))
+    assertEquals(plants.downN(0).get[Boolean]("cadenceAvailable"), Right(false))
+    assertEquals(plants.downN(0).get[String]("elapsed"), Right("PT12H"))
+    assertEquals(plants.downN(1).downField("plant").get[String]("id"), Right("p1"))
+    assertEquals(plants.downN(1).get[Boolean]("cadenceAvailable"), Right(true))
+    assertEquals(plants.downN(1).get[String]("averageInterval"), Right("PT24H"))
+    assertEquals(plants.downN(1).get[String]("elapsed"), Right("PT49H"))
+    assertEquals(plants.downN(1).downField("urgency").get[Boolean]("unbounded"), Right(false))
+    assertEquals(plants.downN(1).downField("urgency").get[String]("numeratorNanos"), Right("176400000000000"))
+    assertEquals(plants.downN(1).downField("urgency").get[String]("denominatorNanos"), Right("86400000000000"))
+    assertEquals(plants.downN(1).get[String]("state"), Right("redAlert"))
+    assertEquals(plants.downN(2).downField("plant").get[String]("id"), Right("zero-average"))
+    assertEquals(plants.downN(2).downField("urgency").get[Boolean]("unbounded"), Right(true))
+    assertEquals(plants.downN(2).downField("urgency").get[Option[String]]("numeratorNanos"), Right(None))
+
+  test("should report when attention has not been materialized"):
+    val response = getWithoutAttention("/attention", buildJournal())
+    assertResponse(response, StatusCode.ServiceUnavailable, """{"message":"plant attention is not available"}""")
 
   test("should use the recent-operation window by default"):
     val requestedWindows = AtomicReference(Vector.empty[OperationWindow])
@@ -216,8 +280,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def editOperation(body: String, journal: PlantJournal) =
     basicRequest.put(uri"http://test/operations/${repotOperation.id.value}").body(body).contentType("application/json").send(backend(journal))
 
-  private def get(path: String, journal: PlantJournal) =
-    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backend(journal))
+  private def get(path: String, journal: PlantJournal, attention: PlantAttentionProjection = unavailableAttention) =
+    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backend(journal, attention))
+
+  private def getWithoutAttention(path: String, journal: PlantJournal) =
+    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backendWithoutAttention(journal))
 
   private def post(path: String, body: String, journal: PlantJournal) =
     basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
@@ -225,8 +292,18 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def put(path: String, body: String, journal: PlantJournal) =
     basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
 
-  private def backend(journal: PlantJournal) =
-    TapirStubInterpreter(SttpBackendStub.synchronous).whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal)).backend()
+  private def backend(journal: PlantJournal, attention: PlantAttentionProjection = unavailableAttention) =
+    TapirStubInterpreter(SttpBackendStub.synchronous)
+      .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal, attention))
+      .backend()
+
+  private def backendWithoutAttention(journal: PlantJournal) =
+    TapirStubInterpreter(SttpBackendStub.synchronous)
+      .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal))
+      .backend()
+
+  private val unavailableAttention = new PlantAttentionProjection:
+    override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)

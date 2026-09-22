@@ -1,11 +1,14 @@
 package gardening.app
 
 import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
-import gardening.adapters.persistence.{Sqlite, SqliteLocation, SqlitePlantJournalStore}
-import gardening.adapters.system.{SystemClock, UuidIdGenerator}
-import gardening.domain.PlantJournal
+import gardening.adapters.persistence.SqliteLocation
 import org.flywaydb.core.Flyway
+import ox.{EitherMode, forkError, supervisedError}
+import ox.either.*
 import sttp.tapir.server.netty.sync.NettySyncServer
+
+import scala.concurrent.duration.*
+import scala.util.Using
 
 object Main:
 
@@ -16,14 +19,25 @@ object Main:
     val host      = sys.env.getOrElse("GARDENING_HOST", "0.0.0.0")
     val dbPath    = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
 
-    val connection = Sqlite.connect(SqliteLocation.File(dbPath))
-    try
-      val _         = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      val store     = SqlitePlantJournalStore.make(connection.transactor)
-      val journal   = PlantJournal.make(using store, UuidIdGenerator, SystemClock)
+    Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
+      val _         = Flyway.configure().dataSource(resources.dataSource).load().migrate()
+      val programs  = Programs.make(resources, attentionInterval = 5.minutes)
       val endpoints =
         List(HealthApi.serverEndpoint(version)) ++
-          JournalApi.serverEndpoints(using journal) ++
+          JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionProjection) ++
           List(StaticSite.endpoint(staticDir))
-      val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-    finally connection.close()
+      start(
+        http = () =>
+          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
+        ,
+        plantAttentionRefresher = programs.plantAttentionRefresher
+      ).orThrow
+
+  private[app] def start(
+      http: () => Unit,
+      plantAttentionRefresher: PeriodicAttentionRefresher
+  ): Either[Throwable, Unit] =
+    plantAttentionRefresher.refreshAttention().flatMap: _ =>
+      supervisedError(EitherMode[Throwable]()):
+        val _ = forkError(plantAttentionRefresher.refreshPeriodically())
+        Right(http())

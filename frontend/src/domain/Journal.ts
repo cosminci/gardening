@@ -7,6 +7,7 @@ export type Nickname = Brand<string, "Nickname">;
 export type Location = Brand<string, "Location">;
 export type Note = Brand<string, "Note">;
 export type Instant = Brand<string, "Instant">;
+export type Duration = Brand<string, "Duration">;
 export type Percentage = Brand<number, "Percentage">;
 export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
@@ -20,6 +21,7 @@ export const nickname = (value: string): Nickname => value as Nickname;
 export const location = (value: string): Location => value as Location;
 export const note = (value: string): Note => value as Note;
 export const instant = (value: string): Instant => value as Instant;
+export const duration = (value: string): Duration => value as Duration;
 export const percentage = (value: number): Percentage => value as Percentage;
 export const substrateComponentId = (value: string): SubstrateComponentId =>
   value as SubstrateComponentId;
@@ -81,6 +83,37 @@ export interface Plant {
   readonly details: PlantDetails;
 }
 
+export type Urgency =
+  | { readonly kind: "finite"; readonly numeratorNanos: string; readonly denominatorNanos: string }
+  | { readonly kind: "unbounded" };
+
+export type WateringState = "current" | "overdue" | "redAlert";
+
+export type WateringCadence =
+  | {
+      readonly kind: "unavailable";
+      readonly sampleCount: number;
+      readonly maybeElapsed: Duration | null;
+    }
+  | {
+      readonly kind: "inferred";
+      readonly sampleCount: number;
+      readonly averageInterval: Duration;
+      readonly elapsed: Duration;
+      readonly urgency: Urgency;
+      readonly state: WateringState;
+    };
+
+export interface PlantAttention {
+  readonly plant: Plant;
+  readonly cadence: WateringCadence;
+}
+
+export interface AttentionProjection {
+  readonly measuredAt: Instant;
+  readonly plants: readonly PlantAttention[];
+}
+
 export interface CareOperationDetails {
   readonly kind: "care";
   readonly actions: ReadonlySet<ActionType>;
@@ -118,6 +151,10 @@ export type GetPlantsResult =
   | { readonly kind: "read"; readonly plants: readonly Plant[] }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
+export type GetAttentionResult =
+  | { readonly kind: "read"; readonly projection: AttentionProjection }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
 export type GetOperationsResult =
   | { readonly kind: "read"; readonly page: OperationPage }
   | { readonly kind: "readFailed"; readonly reason: Error };
@@ -146,6 +183,7 @@ export type CatalogEditResult<A> =
   | { readonly kind: "editFailed"; readonly reason: Error };
 
 export interface JournalClient {
+  getAttention(): Promise<GetAttentionResult>;
   getPlants(): Promise<GetPlantsResult>;
   getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
   logOperation(plantId: PlantId, details: OperationDetails): Promise<LogOperationResult>;

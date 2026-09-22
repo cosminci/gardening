@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { pesticideLabel, substrateComponentLabel } from "../../src/app/JournalLabels";
 import { PlantCard } from "../../src/app/PlantCard";
 import { nomenclatureName, pesticideId, substrateComponentId } from "../../src/domain/Journal";
-import { care, ficus } from "./JournalTestSupport";
+import { care, ficus, inferredAttention, unavailableAttention } from "./JournalTestSupport";
 
 describe("plant operation controls", () => {
   it("should distinguish edit controls for same-day care operations", () => {
@@ -11,7 +11,7 @@ describe("plant operation controls", () => {
     const onEdit = vi.fn();
     render(() => (
       <PlantCard
-        plant={ficus()}
+        attention={inferredAttention(ficus())}
         operationPage={{
           operations: [
             care({ id: "o2", date: "2026-03-03T12:00:00Z", moisture: "wet" }),
@@ -48,7 +48,7 @@ describe("plant operation controls", () => {
 
   it("should show history access only when older operations exist", () => {
     const props = {
-      plant: ficus(),
+      attention: inferredAttention(ficus()),
       substrateComponents: [],
       pesticides: [],
       getOperations: () =>
@@ -81,6 +81,37 @@ describe("plant operation controls", () => {
       />
     ));
     expect(screen.getByRole("button", { name: "Show operation history" })).toBeInTheDocument();
+  });
+
+  it("should distinguish unknown, overdue, and red-alert watering states accessibly", () => {
+    const props = {
+      operationPage: { operations: [], hasNextPage: false },
+      substrateComponents: [],
+      pesticides: [],
+      getOperations: () =>
+        Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
+      onLog: () => undefined,
+      onEdit: () => undefined,
+      operationChange: undefined,
+    };
+    const { unmount: unmountUnknown } = render(() => (
+      <PlantCard {...props} attention={unavailableAttention(ficus(), 4)} />
+    ));
+    expect(screen.getByRole("status", { name: "Watering cadence unknown" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    unmountUnknown();
+
+    const { unmount: unmountOverdue } = render(() => (
+      <PlantCard {...props} attention={inferredAttention(ficus(), "overdue")} />
+    ));
+    expect(screen.getByRole("status", { name: "Watering overdue" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    unmountOverdue();
+
+    render(() => <PlantCard {...props} attention={inferredAttention(ficus(), "redAlert")} />);
+    const warning = screen.getByRole("alert", { name: "Watering red alert" });
+    expect(warning).toHaveTextContent("!");
+    expect(warning).toHaveTextContent("Watering red alert");
   });
 
   it("should identify an unrecognized persisted substrate component", () => {

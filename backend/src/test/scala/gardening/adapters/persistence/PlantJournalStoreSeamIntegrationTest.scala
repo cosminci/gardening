@@ -2,6 +2,7 @@ package gardening.adapters.persistence
 
 import cats.syntax.option.*
 import gardening.domain.*
+import gardening.domain.journal.*
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
@@ -121,6 +122,44 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       assertEquals(
         store.getOperations(PlantId("p1"), OperationWindow(offset = 4, size = 3)),
         GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+      )
+
+  test("should select waterings before applying the bounded operation window"):
+    withStore: (dataSource, store) =>
+      seedPlant(dataSource, id = "p1")
+      val plantId   = PlantId("p1")
+      val waterings = Vector.tabulate(22): index =>
+        Operation(OperationId(f"w$index%02d"), plantId, date.plusSeconds(index.toLong), care)
+      val nonWatering = Operation(
+        OperationId("care-only"),
+        plantId,
+        date.plusSeconds(30),
+        care.copy(actions = Set(ActionType.Pruned))
+      )
+      val repot = Operation(
+        OperationId("repot"),
+        plantId,
+        date.plusSeconds(31),
+        OperationDetails.Repot(substrateOf(perliteId -> 100), none)
+      )
+      (waterings :+ nonWatering :+ repot).foreach: operation =>
+        assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+
+      assertEquals(
+        store.getOperations(
+          plantId,
+          OperationSelection.Watering,
+          OperationWindow(offset = 0, size = 20)
+        ),
+        GetOperationsResult.Read(OperationPage(waterings.reverse.take(20), hasNextPage = true))
+      )
+      assertEquals(
+        store.getOperations(
+          plantId,
+          OperationSelection.Watering,
+          OperationWindow(offset = 20, size = 20)
+        ),
+        GetOperationsResult.Read(OperationPage(waterings.reverse.drop(20), hasNextPage = false))
       )
 
   test("should retain chronological operation order after migrating existing timestamps"):

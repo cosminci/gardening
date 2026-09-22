@@ -9,7 +9,7 @@ import "./plant-card.css";
 import "./plant-history.css";
 
 interface PlantCardProps {
-  readonly plant: Journal.Plant;
+  readonly attention: Journal.PlantAttention;
   readonly operationPage: Journal.OperationPage;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
@@ -20,8 +20,19 @@ interface PlantCardProps {
 }
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
-  const name = () => plantDisplayName(props.plant);
+  const plant = () => props.attention.plant;
+  const name = () => plantDisplayName(plant());
   const recentOperations = () => [...props.operationPage.operations].reverse();
+  const wateringStatus = () => {
+    const cadence = props.attention.cadence;
+    if (cadence.kind === "unavailable")
+      return { className: "unknown", label: "Watering cadence unknown", warning: false };
+    if (cadence.state === "redAlert")
+      return { className: "red-alert", label: "Watering red alert", warning: true };
+    if (cadence.state === "overdue")
+      return { className: "overdue", label: "Watering overdue", warning: false };
+    return { className: "current", label: "Watering current", warning: false };
+  };
 
   return (
     <article class="plant-card" aria-label={name()}>
@@ -29,14 +40,26 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         <div class="plant-summary">
           <header class="plant-card__header">
             <div>
-              <p class="eyebrow">{props.plant.details.location}</p>
+              <p class="eyebrow">{plant().details.location}</p>
               <h2>{name()}</h2>
-              <p class="plant-card__species">{props.plant.details.species}</p>
+              <p class="plant-card__species">{plant().details.species}</p>
             </div>
+            <p
+              class={`watering-status watering-status--${wateringStatus().className}`}
+              role={wateringStatus().warning ? "alert" : "status"}
+              aria-label={wateringStatus().label}
+            >
+              <Show when={wateringStatus().warning}>
+                <span class="watering-status__symbol" aria-hidden="true">
+                  !
+                </span>
+              </Show>
+              <span>{wateringStatus().label}</span>
+            </p>
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>
-            <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
+            <dd>{formatSubstrate(plant().details.substrate, props.substrateComponents)}</dd>
           </dl>
         </div>
         <Show
@@ -64,7 +87,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
           </ol>
         </Show>
         <button
-          id={logOperationControlId(props.plant.id)}
+          id={logOperationControlId(plant().id)}
           class="add-operation"
           type="button"
           aria-label={`Log operation for ${name()}`}
@@ -78,7 +101,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
       </div>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory
-          plantId={props.plant.id}
+          plantId={plant().id}
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           getOperations={props.getOperations}

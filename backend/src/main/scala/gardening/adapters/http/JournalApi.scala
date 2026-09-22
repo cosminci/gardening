@@ -2,6 +2,8 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
+import gardening.domain.attention.*
+import gardening.domain.journal.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -20,11 +22,26 @@ import scala.util.Try
 
 final private case class LoggedOperation(id: String) derives Codec.AsObject
 
+final private case class AttentionProjectionResponse(measuredAt: Instant, plants: Vector[PlantAttentionResponse])
+final private case class PlantAttentionResponse(
+    plant: Plant,
+    sampleCount: Int,
+    cadenceAvailable: Boolean,
+    averageInterval: Option[String],
+    elapsed: Option[String],
+    urgency: Option[UrgencyResponse],
+    state: Option[WateringState]
+)
+final private case class UrgencyResponse(unbounded: Boolean, numeratorNanos: Option[String], denominatorNanos: Option[String])
+
 object JournalApi:
 
   private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
   private val getPlantsEndpoint =
     journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
+
+  private val getAttentionEndpoint =
+    journalEndpoint.get.in("attention").out(jsonBody[AttentionProjectionResponse]).summary("Read plant attention")
 
   private val getOperationsEndpoint =
     journalEndpoint.get
@@ -64,6 +81,7 @@ object JournalApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(
       getPlantsEndpoint,
+      getAttentionEndpoint,
       getOperationsEndpoint,
       logOperationEndpoint,
       editOperationEndpoint,
@@ -76,12 +94,21 @@ object JournalApi:
     )
 
   def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
+    serverEndpoints(using journal, UnavailableAttention)
+
+  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionProjection): List[ServerEndpoint[Any, Identity]] =
     List(
       getPlantsEndpoint.handle: _ =>
         journal.getPlants match
           case GetPlantsResult.Read(plants)  => plants.asRight
           case GetPlantsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
+      getAttentionEndpoint.handle: _ =>
+        attention.current match
+          case GetAttentionProjectionResult.Read(projection) =>
+            toResponse(projection).asRight
+          case GetAttentionProjectionResult.Unavailable =>
+            (StatusCode.ServiceUnavailable, ApiError("plant attention is not available")).asLeft,
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
@@ -159,8 +186,8 @@ object JournalApi:
     .validate(Validator.min(0))
     .map(_.refineOption[GreaterEqual[0]])(value => value)
   private lazy val operationPageSizeSchema = Schema.schemaForInt
-    .validate(Validator.min(1).and(Validator.max(10)))
-    .map(_.refineOption[Interval.Closed[1, 10]])(value => value)
+    .validate(Validator.min(1).and(Validator.max(20)))
+    .map(_.refineOption[Interval.Closed[1, 20]])(value => value)
   // $COVERAGE-ON$
 
   private given TapirCodec.PlainCodec[OperationOffset] = TapirCodec.int
@@ -173,9 +200,9 @@ object JournalApi:
 
   private given TapirCodec.PlainCodec[OperationPageSize] = TapirCodec.int
     .mapDecode(value =>
-      value.refineOption[Interval.Closed[1, 10]] match
+      value.refineOption[Interval.Closed[1, 20]] match
         case Some(size) => DecodeResult.Value(size)
-        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 10"))
+        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 20"))
     )(value => value)
     .schema(operationPageSizeSchema)
 
@@ -204,7 +231,7 @@ object JournalApi:
     Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value")),
     Encoder.encodeInt.contramap(value => value)
   )
-  private type JournalEnum = ActionType | MoistureLevel | PesticideType | PlantStatus
+  private type JournalEnum = ActionType | MoistureLevel | PesticideType | PlantStatus | WateringState
   private inline given [A <: JournalEnum](using Mirror.SumOf[A]): Codec[A] = ConfiguredEnumCodec.derived
   private given Encoder[Set[ActionType]]                                   = Encoder.encodeList[ActionType].contramap(_.toList.sortBy(_.toString))
   private inline given productCodec[A](using Mirror.ProductOf[A]): Codec.AsObject[A] = ConfiguredCodec.derived
@@ -212,7 +239,49 @@ object JournalApi:
     Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).left.map(_.toString)),
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
-  private given Codec.AsObject[OperationDetails] = ConfiguredCodec.derived
+  private given Codec.AsObject[OperationDetails]            = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantDetails]                = ConfiguredCodec.derived
+  private given Codec.AsObject[Plant]                       = ConfiguredCodec.derived
+  private given Codec.AsObject[UrgencyResponse]             = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantAttentionResponse]      = ConfiguredCodec.derived
+  private given Codec.AsObject[AttentionProjectionResponse] = ConfiguredCodec.derived
+
+  private object UnavailableAttention extends PlantAttentionProjection:
+    override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
+
+  private def toResponse(projection: AttentionProjection): AttentionProjectionResponse =
+    AttentionProjectionResponse(
+      projection.measuredAt,
+      projection.plants.map(attentionResponse)
+    )
+
+  private def attentionResponse(attention: PlantAttention): PlantAttentionResponse =
+    attention.cadence match
+      case WateringCadence.Unavailable(sampleCount, maybeElapsed) =>
+        PlantAttentionResponse(attention.plant, sampleCount, false, None, maybeElapsed.map(_.toString), None, None)
+      case WateringCadence.Inferred(sampleCount, averageInterval, elapsed, urgency, state) =>
+        PlantAttentionResponse(
+          attention.plant,
+          sampleCount,
+          true,
+          Some(averageInterval.toString),
+          Some(elapsed.toString),
+          Some(urgencyResponse(urgency)),
+          Some(state)
+        )
+
+  private def urgencyResponse(urgency: Urgency): UrgencyResponse =
+    urgency match
+      case Urgency.Unbounded                        => UrgencyResponse(unbounded = true, None, None)
+      case Urgency.Finite(elapsed, averageInterval) =>
+        UrgencyResponse(
+          unbounded = false,
+          Some(durationNanos(elapsed).toString),
+          Some(durationNanos(averageInterval).toString)
+        )
+
+  private def durationNanos(duration: java.time.Duration): BigInt =
+    BigInt(duration.getSeconds) * 1_000_000_000 + duration.getNano
 
   private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo
   private given [A <: WireText]: Schema[A] = Schema.string

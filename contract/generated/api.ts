@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read plant attention */
+        get: operations["getAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plants/{plantId}/operations": {
         parameters: {
             query?: never;
@@ -156,6 +173,12 @@ export interface components {
         ApiError: {
             message: string;
         };
+        /** AttentionProjectionResponse */
+        AttentionProjectionResponse: {
+            /** Format: date-time */
+            measuredAt: string;
+            plants?: components["schemas"]["PlantAttentionResponse"][];
+        };
         /** Care */
         Care: {
             actions: components["schemas"]["ActionType"][];
@@ -219,6 +242,17 @@ export interface components {
             id: string;
             details: components["schemas"]["PlantDetails"];
         };
+        /** PlantAttentionResponse */
+        PlantAttentionResponse: {
+            plant: components["schemas"]["Plant"];
+            /** Format: int32 */
+            sampleCount: number;
+            cadenceAvailable: boolean;
+            averageInterval?: string | null;
+            elapsed?: string | null;
+            urgency?: components["schemas"]["UrgencyResponse"] | null;
+            state?: components["schemas"]["WateringState"] | null;
+        };
         /** PlantDetails */
         PlantDetails: {
             species: string;
@@ -260,6 +294,17 @@ export interface components {
             /** Format: int32 */
             share: number;
         };
+        /** UrgencyResponse */
+        UrgencyResponse: {
+            unbounded: boolean;
+            numeratorNanos?: string | null;
+            denominatorNanos?: string | null;
+        };
+        /**
+         * WateringState
+         * @enum {string}
+         */
+        WateringState: "current" | "overdue" | "redAlert";
     };
     responses: never;
     parameters: never;
@@ -303,6 +348,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Plant"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionProjectionResponse"];
                 };
             };
             default: {

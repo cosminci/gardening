@@ -5,8 +5,9 @@ import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
-import gardening.domain.EditOperationResult.*
-import gardening.domain.LogOperationResult.*
+import gardening.domain.journal.*
+import gardening.domain.journal.EditOperationResult.*
+import gardening.domain.journal.LogOperationResult.*
 import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
@@ -57,21 +58,35 @@ object SqlitePlantJournalStore:
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
 
-    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
+    override def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult =
       try
-        val rows       = connect(transactor)(selectOperationsForPlant(plantId.value, window).query[OperationRow].run())
+        val rows       = connect(transactor)(selectOperationsForPlant(plantId.value, selection, window).query[OperationRow].run())
         val operations = trust(rows.traverse(toOperation))
         GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
 
-    private def selectOperationsForPlant(plantId: String, window: OperationWindow): Frag =
+    private def selectOperationsForPlant(plantId: String, selection: OperationSelection, window: OperationWindow): Frag =
       val readSize: Int = window.size + 1
       val offset: Int   = window.offset
-      sql"""select id, plant_id, date, kind, payload
-            from operation
-            where plant_id = $plantId
-            order by date desc, id desc
-            limit $readSize offset $offset"""
+      selection match
+        case OperationSelection.All =>
+          sql"""select id, plant_id, date, kind, payload
+                from operation
+                where plant_id = $plantId
+                order by date desc, id desc
+                limit $readSize offset $offset"""
+        case OperationSelection.Watering =>
+          sql"""select id, plant_id, date, kind, payload
+                from operation
+                where plant_id = $plantId
+                  and kind = 'Care'
+                  and exists (
+                    select 1
+                    from json_each(operation.payload, '$$.actions')
+                    where value = 'Watered'
+                  )
+                order by date desc, id desc
+                limit $readSize offset $offset"""
 
     override def getOperation(id: OperationId): GetOperationResult =
       try

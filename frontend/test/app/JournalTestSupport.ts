@@ -29,6 +29,38 @@ export const monstera = (): Journal.Plant => ({
   },
 });
 
+export const unavailableAttention = (
+  plant: Journal.Plant,
+  sampleCount = 0,
+): Journal.PlantAttention => ({
+  plant,
+  cadence: { kind: "unavailable", sampleCount, maybeElapsed: null },
+});
+
+export const inferredAttention = (
+  plant: Journal.Plant,
+  state: Journal.WateringState = "current",
+): Journal.PlantAttention => ({
+  plant,
+  cadence: {
+    kind: "inferred",
+    sampleCount: 5,
+    averageInterval: Journal.duration("PT24H"),
+    elapsed: Journal.duration(
+      state === "current" ? "PT12H" : state === "overdue" ? "PT25H" : "PT49H",
+    ),
+    urgency: { kind: "finite", numeratorNanos: "1", denominatorNanos: "1" },
+    state,
+  },
+});
+
+export const attentionResult = (
+  plants: readonly Journal.PlantAttention[] = [],
+): Journal.GetAttentionResult => ({
+  kind: "read",
+  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants },
+});
+
 export const care = ({
   id,
   date,
@@ -76,6 +108,7 @@ export const operationsPage = (
 });
 
 export const buildJournal = ({
+  getAttentionResults,
   getPlantsResult = { kind: "read", plants: [] },
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
@@ -94,6 +127,7 @@ export const buildJournal = ({
   editedPesticides = [],
   operationWindows = [],
 }: {
+  getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
   getPlantsResult?: Journal.GetPlantsResult;
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
@@ -117,9 +151,21 @@ export const buildJournal = ({
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): Journal.JournalClient => {
+  const attentionResponses =
+    getAttentionResults ??
+    (getPlantsResult.kind === "read"
+      ? ([
+          attentionResult(getPlantsResult.plants.map((plant) => unavailableAttention(plant))),
+        ] as const)
+      : ([{ kind: "readFailed", reason: getPlantsResult.reason }] as const));
+  let attentionReads = 0;
   const operationReads = new Map<string, number>();
 
   return {
+    getAttention: () => {
+      const read = attentionReads++;
+      return Promise.resolve(attentionResponses[Math.min(read, attentionResponses.length - 1)]!);
+    },
     getPlants: () => Promise.resolve(getPlantsResult),
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });

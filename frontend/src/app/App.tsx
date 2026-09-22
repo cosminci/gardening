@@ -13,7 +13,7 @@ interface AppProps {
 }
 
 interface PlantHistory {
-  readonly plant: Journal.Plant;
+  readonly attention: Journal.PlantAttention;
   readonly page: Journal.OperationPage;
 }
 
@@ -32,13 +32,13 @@ export const App: Component<AppProps> = (props) => {
 
   const loadJournal = async (animate = false) => {
     const journal = props.journal;
-    const [plantsResult, componentsResult, pesticidesResult] = await Promise.all([
-      journal.getPlants(),
+    const [attentionResult, componentsResult, pesticidesResult] = await Promise.all([
+      journal.getAttention(),
       journal.getSubstrateComponents(),
       journal.getPesticides(),
     ]);
     if (
-      plantsResult.kind !== "read" ||
+      attentionResult.kind !== "read" ||
       componentsResult.kind !== "read" ||
       pesticidesResult.kind !== "read"
     ) {
@@ -49,22 +49,21 @@ export const App: Component<AppProps> = (props) => {
     setPesticides(pesticidesResult.entries);
 
     const results = await Promise.all(
-      plantsResult.plants.map(async (plant) => ({
-        plant,
-        operationsResult: await journal.getOperations(plant.id, {
+      attentionResult.projection.plants.map(async (attention) => ({
+        attention,
+        operationsResult: await journal.getOperations(attention.plant.id, {
           offset: 0,
           size: recentOperationCount,
         }),
       })),
     );
     const loaded: PlantHistory[] = [];
-    for (const { plant, operationsResult } of results)
-      if (operationsResult.kind === "read") loaded.push({ plant, page: operationsResult.page });
+    for (const { attention, operationsResult } of results)
+      if (operationsResult.kind === "read") loaded.push({ attention, page: operationsResult.page });
       else {
         setView("failed");
         return;
       }
-    loaded.sort((first, second) => name(first.plant).localeCompare(name(second.plant)));
     const display = () => {
       setHistories(loaded);
       setView("loaded");
@@ -171,17 +170,17 @@ export const App: Component<AppProps> = (props) => {
             <Index each={histories()}>
               {(history) => (
                 <PlantCard
-                  plant={history().plant}
+                  attention={history().attention}
                   operationPage={history().page}
                   substrateComponents={substrateComponents()}
                   pesticides={pesticides()}
                   getOperations={(window) =>
-                    props.journal.getOperations(history().plant.id, window)
+                    props.journal.getOperations(history().attention.plant.id, window)
                   }
                   operationChange={operationChange()}
                   onLog={() => {
                     setSaveError(undefined);
-                    setFormTarget({ kind: "log", plantId: history().plant.id });
+                    setFormTarget({ kind: "log", plantId: history().attention.plant.id });
                   }}
                   onEdit={(operation) => {
                     setSaveError(undefined);
@@ -214,5 +213,3 @@ export const App: Component<AppProps> = (props) => {
     </main>
   );
 };
-
-const name = (plant: Journal.Plant) => plant.details.maybeNickname ?? plant.details.species;

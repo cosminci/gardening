@@ -1,6 +1,7 @@
-package gardening.domain
+package gardening.domain.journal
 
 import cats.syntax.either.*
+import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.numeric.GreaterEqual
@@ -131,7 +132,7 @@ object PlantJournal:
     private def readLatestOtherRepot(operation: Operation) =
       @tailrec
       def read(window: OperationWindow): Either[PlantUpdateInterruption, Option[Operation]] =
-        store.getOperations(operation.plantId, window) match
+        store.getOperations(operation.plantId, OperationSelection.All, window) match
           case GetOperationsResult.Read(page) =>
             page.operations
               .find(other => !other.id.value.equals(operation.id.value) && isRepot(other)) match

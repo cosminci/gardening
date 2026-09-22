@@ -11,6 +11,111 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
   expect(result).resolves.toEqual(expected);
 
 describe("HttpJournalClient", () => {
+  it("should translate the attention projection into domain values", async () => {
+    const plant = (id: string) => ({
+      id,
+      details: {
+        species: "Ficus lyrata",
+        nickname: null,
+        location: "Balcony",
+        substrate: [{ componentId: perliteId, share: 100 }],
+        status: "active" as const,
+      },
+    });
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          jsonResponse({
+            measuredAt: "2026-01-10T00:00:00Z",
+            plants: [
+              {
+                plant: plant("unknown"),
+                sampleCount: 4,
+                cadenceAvailable: false,
+                averageInterval: null,
+                elapsed: null,
+                urgency: null,
+                state: null,
+              },
+              {
+                plant: plant("finite"),
+                sampleCount: 5,
+                cadenceAvailable: true,
+                averageInterval: "PT24H",
+                elapsed: "PT25H",
+                urgency: {
+                  unbounded: false,
+                  numeratorNanos: "90000000000000",
+                  denominatorNanos: "86400000000000",
+                },
+                state: "overdue",
+              },
+              {
+                plant: plant("unbounded"),
+                sampleCount: 5,
+                cadenceAvailable: true,
+                averageInterval: "PT0S",
+                elapsed: "PT1S",
+                urgency: { unbounded: true, numeratorNanos: null, denominatorNanos: null },
+                state: "redAlert",
+              },
+            ],
+          }),
+        ],
+        requests,
+      ),
+    );
+
+    await expect(journal.getAttention()).resolves.toMatchObject({
+      kind: "read",
+      projection: {
+        measuredAt: "2026-01-10T00:00:00Z",
+        plants: [
+          {
+            plant: { id: "unknown" },
+            cadence: { kind: "unavailable", sampleCount: 4, maybeElapsed: null },
+          },
+          {
+            plant: { id: "finite" },
+            cadence: {
+              kind: "inferred",
+              sampleCount: 5,
+              averageInterval: "PT24H",
+              elapsed: "PT25H",
+              urgency: {
+                kind: "finite",
+                numeratorNanos: "90000000000000",
+                denominatorNanos: "86400000000000",
+              },
+              state: "overdue",
+            },
+          },
+          {
+            plant: { id: "unbounded" },
+            cadence: {
+              kind: "inferred",
+              urgency: { kind: "unbounded" },
+              state: "redAlert",
+            },
+          },
+        ],
+      },
+    });
+    expect(new URL(requests[0]!.url).pathname).toBe("/attention");
+  });
+
+  it("should reject an incomplete attention projection", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([jsonResponse({ measuredAt: "2026-01-10T00:00:00Z" })]),
+    );
+
+    await expect(journal.getAttention()).resolves.toMatchObject({
+      kind: "readFailed",
+      reason: new Error("attention projection is missing plants"),
+    });
+  });
+
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const requests: Request[] = [];
@@ -361,6 +466,7 @@ describe("HttpJournalClient", () => {
     };
     const httpFailures = makeHttpJournalClient(
       respondingWith([
+        jsonResponse({ message: "attention unavailable" }, 503),
         jsonResponse({ message: "journal could not be read" }, 500),
         jsonResponse({ message: "journal could not be read" }, 500),
         jsonResponse("invalid body", 400),
@@ -385,6 +491,7 @@ describe("HttpJournalClient", () => {
       maybeInfo: null,
     };
 
+    await expectKind(httpFailures.getAttention(), "readFailed");
     await expectKind(httpFailures.getPlants(), "readFailed");
     await expectKind(
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
@@ -410,11 +517,12 @@ describe("HttpJournalClient", () => {
 
     const reason = new Error("offline");
     const networkFailures = makeHttpJournalClient(
-      respondingWith(new Array<Error>(10).fill(reason)),
+      respondingWith(new Array<Error>(11).fill(reason)),
     );
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
 
+    await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
     await expectNetworkFailure(networkFailures.getPlants(), "readFailed");
     await expectNetworkFailure(
       networkFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),

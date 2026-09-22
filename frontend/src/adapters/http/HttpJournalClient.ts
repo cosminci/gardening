@@ -10,6 +10,17 @@ export const makeHttpJournalClient = (
   const client = createClient<paths>({ baseUrl: globalThis.location.origin, fetch });
 
   return {
+    async getAttention(): Promise<Journal.GetAttentionResult> {
+      try {
+        const { data, error } = await client.GET("/attention");
+        return data === undefined
+          ? { kind: "readFailed", reason: requestFailure(error) }
+          : { kind: "read", projection: toAttentionProjection(data) };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
     async getPlants(): Promise<Journal.GetPlantsResult> {
       try {
         const { data, error } = await client.GET("/plants");
@@ -173,6 +184,54 @@ const toPlant = (value: Wire["Plant"]): Journal.Plant => ({
     status: value.details.status,
   },
 });
+
+const toAttentionProjection = (
+  value: Wire["AttentionProjectionResponse"],
+): Journal.AttentionProjection => {
+  return {
+    measuredAt: Journal.instant(value.measuredAt),
+    plants: required(value.plants, "attention projection is missing plants").map(toPlantAttention),
+  };
+};
+
+const toPlantAttention = (value: Wire["PlantAttentionResponse"]): Journal.PlantAttention => {
+  const elapsed = value.elapsed ?? null;
+  const maybeElapsed = elapsed === null ? null : Journal.duration(elapsed);
+  if (!value.cadenceAvailable)
+    return {
+      plant: toPlant(value.plant),
+      cadence: { kind: "unavailable", sampleCount: value.sampleCount, maybeElapsed },
+    };
+
+  return {
+    plant: toPlant(value.plant),
+    cadence: {
+      kind: "inferred",
+      sampleCount: value.sampleCount,
+      averageInterval: Journal.duration(
+        required(value.averageInterval, "inferred watering cadence is missing its average"),
+      ),
+      elapsed: required(maybeElapsed, "inferred watering cadence is missing elapsed time"),
+      urgency: toUrgency(required(value.urgency, "inferred watering cadence is missing urgency")),
+      state: required(value.state, "inferred watering cadence is missing state"),
+    },
+  };
+};
+
+const toUrgency = (value: Wire["UrgencyResponse"]): Journal.Urgency => {
+  if (value.unbounded) return { kind: "unbounded" };
+  return {
+    kind: "finite",
+    numeratorNanos: required(value.numeratorNanos, "finite urgency is missing its numerator"),
+    denominatorNanos: required(value.denominatorNanos, "finite urgency is missing its denominator"),
+  };
+};
+
+const required = <Value>(value: Value | null | undefined, message: string): Value => {
+  const present = value ?? null;
+  if (present === null) throw new Error(message);
+  return present;
+};
 
 const toOperation = (value: Wire["Operation"]): Journal.Operation => ({
   id: Journal.operationId(value.id),
