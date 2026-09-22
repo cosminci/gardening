@@ -6,10 +6,11 @@ Cross-cutting test conventions and gates live in [CONTRIBUTING.md](../CONTRIBUTI
 
 ## Service-specific strategy
 
-- Backend component tests exercise complete ports and traits through injected capabilities, including catalog identifier assignment, journal orchestration, latest-repot synchronization, compensation, accumulated failures, and serialized mutations.
-- Persistence seam-integration tests exercise the store against real SQLite with the production migrations, including initial nomenclatures, catalog list/add/edit behavior, catalog references from substrates and care operations, and deliberately malformed rows.
-- HTTP seam-integration tests run the Tapir endpoints through its stub interpreter and assert catalog and journal wire representations plus result-specific failures.
-- Frontend seam-integration tests exercise catalog and journal HTTP translation through controlled fetch responses. Component tests inject the journal client and cover the inline substrate-component and pesticide editors, their operation-form integration, side-sheet transitions, and user-visible failures.
+- Backend component tests exercise complete ports and traits through injected capabilities, including bounded operation reads, catalog identifier assignment, journal orchestration, multi-page latest-repot synchronization, compensation, accumulated failures, and serialized mutations.
+- Persistence seam-integration tests exercise the store against real SQLite with the production migrations, including page boundaries, next-page lookahead, equal and sub-second timestamp ordering, timestamp normalization during upgrade, catalog behavior, references, and deliberately malformed rows.
+- HTTP seam-integration tests run the Tapir endpoints through its stub interpreter and assert operation-window defaults and limits, catalog and journal wire representations, and result-specific failures.
+- Frontend seam-integration tests exercise catalog and journal HTTP translation through controlled fetch responses. Component tests inject the journal client and cover history disclosure, pagination, loading, empty, failure, retry, focus, stale-response handling, editing, inline nomenclature editors, and side-sheet transitions.
+- Reduced-motion behavior is declarative CSS; component tests do not execute media queries, so its media rule is verified through stylesheet review.
 - There is no separate system-integration tier. Static-file serving alone uses a loopback Netty server because the server boundary is the behavior under test.
 
 ## Fixtures & data setup

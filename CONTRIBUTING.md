@@ -40,6 +40,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 - Short, technical, concise — bullet lists over multi-sentence paragraphs.
 - Treat every word as a cost; cut hedging, filler, and restatement.
 - Never repeat a fact — state it once, in one place.
+- Integrate new lessons into the rule that owns them. Refine or replace stale guidance instead of appending a chronology of discoveries.
 
 ## Naming
 
@@ -52,6 +53,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 - Apply [Locality of Behavior and knowledge-based DRY](DESIGN-PRINCIPLES.md#3-fractal-design): deduplicate a rule or contract whose divergence would be a bug, not code that merely has the same shape today. Keep genuinely independent use cases local even when that means repeated lines.
 - Before extracting shared code, name the responsibility it owns and the callers that must obey the same invariant. If the extraction mainly replaces straightforward code with callbacks, options, or configuration, keep the behavior local.
+- An interactive component owns focus with its visual state. Expansion, collapse, success, and failure transitions leave focus on a persistent control or the rendered status; replacing a control must not drop focus to the document.
 
 ## Scala composition
 
@@ -99,7 +101,7 @@ documentation; it introduces no new product behavior.
 
 - **Backend** uses MUnit; name suites `<Component>ComponentTest`. A component is a complete port, trait, adapter, or domain abstraction—not an arbitrary method. Test behaviour through that boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port.
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)` (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real seam), and `*.systemIntegrationTest.ts(x)` (the running system).
-- Every test name starts with `should ` and describes a use case, not an implementation detail.
+- Every test name starts with `should ` and describes a use case, not an implementation detail. Inputs may force a pagination, tie, or failure path, but names and assertions stay at the tested boundary. Do not assert private traversal solely to pin a branch or satisfy coverage.
 - Prefer duplication over a shared test helper until the third repetition — a test should read top-to-bottom without indirection.
 - Coverage is enforced at 100% — as a means, not a goal (see DESIGN-PRINCIPLES.md §6). Hard-to-test code is a design signal, not a licence to hack the test or lower a threshold. The HTTP layer is tested at its seam, not excluded: logic-bearing endpoints through the tapir stub interpreter and static serving against a live server. The only file or package exclusions are composition roots that just wire already-tested parts together: the backend's (`gardening.app.*`), the frontend's (`main.tsx`), and the pipeline entrypoint (`index.ts`) with its `hooks/**` and `buildEnv.ts`. Adapters that carry logic — request mapping, error translation, persistence — are never excluded. Exclude only a genuine wiring shell; never contort a test to reach one.
 - A narrowly scoped `$COVERAGE-OFF$` / `$COVERAGE-ON$` exclusion is permitted for an unreachable branch when an adjacent comment names the domain invariant that makes it unreachable. Never exclude a reachable failure mode or the enclosing method.

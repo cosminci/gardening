@@ -4,7 +4,7 @@
 
 ## Service overview
 
-plant-journal keeps the household's plants, current substrates, and dated care history. A direct-style Scala backend owns the journal rules and persists them in SQLite; a SolidJS browser lists active plants, shows their three most recent operations, and provides operation logging and editing.
+plant-journal keeps the household's plants, current substrates, and dated care history. A direct-style Scala backend owns the journal rules and persists them in SQLite; a SolidJS browser lists active plants, shows recent and paginated historical operations, and provides operation logging and editing.
 
 ## Domain model
 
@@ -26,7 +26,7 @@ erDiagram
 
 ## Processing rules
 
-- Journal reads return active plants and a requested plant's operations. Every persisted row is validated before plant-status filtering, so malformed archived rows cannot disappear silently.
+- Journal reads return active plants and bounded windows of a requested plant's operations. Operation pages are newest-first, with identifiers breaking timestamp ties. Every persisted row is validated before plant-status filtering, so malformed archived rows cannot disappear silently.
 - Logging assigns the operation identifier and timestamp in the backend. Care logging changes only the journal; repot logging also changes the plant's current substrate.
 - A repot log succeeds only after both the operation and current substrate are persisted. If the substrate update or its prerequisite read fails, the new operation is removed; a failed compensation is reported with the original failure.
 - Editing may change only kind-specific operation details. Editing the latest repot also updates current substrate; editing an older repot does not. A failed latest-repot substrate update restores the previous operation details.
@@ -34,7 +34,9 @@ erDiagram
 - Operations cannot be deleted by users because they record care that already happened.
 - Substrate-component and pesticide catalogs can be listed, extended, and edited, but not deleted. Editing preserves the stable identifier used by existing substrates and operations.
 - The browser loads both catalogs for operation forms. Substrate-components are defined or edited beside a substrate mix; pesticides are defined or edited beside the pesticide choices. Each editor opens in an adjacent sheet without replacing the operation form.
-- The browser orders plants for display and shows each plant's three latest operations from oldest to newest. After a successful log or edit, it reloads the journal from the backend.
+- The browser orders plants for display and shows each plant's three latest operations from oldest to newest. Older operations load on demand in ten-row, newest-first pages; loading, empty, and retryable failure states remain inside the expanded history.
+- Recent and historical operations share display semantics and the same editing sheet while retaining layouts suited to cards and rows. Long values wrap, note line breaks remain visible, narrow tables scroll without losing column association, and reduced-motion preferences suppress expansion animation.
+- After a successful log, the browser reloads the journal. A historical edit refreshes its visible row without creating a separate editing path.
 
 ## Edge cases
 
@@ -51,6 +53,7 @@ erDiagram
 - Every Substrate is non-empty, contains each Substrate-component at most once, assigns each part a share from 1 through 100, and has a total share no greater than 100.
 - A Care operation carries no Substrate; a Repot operation always carries one.
 - An Operation's identifier, Plant, timestamp, and care-or-repot kind never change after logging.
+- Every operation page is ordered by timestamp descending, then identifier descending.
 - When a Plant has repot operations, its current Substrate matches its latest repot after every successful log or edit.
 - Nomenclature identifiers remain stable when their editable name, information, or pesticide type changes.
 - Every Pesticide has exactly one supported Pesticide type.
