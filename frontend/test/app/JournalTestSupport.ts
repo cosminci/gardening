@@ -1,83 +1,68 @@
-import type {
-  ActionType,
-  EditOperationResult,
-  GetOperationsResult,
-  GetPlantsResult,
-  JournalClient,
-  LogOperationResult,
-  Operation,
-  OperationDetails,
-  PesticideId,
-  Plant,
-} from "../../src/domain/Journal";
-import {
-  instant,
-  location,
-  nickname,
-  note,
-  operationId,
-  percentage,
-  plantId,
-  seededSubstrateComponentIds,
-  species,
-  substrate,
-} from "../../src/domain/Journal";
+import * as Journal from "../../src/domain/Journal";
 
-export const ficus = (): Plant => ({
-  id: plantId("p1"),
+const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
+const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
+const substrateComponents: readonly Journal.SubstrateComponent[] = [
+  { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
+  { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
+];
+
+export const ficus = (): Journal.Plant => ({
+  id: Journal.plantId("p1"),
   details: {
-    species: species("Ficus lyrata"),
-    maybeNickname: nickname("Fern"),
-    location: location("Balcony"),
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
-    ]),
+    species: Journal.species("Ficus lyrata"),
+    maybeNickname: Journal.nickname("Fern"),
+    location: Journal.location("Balcony"),
+    substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
     status: "active",
   },
 });
 
-export const monstera = (): Plant => ({
-  id: plantId("p2"),
+export const monstera = (): Journal.Plant => ({
+  id: Journal.plantId("p2"),
   details: {
-    species: species("Monstera deliciosa"),
+    species: Journal.species("Monstera deliciosa"),
     maybeNickname: null,
-    location: location("Kitchen"),
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.pineBark, share: percentage(40) },
-    ]),
+    location: Journal.location("Kitchen"),
+    substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(40) }]),
     status: "active",
   },
 });
 
-export const care = (
-  id: string,
-  date: string,
-  moisture: "dry" | "moderatePlus" | "wet",
-  maybeNote: string | null = null,
-  actions: ReadonlySet<ActionType> = new Set(["watered"]),
-  pesticides: ReadonlySet<PesticideId> = new Set(),
-): Operation => ({
-  id: operationId(id),
-  plantId: plantId("p1"),
-  date: instant(date),
+export const care = ({
+  id,
+  date,
+  moisture,
+  maybeNote = null,
+  actions = new Set(["watered"]),
+  pesticides = new Set(),
+}: {
+  id: string;
+  date: string;
+  moisture: "dry" | "moderatePlus" | "wet";
+  maybeNote?: string | null;
+  actions?: ReadonlySet<Journal.ActionType>;
+  pesticides?: ReadonlySet<Journal.PesticideId>;
+}): Journal.Operation => ({
+  id: Journal.operationId(id),
+  plantId: Journal.plantId("p1"),
+  date: Journal.instant(date),
   details: {
     kind: "care",
     actions,
     pesticides,
     moisture,
-    maybeNote: maybeNote === null ? null : note(maybeNote),
+    maybeNote: maybeNote === null ? null : Journal.note(maybeNote),
   },
 });
 
-export const repot = (id: string, date: string): Operation => ({
-  id: operationId(id),
-  plantId: plantId("p1"),
-  date: instant(date),
+export const repot = (id: string, date: string): Journal.Operation => ({
+  id: Journal.operationId(id),
+  plantId: Journal.plantId("p1"),
+  date: Journal.instant(date),
   details: {
     kind: "repot",
-    substrate: substrate([
-      { component: seededSubstrateComponentIds.perlite, share: percentage(100) },
-    ]),
+    substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
     maybeNote: null,
   },
 });
@@ -87,18 +72,41 @@ export const buildJournal = ({
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
+  componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  getPesticidesResult = { kind: "read", entries: [] },
+  pesticideAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
   logged = [],
   edited = [],
+  addedComponents = [],
+  editedComponents = [],
+  addedPesticides = [],
+  editedPesticides = [],
 }: {
-  getPlantsResult?: GetPlantsResult;
+  getPlantsResult?: Journal.GetPlantsResult;
   getOperationsByPlantId?: Readonly<
-    Record<string, readonly [GetOperationsResult, ...GetOperationsResult[]]>
+    Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
   >;
-  logOperationResult?: LogOperationResult;
-  editOperationResult?: EditOperationResult;
-  logged?: { plantId: string; details: OperationDetails }[];
-  edited?: { operationId: string; details: OperationDetails }[];
-} = {}): JournalClient => {
+  logOperationResult?: Journal.LogOperationResult;
+  editOperationResult?: Journal.EditOperationResult;
+  getSubstrateComponentsResult?: Journal.CatalogReadResult<Journal.SubstrateComponent>;
+  componentAddResult?: Journal.CatalogAddResult<Journal.SubstrateComponent>;
+  componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
+  getPesticidesResult?: Journal.CatalogReadResult<Journal.Pesticide>;
+  pesticideAddResult?: Journal.CatalogAddResult<Journal.Pesticide>;
+  pesticideEditResult?: Journal.CatalogEditResult<Journal.Pesticide>;
+  logged?: { plantId: string; details: Journal.OperationDetails }[];
+  edited?: { operationId: string; details: Journal.OperationDetails }[];
+  addedComponents?: Journal.SubstrateComponentData[];
+  editedComponents?: {
+    id: Journal.SubstrateComponentId;
+    data: Journal.SubstrateComponentData;
+  }[];
+  addedPesticides?: Journal.PesticideData[];
+  editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
+} = {}): Journal.JournalClient => {
   const operationReads = new Map<string, number>();
 
   return {
@@ -119,6 +127,24 @@ export const buildJournal = ({
     editOperation: (id, details) => {
       edited.push({ operationId: id, details });
       return Promise.resolve(editOperationResult);
+    },
+    getSubstrateComponents: () => Promise.resolve(getSubstrateComponentsResult),
+    addSubstrateComponent: (data) => {
+      addedComponents.push(data);
+      return Promise.resolve(componentAddResult);
+    },
+    editSubstrateComponent: (id, data) => {
+      editedComponents.push({ id, data });
+      return Promise.resolve(componentEditResult);
+    },
+    getPesticides: () => Promise.resolve(getPesticidesResult),
+    addPesticide: (data) => {
+      addedPesticides.push(data);
+      return Promise.resolve(pesticideAddResult);
+    },
+    editPesticide: (id, data) => {
+      editedPesticides.push({ id, data });
+      return Promise.resolve(pesticideEditResult);
     },
   };
 };

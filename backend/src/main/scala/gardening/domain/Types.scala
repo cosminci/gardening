@@ -61,10 +61,8 @@ object NomenclatureInfo:
   def apply(value: String): NomenclatureInfo           = value
   extension (info: NomenclatureInfo) def value: String = info
 
-opaque type PesticideType = String
-object PesticideType:
-  def apply(value: String): PesticideType                    = value
-  extension (pesticideType: PesticideType) def value: String = pesticideType
+enum PesticideType:
+  case Fungicide, Insecticide, Treatment
 
 final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Option[NomenclatureInfo])
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)

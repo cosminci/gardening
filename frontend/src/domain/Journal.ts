@@ -10,6 +10,8 @@ export type Instant = Brand<string, "Instant">;
 export type Percentage = Brand<number, "Percentage">;
 export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
+export type NomenclatureName = Brand<string, "NomenclatureName">;
+export type NomenclatureInfo = Brand<string, "NomenclatureInfo">;
 
 export const plantId = (value: string): PlantId => value as PlantId;
 export const operationId = (value: string): OperationId => value as OperationId;
@@ -22,22 +24,14 @@ export const percentage = (value: number): Percentage => value as Percentage;
 export const substrateComponentId = (value: string): SubstrateComponentId =>
   value as SubstrateComponentId;
 export const pesticideId = (value: string): PesticideId => value as PesticideId;
+export const nomenclatureName = (value: string): NomenclatureName => value as NomenclatureName;
+export const nomenclatureInfo = (value: string): NomenclatureInfo => value as NomenclatureInfo;
+
+export const pesticideTypes = ["fungicide", "insecticide", "treatment"] as const;
+export type PesticideType = (typeof pesticideTypes)[number];
 
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];
-
-export const seededSubstrateComponentIds = {
-  kekkilaUniversal: substrateComponentId("00000000-0000-4000-8000-000000000001"),
-  kekkilaEricaceous: substrateComponentId("00000000-0000-4000-8000-000000000002"),
-  perlite: substrateComponentId("00000000-0000-4000-8000-000000000003"),
-  pineBark: substrateComponentId("00000000-0000-4000-8000-000000000004"),
-  sand3to5: substrateComponentId("00000000-0000-4000-8000-000000000005"),
-  sand4to8: substrateComponentId("00000000-0000-4000-8000-000000000006"),
-  leca: substrateComponentId("00000000-0000-4000-8000-000000000007"),
-} as const;
-export const substrateComponents: readonly SubstrateComponentId[] = Object.values(
-  seededSubstrateComponentIds,
-);
 
 export const actionTypes = ["watered", "fertilized", "pesticide", "pruned", "noAction"] as const;
 export type ActionType = (typeof actionTypes)[number];
@@ -52,6 +46,27 @@ export interface SubstratePart {
 
 export type Substrate = Brand<readonly SubstratePart[], "Substrate">;
 export const substrate = (parts: readonly SubstratePart[]): Substrate => parts as Substrate;
+
+export interface SubstrateComponentData {
+  readonly name: NomenclatureName;
+  readonly maybeInfo: NomenclatureInfo | null;
+}
+
+export interface SubstrateComponent {
+  readonly id: SubstrateComponentId;
+  readonly data: SubstrateComponentData;
+}
+
+export interface PesticideData {
+  readonly name: NomenclatureName;
+  readonly pesticideType: PesticideType;
+  readonly maybeInfo: NomenclatureInfo | null;
+}
+
+export interface Pesticide {
+  readonly id: PesticideId;
+  readonly data: PesticideData;
+}
 
 export interface PlantDetails {
   readonly species: Species;
@@ -89,28 +104,12 @@ export interface Operation {
   readonly details: OperationDetails;
 }
 
-export type JournalRecord =
-  | { readonly kind: "plant"; readonly id: PlantId }
-  | { readonly kind: "operation"; readonly id: OperationId };
-export interface JournalCorruption {
-  readonly record: JournalRecord;
-  readonly reason: Error;
-}
-
 export type GetPlantsResult =
   | { readonly kind: "read"; readonly plants: readonly Plant[] }
-  | {
-      readonly kind: "corrupted";
-      readonly details: readonly [JournalCorruption, ...JournalCorruption[]];
-    }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type GetOperationsResult =
   | { readonly kind: "read"; readonly operations: readonly Operation[] }
-  | {
-      readonly kind: "corrupted";
-      readonly details: readonly [JournalCorruption, ...JournalCorruption[]];
-    }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type LogOperationResult =
@@ -121,10 +120,19 @@ export type EditOperationResult =
   | { readonly kind: "edited"; readonly operation: Operation }
   | { readonly kind: "operationMissing" }
   | { readonly kind: "operationTypeMismatch" }
-  | {
-      readonly kind: "corrupted";
-      readonly details: readonly [JournalCorruption, ...JournalCorruption[]];
-    }
+  | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type CatalogReadResult<A> =
+  | { readonly kind: "read"; readonly entries: readonly A[] }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
+export type CatalogAddResult<A> =
+  | { readonly kind: "added"; readonly entry: A }
+  | { readonly kind: "addFailed"; readonly reason: Error };
+
+export type CatalogEditResult<A> =
+  | { readonly kind: "edited"; readonly entry: A }
+  | { readonly kind: "recordMissing" }
   | { readonly kind: "editFailed"; readonly reason: Error };
 
 export interface JournalClient {
@@ -132,4 +140,15 @@ export interface JournalClient {
   getOperations(plantId: PlantId): Promise<GetOperationsResult>;
   logOperation(plantId: PlantId, details: OperationDetails): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
+  getSubstrateComponents(): Promise<CatalogReadResult<SubstrateComponent>>;
+  addSubstrateComponent(
+    data: SubstrateComponentData,
+  ): Promise<CatalogAddResult<SubstrateComponent>>;
+  editSubstrateComponent(
+    id: SubstrateComponentId,
+    data: SubstrateComponentData,
+  ): Promise<CatalogEditResult<SubstrateComponent>>;
+  getPesticides(): Promise<CatalogReadResult<Pesticide>>;
+  addPesticide(data: PesticideData): Promise<CatalogAddResult<Pesticide>>;
+  editPesticide(id: PesticideId, data: PesticideData): Promise<CatalogEditResult<Pesticide>>;
 }

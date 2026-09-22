@@ -4,7 +4,7 @@ import cats.syntax.either._
 import gardening.adapters.http.OpenApiDocs
 import io.circe.yaml.parser.parse
 
-class OpenApiDocsUnitTest extends munit.FunSuite:
+class OpenApiDocsComponentTest extends munit.FunSuite:
   test("yaml documents the health and care-journal contract"):
     val yaml = OpenApiDocs.yaml
 

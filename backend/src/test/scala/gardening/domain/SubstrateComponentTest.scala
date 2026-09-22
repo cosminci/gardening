@@ -5,7 +5,7 @@ import io.github.iltotore.iron.*
 
 import java.util.UUID
 
-class SubstrateUnitTest extends munit.FunSuite:
+class SubstrateComponentTest extends munit.FunSuite:
 
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
   private val pineBarkId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000004"))

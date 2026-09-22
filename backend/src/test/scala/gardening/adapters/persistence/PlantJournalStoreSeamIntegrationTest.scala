@@ -353,30 +353,30 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       store.getPesticides match
         case CatalogReadResult.Read(pesticides) =>
           assertEquals(
-            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType.value, pesticide.data.maybeInfo.map(_.value))),
+            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value))),
             Vector(
-              ("ORTIVA TOP", "Fungicide", "1ml/L".some),
-              ("SWITCH 62.5 WG", "Fungicide", none),
-              ("VERTAB", "Insecticide", "0.8ml/L".some),
-              ("SIMFONIA", "Insecticide", "organic".some),
-              ("SPRUZIT AF Neudorff", "Insecticide", none),
-              ("MOSPILAN 20SG", "Insecticide", none),
-              ("Neem oil + Catille soap", "Insecticide", "5ml:5ml:1L".some),
-              ("H2O2", "Treatment", none)
+              ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some),
+              ("SWITCH 62.5 WG", PesticideType.Fungicide, none),
+              ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some),
+              ("SIMFONIA", PesticideType.Insecticide, "organic".some),
+              ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none),
+              ("MOSPILAN 20SG", PesticideType.Insecticide, none),
+              ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some),
+              ("H2O2", PesticideType.Treatment, none)
             )
           )
         case other => fail(s"expected Read, got $other")
 
-      val added = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), none))
+      val added = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
       assertEquals(store.addPesticide(added), CatalogAddResult.Added(added))
-      val editedData = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType("Treatment"), NomenclatureInfo("2g/L").some)
+      val editedData = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType.Treatment, NomenclatureInfo("2g/L").some)
       assertEquals(store.editPesticide(pesticideId, editedData), CatalogEditResult.Edited(added.copy(data = editedData)))
       assertEquals(
         store.editPesticide(PesticideId(UUID.randomUUID()), editedData),
         CatalogEditResult.RecordMissing
       )
 
-  test("should fail when stored catalog identifiers are corrupt"):
+  test("should reject corrupt catalog values"):
     withStore: (dataSource, store) =>
       execute(dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Perlite'")
       execute(dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'H2O2'")
@@ -387,12 +387,17 @@ class PlantJournalStoreSeamIntegrationTest extends FunSuite:
       )
       assertEquals(intercept[DatabaseCorruption](store.getPesticides).err.getMessage, "invalid pesticide id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
+    withStore: (dataSource, _) =>
+      val rejected = intercept[java.sql.SQLException]:
+        execute(dataSource, "update pesticide set type = 'Unknown' where name = 'H2O2'")
+      assert(rejected.getMessage.contains("CHECK constraint failed"))
+
   test("should report write failures when the database is read-only"):
     withStore: (dataSource, store) =>
       seedPlant(dataSource, id = "p1")
       val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
       val component = SubstrateComponent(componentId, SubstrateComponentData(NomenclatureName("Pumice"), none))
-      val pesticide = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType("Fungicide"), none))
+      val pesticide = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
       val readOnlyStore = SqlitePlantJournalStore.make(Transactor(dataSource, connectionConfig = makeReadOnly))
 

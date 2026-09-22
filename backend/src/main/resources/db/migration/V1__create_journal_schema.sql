@@ -7,7 +7,7 @@ create table substrate_component (
 create table pesticide (
     id text primary key check (length(id) = 36),
     name text not null,
-    type text not null,
+    type text not null check (type in ('Fungicide', 'Insecticide', 'Treatment')),
     info text
 );
 

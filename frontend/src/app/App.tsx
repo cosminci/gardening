@@ -1,20 +1,19 @@
 import { For, Match, Show, Switch, createSignal, onMount } from "solid-js";
 import type { Component } from "solid-js";
-import type { JournalClient, Operation, OperationDetails, Plant } from "../domain/Journal";
+import type * as Journal from "../domain/Journal";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { PlantCard } from "./PlantCard";
 import "./app.css";
-import "./controls.css";
 
 interface AppProps {
-  readonly journal: JournalClient;
+  readonly journal: Journal.JournalClient;
 }
 
 interface PlantHistory {
-  readonly plant: Plant;
-  readonly operations: readonly Operation[];
+  readonly plant: Journal.Plant;
+  readonly operations: readonly Journal.Operation[];
 }
 
 type ViewState = "loading" | "failed" | "loaded";
@@ -22,16 +21,30 @@ type ViewState = "loading" | "failed" | "loaded";
 export const App: Component<AppProps> = (props) => {
   const [view, setView] = createSignal<ViewState>("loading");
   const [histories, setHistories] = createSignal<readonly PlantHistory[]>([]);
+  const [substrateComponents, setSubstrateComponents] = createSignal<
+    readonly Journal.SubstrateComponent[]
+  >([]);
+  const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
 
   const loadJournal = async (animate = false) => {
     const journal = props.journal;
-    const plantsResult = await journal.getPlants();
-    if (plantsResult.kind !== "read") {
+    const [plantsResult, componentsResult, pesticidesResult] = await Promise.all([
+      journal.getPlants(),
+      journal.getSubstrateComponents(),
+      journal.getPesticides(),
+    ]);
+    if (
+      plantsResult.kind !== "read" ||
+      componentsResult.kind !== "read" ||
+      pesticidesResult.kind !== "read"
+    ) {
       setView("failed");
       return;
     }
+    setSubstrateComponents(componentsResult.entries);
+    setPesticides(pesticidesResult.entries);
 
     const results = await Promise.all(
       plantsResult.plants.map(async (plant) => ({
@@ -55,7 +68,7 @@ export const App: Component<AppProps> = (props) => {
     await displayJournalUpdate(animate && formTarget() === undefined, display);
   };
 
-  const saveOperation = async (target: OperationTarget, details: OperationDetails) => {
+  const saveOperation = async (target: OperationTarget, details: Journal.OperationDetails) => {
     const setTargetError = (message: string) => formTarget() === target && setSaveError(message);
     try {
       if (target.kind === "log") {
@@ -91,6 +104,39 @@ export const App: Component<AppProps> = (props) => {
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
   };
 
+  const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
+    const result = await props.journal.addSubstrateComponent(data);
+    if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
+    return result;
+  };
+
+  const editSubstrateComponent: Journal.JournalClient["editSubstrateComponent"] = async (
+    id,
+    data,
+  ) => {
+    const result = await props.journal.editSubstrateComponent(id, data);
+    if (result.kind === "edited")
+      setSubstrateComponents((current) =>
+        current.map((component) => (component.id === id ? result.entry : component)),
+      );
+    return result;
+  };
+
+  const addPesticide = async (data: Journal.PesticideData) => {
+    const result = await props.journal.addPesticide(data);
+    if (result.kind === "added") setPesticides((current) => [...current, result.entry]);
+    return result;
+  };
+
+  const editPesticide: Journal.JournalClient["editPesticide"] = async (id, data) => {
+    const result = await props.journal.editPesticide(id, data);
+    if (result.kind === "edited")
+      setPesticides((current) =>
+        current.map((pesticide) => (pesticide.id === id ? result.entry : pesticide)),
+      );
+    return result;
+  };
+
   onMount(() => {
     void loadJournal().catch(() => {
       setView("failed");
@@ -116,6 +162,8 @@ export const App: Component<AppProps> = (props) => {
                 <PlantCard
                   plant={history.plant}
                   operations={history.operations}
+                  substrateComponents={substrateComponents()}
+                  pesticides={pesticides()}
                   onLog={() => {
                     setSaveError(undefined);
                     setFormTarget({ kind: "log", plantId: history.plant.id });
@@ -134,8 +182,14 @@ export const App: Component<AppProps> = (props) => {
         {(target) => (
           <OperationSheet
             target={target}
+            substrateComponents={substrateComponents()}
+            pesticides={pesticides()}
             saveError={saveError()}
             onSubmit={(details) => saveOperation(target, details)}
+            onAddSubstrateComponent={addSubstrateComponent}
+            onEditSubstrateComponent={editSubstrateComponent}
+            onAddPesticide={addPesticide}
+            onEditPesticide={editPesticide}
             onCancel={() => {
               setFormTarget(undefined);
             }}
@@ -146,4 +200,4 @@ export const App: Component<AppProps> = (props) => {
   );
 };
 
-const name = (plant: Plant) => plant.details.maybeNickname ?? plant.details.species;
+const name = (plant: Journal.Plant) => plant.details.maybeNickname ?? plant.details.species;

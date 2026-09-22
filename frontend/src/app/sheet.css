@@ -20,6 +20,46 @@
   overflow-y: auto;
   background: var(--paper);
   box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
+  transition: transform 180ms ease;
+}
+
+.sheet--entering {
+  animation: sheet-enter 180ms ease;
+}
+
+@keyframes sheet-enter {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+.sheet-layer--editing .sheet--operation {
+  transform: translateX(-31rem);
+}
+
+.sheet--nomenclature-editor {
+  z-index: 1;
+}
+
+.sheet-layer .sheet--closing {
+  transform: translateX(100%);
+}
+
+.sheet-collapse {
+  flex: 0 0 auto;
+  color: var(--danger);
+}
+
+.sheet-collapse:hover {
+  background: #fae9e5;
+}
+
+.sheet-collapse__icon {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-right: 0.14rem solid currentcolor;
+  border-bottom: 0.14rem solid currentcolor;
+  transform: rotate(-45deg);
 }
 
 .inline-alert {
@@ -28,4 +68,11 @@
   border-radius: 0.55rem;
   color: var(--danger);
   background: #fae9e5;
+}
+
+@media (max-width: 62rem) {
+  .sheet-layer--editing .sheet--operation {
+    transform: translateX(-100%);
+    visibility: hidden;
+  }
 }

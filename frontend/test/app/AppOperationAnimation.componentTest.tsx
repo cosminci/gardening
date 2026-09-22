@@ -1,15 +1,15 @@
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import * as Testing from "@solidjs/testing-library";
+import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import type { GetOperationsResult, PlantId } from "../../src/domain/Journal";
 import { operationId } from "../../src/domain/Journal";
 import { buildJournal, care, ficus } from "./JournalTestSupport";
 
-afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
+Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
-describe("animating operation changes", () => {
-  it("should not animate a refresh beneath a newly opened editor", async () => {
-    const startViewTransition = vi.fn();
+Vitest.describe("animating operation changes", () => {
+  Vitest.it("should not animate a refresh beneath a newly opened editor", async () => {
+    const startViewTransition = Vitest.vi.fn();
     Object.defineProperty(document, "startViewTransition", {
       configurable: true,
       value: startViewTransition,
@@ -29,23 +29,25 @@ describe("animating operation changes", () => {
       getOperations: (plantId: PlantId) =>
         operationReads++ === 0 ? base.getOperations(plantId) : refresh,
     };
-    render(() => <App journal={journal} />);
-    await screen.findByRole("article", { name: "Fern" });
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByRole("article", { name: "Fern" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
-    await waitFor(() => {
-      expect(operationReads).toBe(2);
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(operationReads).toBe(2);
+      Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     finishRefresh({
       kind: "read",
-      operations: [care("new", "2026-05-05T00:00:00Z", "wet")],
+      operations: [care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" })],
     });
 
-    await screen.findByText("2026-05-05");
-    expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
-    expect(startViewTransition).not.toHaveBeenCalled();
+    await Testing.screen.findByText("2026-05-05");
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(startViewTransition).not.toHaveBeenCalled();
   });
 });

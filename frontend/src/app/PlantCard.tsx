@@ -1,6 +1,6 @@
 import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
-import type { Operation, Plant } from "../domain/Journal";
+import type * as Journal from "../domain/Journal";
 import { formatSubstrate, plantDisplayName } from "./JournalLabels";
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
@@ -8,10 +8,12 @@ import "./plant-card.css";
 import "./plant-history.css";
 
 interface PlantCardProps {
-  readonly plant: Plant;
-  readonly operations: readonly Operation[];
+  readonly plant: Journal.Plant;
+  readonly operations: readonly Journal.Operation[];
+  readonly substrateComponents: readonly Journal.SubstrateComponent[];
+  readonly pesticides: readonly Journal.Pesticide[];
   readonly onLog: () => void;
-  readonly onEdit: (operation: Operation) => void;
+  readonly onEdit: (operation: Journal.Operation) => void;
 }
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
@@ -33,7 +35,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         </header>
         <dl class="plant-facts">
           <dt>Substrate</dt>
-          <dd>{formatSubstrate(props.plant.details.substrate)}</dd>
+          <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
         </dl>
       </div>
       <Show
@@ -50,6 +52,8 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <OperationCell
                 operation={operation}
                 position={index() + 1}
+                substrateComponents={props.substrateComponents}
+                pesticides={props.pesticides}
                 onEdit={() => {
                   props.onEdit(operation);
                 }}

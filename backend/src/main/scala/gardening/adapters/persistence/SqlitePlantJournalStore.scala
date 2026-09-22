@@ -163,7 +163,7 @@ object SqlitePlantJournalStore:
         val data = pesticide.data
         transact(transactor):
           sql"""insert into pesticide (id, name, type, info)
-               values (${pesticide.id.value.toString}, ${data.name.value}, ${data.pesticideType.value}, ${data.maybeInfo.map(
+               values (${pesticide.id.value.toString}, ${data.name.value}, ${data.pesticideType.toString}, ${data.maybeInfo.map(
               _.value
             )})""".update.run()
         CatalogAddResult.Added(pesticide)
@@ -172,7 +172,7 @@ object SqlitePlantJournalStore:
     override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
       try
         transact(transactor):
-          sql"""update pesticide set name = ${data.name.value}, type = ${data.pesticideType.value}, info = ${data.maybeInfo.map(_.value)}
+          sql"""update pesticide set name = ${data.name.value}, type = ${data.pesticideType.toString}, info = ${data.maybeInfo.map(_.value)}
                where id = ${id.value.toString}""".update.run()
         match
           case 1 => CatalogEditResult.Edited(Pesticide(id, data))
@@ -187,11 +187,16 @@ object SqlitePlantJournalStore:
           SubstrateComponent(id, SubstrateComponentData(NomenclatureName(row.name), row.info.map(NomenclatureInfo.apply)))
 
     private def toPesticide(row: PesticideRow): Either[Throwable, Pesticide] =
-      PesticideId
-        .parse(row.id)
-        .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
-        .map: id =>
-          Pesticide(id, PesticideData(NomenclatureName(row.name), PesticideType(row.pesticideType), row.info.map(NomenclatureInfo.apply)))
+      for
+        id <- PesticideId
+          .parse(row.id)
+          .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
+        // The schema check mirrors PesticideType; extending it requires a migration before persistence.
+        // $COVERAGE-OFF$
+        pesticideType <- Try(PesticideType.valueOf(row.pesticideType)).toEither.left.map: error =>
+          RuntimeException(s"invalid pesticide type: ${row.pesticideType}", error)
+      // $COVERAGE-ON$
+      yield Pesticide(id, PesticideData(NomenclatureName(row.name), pesticideType, row.info.map(NomenclatureInfo.apply)))
 
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
     private def trust[A](decoded: Either[Throwable, A]) =

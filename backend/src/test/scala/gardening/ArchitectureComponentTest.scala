@@ -4,7 +4,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import munit.FunSuite
 
-class ArchitectureUnitTest extends FunSuite:
+class ArchitectureComponentTest extends FunSuite:
 
   test("should keep the domain independent from adapters and the application"):
     noClasses()

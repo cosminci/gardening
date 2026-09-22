@@ -443,11 +443,18 @@ components:
         name:
           type: string
         type:
-          type: string
+          $ref: '#/components/schemas/PesticideType'
         info:
           type:
           - string
           - 'null'
+    PesticideType:
+      title: PesticideType
+      type: string
+      enum:
+      - fungicide
+      - insecticide
+      - treatment
     Plant:
       title: Plant
       type: object

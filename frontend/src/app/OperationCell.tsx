@@ -1,12 +1,14 @@
 import { Show } from "solid-js";
 import type { Component } from "solid-js";
-import type { Operation, OperationDetails } from "../domain/Journal";
-import { actionLabels, formatSubstrate, moistureLabels } from "./JournalLabels";
+import type * as Journal from "../domain/Journal";
+import * as Labels from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
 
 interface OperationCellProps {
-  readonly operation: Operation;
+  readonly operation: Journal.Operation;
   readonly position: number;
+  readonly substrateComponents: readonly Journal.SubstrateComponent[];
+  readonly pesticides: readonly Journal.Pesticide[];
   readonly onEdit: () => void;
 }
 
@@ -36,7 +38,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
         </span>
       </div>
       <dl class="operation__details">
-        {renderDetails(props.operation.details)}
+        {renderDetails(props.operation.details, props.substrateComponents, props.pesticides)}
         <Show when={props.operation.details.maybeNote}>
           {(note) => (
             <>
@@ -50,26 +52,42 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
   );
 };
 
-const renderDetails = (details: OperationDetails) => {
+const renderDetails = (
+  details: Journal.OperationDetails,
+  substrateComponents: readonly Journal.SubstrateComponent[],
+  pesticides: readonly Journal.Pesticide[],
+) => {
   switch (details.kind) {
-    case "care":
+    case "care": {
+      const actions = [...details.actions].filter((action) => action !== "noAction");
       return (
         <>
           <dt>Moisture</dt>
-          <dd>{moistureLabels[details.moisture]}</dd>
+          <dd>{Labels.moistureLabels[details.moisture]}</dd>
           <dt>Actions</dt>
           <dd>
-            {details.actions.size === 0
+            {actions.length === 0
               ? "None recorded"
-              : [...details.actions].map((action) => actionLabels[action]).join(", ")}
+              : actions.map((action) => Labels.actionLabels[action]).join(", ")}
           </dd>
+          <Show when={details.pesticides.size > 0}>
+            <>
+              <dt>Pesticides</dt>
+              <dd>
+                {[...details.pesticides]
+                  .map((id) => Labels.pesticideLabel(id, pesticides))
+                  .join(", ")}
+              </dd>
+            </>
+          </Show>
         </>
       );
+    }
     case "repot":
       return (
         <>
           <dt>Substrate</dt>
-          <dd>{formatSubstrate(details.substrate)}</dd>
+          <dd>{Labels.formatSubstrate(details.substrate, substrateComponents)}</dd>
         </>
       );
   }

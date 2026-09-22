@@ -1,38 +1,16 @@
 import type { components, paths } from "@contract";
 import createClient from "openapi-fetch";
-import type {
-  EditOperationResult,
-  GetOperationsResult,
-  GetPlantsResult,
-  JournalClient,
-  LogOperationResult,
-  Operation,
-  OperationDetails,
-  Plant,
-} from "../../domain/Journal";
-import {
-  instant,
-  location,
-  nickname,
-  note,
-  operationId,
-  pesticideId,
-  percentage,
-  plantId,
-  substrateComponentId,
-  species,
-  substrate,
-} from "../../domain/Journal";
+import * as Journal from "../../domain/Journal";
 
 type Wire = components["schemas"];
 
 export const makeHttpJournalClient = (
   fetch: (request: Request) => Promise<Response> = globalThis.fetch,
-): JournalClient => {
+): Journal.JournalClient => {
   const client = createClient<paths>({ baseUrl: globalThis.location.origin, fetch });
 
   return {
-    async getPlants(): Promise<GetPlantsResult> {
+    async getPlants(): Promise<Journal.GetPlantsResult> {
       try {
         const { data, error } = await client.GET("/plants");
         return data === undefined
@@ -43,7 +21,7 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async getOperations(id): Promise<GetOperationsResult> {
+    async getOperations(id): Promise<Journal.GetOperationsResult> {
       try {
         const { data, error } = await client.GET("/plants/{plantId}/operations", {
           params: { path: { plantId: id } },
@@ -56,7 +34,7 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async logOperation(id, details): Promise<LogOperationResult> {
+    async logOperation(id, details): Promise<Journal.LogOperationResult> {
       try {
         const { data, error } = await client.POST("/plants/{plantId}/operations", {
           params: { path: { plantId: id } },
@@ -64,13 +42,13 @@ export const makeHttpJournalClient = (
         });
         return data === undefined
           ? { kind: "loggingFailed", reason: requestFailure(error) }
-          : { kind: "logged", id: operationId(data.id) };
+          : { kind: "logged", id: Journal.operationId(data.id) };
       } catch (error) {
         return { kind: "loggingFailed", reason: requestFailure(error) };
       }
     },
 
-    async editOperation(id, details): Promise<EditOperationResult> {
+    async editOperation(id, details): Promise<Journal.EditOperationResult> {
       try {
         const { data, error, response } = await client.PUT("/operations/{operationId}", {
           params: { path: { operationId: id } },
@@ -84,51 +62,135 @@ export const makeHttpJournalClient = (
         return { kind: "editFailed", reason: requestFailure(error) };
       }
     },
+
+    async getSubstrateComponents(): Promise<Journal.CatalogReadResult<Journal.SubstrateComponent>> {
+      try {
+        const { data, error } = await client.GET("/substrate-components");
+        return data === undefined
+          ? { kind: "readFailed", reason: requestFailure(error) }
+          : { kind: "read", entries: data.map(toSubstrateComponent) };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async addSubstrateComponent(
+      value: Journal.SubstrateComponentData,
+    ): Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>> {
+      try {
+        const { data, error } = await client.POST("/substrate-components", {
+          body: toWireSubstrateComponentData(value),
+        });
+        return data === undefined
+          ? { kind: "addFailed", reason: requestFailure(error) }
+          : { kind: "added", entry: toSubstrateComponent(data) };
+      } catch (error) {
+        return { kind: "addFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async editSubstrateComponent(
+      id,
+      value,
+    ): Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>> {
+      try {
+        const { data, error, response } = await client.PUT("/substrate-components/{componentId}", {
+          params: { path: { componentId: id } },
+          body: toWireSubstrateComponentData(value),
+        });
+        if (data !== undefined) return { kind: "edited", entry: toSubstrateComponent(data) };
+        if (response.status === 404) return { kind: "recordMissing" };
+        return { kind: "editFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "editFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async getPesticides(): Promise<Journal.CatalogReadResult<Journal.Pesticide>> {
+      try {
+        const { data, error } = await client.GET("/pesticides");
+        return data === undefined
+          ? { kind: "readFailed", reason: requestFailure(error) }
+          : { kind: "read", entries: data.map(toPesticide) };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async addPesticide(
+      value: Journal.PesticideData,
+    ): Promise<Journal.CatalogAddResult<Journal.Pesticide>> {
+      try {
+        const { data, error } = await client.POST("/pesticides", {
+          body: toWirePesticideData(value),
+        });
+        return data === undefined
+          ? { kind: "addFailed", reason: requestFailure(error) }
+          : { kind: "added", entry: toPesticide(data) };
+      } catch (error) {
+        return { kind: "addFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async editPesticide(id, value): Promise<Journal.CatalogEditResult<Journal.Pesticide>> {
+      try {
+        const { data, error, response } = await client.PUT("/pesticides/{pesticideId}", {
+          params: { path: { pesticideId: id } },
+          body: toWirePesticideData(value),
+        });
+        if (data !== undefined) return { kind: "edited", entry: toPesticide(data) };
+        if (response.status === 404) return { kind: "recordMissing" };
+        return { kind: "editFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "editFailed", reason: requestFailure(error) };
+      }
+    },
   };
 };
 
-const toPlant = (value: Wire["Plant"]): Plant => ({
-  id: plantId(value.id),
+const toPlant = (value: Wire["Plant"]): Journal.Plant => ({
+  id: Journal.plantId(value.id),
   details: {
-    species: species(value.details.species),
-    maybeNickname: value.details.nickname === null ? null : nickname(value.details.nickname),
-    location: location(value.details.location),
-    substrate: substrate(
+    species: Journal.species(value.details.species),
+    maybeNickname:
+      value.details.nickname === null ? null : Journal.nickname(value.details.nickname),
+    location: Journal.location(value.details.location),
+    substrate: Journal.substrate(
       value.details.substrate.map((part) => ({
-        component: substrateComponentId(part.componentId),
-        share: percentage(part.share),
+        component: Journal.substrateComponentId(part.componentId),
+        share: Journal.percentage(part.share),
       })),
     ),
     status: value.details.status,
   },
 });
 
-const toOperation = (value: Wire["Operation"]): Operation => ({
-  id: operationId(value.id),
-  plantId: plantId(value.plantId),
-  date: instant(value.date),
+const toOperation = (value: Wire["Operation"]): Journal.Operation => ({
+  id: Journal.operationId(value.id),
+  plantId: Journal.plantId(value.plantId),
+  date: Journal.instant(value.date),
   details:
     value.details.kind === "care"
       ? {
           kind: "care",
           actions: new Set(value.details.actions),
-          pesticides: new Set(value.details.pesticides.map(pesticideId)),
+          pesticides: new Set(value.details.pesticides.map(Journal.pesticideId)),
           moisture: value.details.moisture,
-          maybeNote: value.details.notes === null ? null : note(value.details.notes),
+          maybeNote: value.details.notes === null ? null : Journal.note(value.details.notes),
         }
       : {
           kind: "repot",
-          substrate: substrate(
+          substrate: Journal.substrate(
             value.details.substrate.map((part) => ({
-              component: substrateComponentId(part.componentId),
-              share: percentage(part.share),
+              component: Journal.substrateComponentId(part.componentId),
+              share: Journal.percentage(part.share),
             })),
           ),
-          maybeNote: value.details.notes === null ? null : note(value.details.notes),
+          maybeNote: value.details.notes === null ? null : Journal.note(value.details.notes),
         },
 });
 
-const toWireDetails = (details: OperationDetails): Wire["OperationDetails"] =>
+const toWireDetails = (details: Journal.OperationDetails): Wire["OperationDetails"] =>
   details.kind === "care"
     ? {
         kind: "care",
@@ -145,6 +207,36 @@ const toWireDetails = (details: OperationDetails): Wire["OperationDetails"] =>
         })),
         notes: details.maybeNote,
       };
+
+const toSubstrateComponent = (value: Wire["SubstrateComponent"]): Journal.SubstrateComponent => ({
+  id: Journal.substrateComponentId(value.id),
+  data: {
+    name: Journal.nomenclatureName(value.data.name),
+    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
+  },
+});
+
+const toWireSubstrateComponentData = (
+  value: Journal.SubstrateComponentData,
+): Wire["SubstrateComponentData"] => ({
+  name: value.name,
+  info: value.maybeInfo,
+});
+
+const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
+  id: Journal.pesticideId(value.id),
+  data: {
+    name: Journal.nomenclatureName(value.data.name),
+    pesticideType: value.data.type,
+    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
+  },
+});
+
+const toWirePesticideData = (value: Journal.PesticideData): Wire["PesticideData"] => ({
+  name: value.name,
+  type: value.pesticideType,
+  info: value.maybeInfo,
+});
 
 const requestFailure = (error: unknown): Error =>
   error instanceof Error ? error : new Error("journal request failed");
