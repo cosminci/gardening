@@ -11,15 +11,16 @@ class MainComponentTest extends munit.FunSuite:
   test("should publish initial attention before starting the HTTP server"):
     val refreshes = AtomicInteger()
     val stop      = RuntimeException("stop")
-    val attention = new PlantAttentionRefresh:
-      override def refreshAll: RefreshAttentionResult =
+    val attention = new PlantAttentionService:
+      override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
+      override def refreshAll: RefreshAttentionResult    =
         val _ = refreshes.incrementAndGet()
         RefreshAttentionResult.Refreshed(AttentionProjection(Instant.EPOCH, Vector.empty))
-    val refresher = PeriodicAttentionRefresher(attention, () => Left(stop))
 
     val result = Main.start(
       http = () => assertEquals(refreshes.get(), 1),
-      plantAttentionRefresher = refresher
+      plantAttentionService = attention,
+      awaitNext = () => Left(stop)
     )
 
     assertEquals(result, Left(stop))
@@ -27,15 +28,16 @@ class MainComponentTest extends munit.FunSuite:
   test("should not start the HTTP server when initial attention refresh fails"):
     val httpStarts = AtomicInteger()
     val failure    = RuntimeException("initial attention failed")
-    val attention  = new PlantAttentionRefresh:
-      override def refreshAll: RefreshAttentionResult = RefreshAttentionResult.RefreshFailed(failure)
-    val refresher = PeriodicAttentionRefresher(attention, () => Right(()))
+    val attention  = new PlantAttentionService:
+      override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
+      override def refreshAll: RefreshAttentionResult    = RefreshAttentionResult.RefreshFailed(failure)
 
     val result = Main.start(
       http = () =>
         val _ = httpStarts.incrementAndGet()
       ,
-      plantAttentionRefresher = refresher
+      plantAttentionService = attention,
+      awaitNext = () => Right(())
     )
 
     assertEquals(result, Left(failure))
@@ -45,15 +47,13 @@ class MainComponentTest extends munit.FunSuite:
     val httpStarted = CountDownLatch(1)
     val httpStopped = CountDownLatch(1)
     val failure     = RuntimeException("attention failed")
-    val attention   = new PlantAttentionRefresh:
-      override def refreshAll: RefreshAttentionResult =
-        RefreshAttentionResult.Refreshed(AttentionProjection(Instant.EPOCH, Vector.empty))
-    val refresher = PeriodicAttentionRefresher(
-      attention,
-      () =>
-        val _ = httpStarted.await(1, TimeUnit.SECONDS)
-        Left(failure)
-    )
+    val refreshes   = AtomicInteger()
+    val attention   = new PlantAttentionService:
+      override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
+      override def refreshAll: RefreshAttentionResult    =
+        refreshes.incrementAndGet() match
+          case 1 => RefreshAttentionResult.Refreshed(AttentionProjection(Instant.EPOCH, Vector.empty))
+          case _ => RefreshAttentionResult.RefreshFailed(failure)
 
     val result = Main.start(
       http = () =>
@@ -61,7 +61,10 @@ class MainComponentTest extends munit.FunSuite:
         try Thread.sleep(Long.MaxValue)
         finally httpStopped.countDown()
       ,
-      plantAttentionRefresher = refresher
+      plantAttentionService = attention,
+      awaitNext = () =>
+        val _ = httpStarted.await(1, TimeUnit.SECONDS)
+        Right(())
     )
 
     assertEquals(result, Left(failure))

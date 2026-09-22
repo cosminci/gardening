@@ -81,7 +81,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   test("should expose the ordered attention projection"):
     val unknownPlant     = plant.copy(id = PlantId("unknown"))
     val zeroAveragePlant = plant.copy(id = PlantId("zero-average"))
-    val attention        = new PlantAttentionProjection:
+    val attention        = new PlantAttentionService:
       override def current: GetAttentionProjectionResult =
         GetAttentionProjectionResult.Read(
           AttentionProjection(
@@ -111,6 +111,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
             )
           )
         )
+      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
 
     val response = get("/attention", buildJournal(), attention)
     val body     = jsonBody(response)
@@ -135,7 +136,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(plants.downN(2).downField("urgency").get[Option[String]]("numeratorNanos"), Right(None))
 
   test("should report when attention has not been materialized"):
-    val response = getWithoutAttention("/attention", buildJournal())
+    val response = get("/attention", buildJournal())
     assertResponse(response, StatusCode.ServiceUnavailable, """{"message":"plant attention is not available"}""")
 
   test("should use the recent-operation window by default"):
@@ -280,11 +281,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def editOperation(body: String, journal: PlantJournal) =
     basicRequest.put(uri"http://test/operations/${repotOperation.id.value}").body(body).contentType("application/json").send(backend(journal))
 
-  private def get(path: String, journal: PlantJournal, attention: PlantAttentionProjection = unavailableAttention) =
+  private def get(path: String, journal: PlantJournal, attention: PlantAttentionService = unavailableAttention) =
     basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backend(journal, attention))
-
-  private def getWithoutAttention(path: String, journal: PlantJournal) =
-    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backendWithoutAttention(journal))
 
   private def post(path: String, body: String, journal: PlantJournal) =
     basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
@@ -292,18 +290,14 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def put(path: String, body: String, journal: PlantJournal) =
     basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
 
-  private def backend(journal: PlantJournal, attention: PlantAttentionProjection = unavailableAttention) =
+  private def backend(journal: PlantJournal, attention: PlantAttentionService = unavailableAttention) =
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal, attention))
       .backend()
 
-  private def backendWithoutAttention(journal: PlantJournal) =
-    TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal))
-      .backend()
-
-  private val unavailableAttention = new PlantAttentionProjection:
+  private val unavailableAttention = new PlantAttentionService:
     override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
+    override def refreshAll: RefreshAttentionResult    = fail("HTTP must not refresh attention")
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)

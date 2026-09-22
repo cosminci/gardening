@@ -48,13 +48,9 @@ enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)
   case RefreshFailed(reason: Throwable)
 
-trait PlantAttentionProjection:
+trait PlantAttentionService:
   def current: GetAttentionProjectionResult
-
-trait PlantAttentionRefresh:
   def refreshAll: RefreshAttentionResult
-
-trait PlantAttentionService extends PlantAttentionProjection, PlantAttentionRefresh
 
 trait PlantJournalStore:
   def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult

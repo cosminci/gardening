@@ -93,10 +93,7 @@ object JournalApi:
       editPesticideEndpoint
     )
 
-  def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
-    serverEndpoints(using journal, UnavailableAttention)
-
-  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionProjection): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionService): List[ServerEndpoint[Any, Identity]] =
     List(
       getPlantsEndpoint.handle: _ =>
         journal.getPlants match
@@ -245,9 +242,6 @@ object JournalApi:
   private given Codec.AsObject[UrgencyResponse]             = ConfiguredCodec.derived
   private given Codec.AsObject[PlantAttentionResponse]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjectionResponse] = ConfiguredCodec.derived
-
-  private object UnavailableAttention extends PlantAttentionProjection:
-    override def current: GetAttentionProjectionResult = GetAttentionProjectionResult.Unavailable
 
   private def toResponse(projection: AttentionProjection): AttentionProjectionResponse =
     AttentionProjectionResponse(

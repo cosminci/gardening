@@ -2,11 +2,13 @@ package gardening.app
 
 import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
 import gardening.adapters.persistence.SqliteLocation
+import gardening.domain.attention.{PlantAttentionService, RefreshAttentionResult}
 import org.flywaydb.core.Flyway
-import ox.{EitherMode, forkError, supervisedError}
+import ox.{EitherMode, forkError, sleep, supervisedError}
 import ox.either.*
 import sttp.tapir.server.netty.sync.NettySyncServer
 
+import scala.annotation.tailrec
 import scala.concurrent.duration.*
 import scala.util.Using
 
@@ -21,23 +23,41 @@ object Main:
 
     Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       val _         = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      val programs  = Programs.make(resources, attentionInterval = 5.minutes)
+      val programs  = Programs.make(resources)
       val endpoints =
         List(HealthApi.serverEndpoint(version)) ++
-          JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionProjection) ++
+          JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionService) ++
           List(StaticSite.endpoint(staticDir))
       start(
         http = () =>
           val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
         ,
-        plantAttentionRefresher = programs.plantAttentionRefresher
+        plantAttentionService = programs.plantAttentionService,
+        awaitNext = () =>
+          sleep(5.minutes)
+          Right(())
       ).orThrow
 
   private[app] def start(
       http: () => Unit,
-      plantAttentionRefresher: PeriodicAttentionRefresher
+      plantAttentionService: PlantAttentionService,
+      awaitNext: () => Either[Throwable, Unit]
   ): Either[Throwable, Unit] =
-    plantAttentionRefresher.refreshAttention().flatMap: _ =>
+    refreshPlantAttention(plantAttentionService).flatMap: _ =>
       supervisedError(EitherMode[Throwable]()):
-        val _ = forkError(plantAttentionRefresher.refreshPeriodically())
+        val _ = forkError(pollPlantAttention(plantAttentionService, awaitNext))
         Right(http())
+
+  @tailrec
+  private def pollPlantAttention(
+      plantAttentionService: PlantAttentionService,
+      awaitNext: () => Either[Throwable, Unit]
+  ): Either[Throwable, Unit] =
+    awaitNext().flatMap(_ => refreshPlantAttention(plantAttentionService)) match
+      case failure @ Left(_) => failure
+      case Right(_)          => pollPlantAttention(plantAttentionService, awaitNext)
+
+  private def refreshPlantAttention(plantAttentionService: PlantAttentionService): Either[Throwable, Unit] =
+    plantAttentionService.refreshAll match
+      case RefreshAttentionResult.Refreshed(_)          => Right(())
+      case RefreshAttentionResult.RefreshFailed(reason) => Left(reason)

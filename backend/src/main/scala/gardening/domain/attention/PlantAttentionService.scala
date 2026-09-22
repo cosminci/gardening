@@ -10,35 +10,24 @@ import java.time.{Duration, Instant}
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 
-trait PlantAttentionProjection:
+trait PlantAttentionService:
   def current: GetAttentionProjectionResult
-
-trait PlantAttentionRefresh:
   def refreshAll: RefreshAttentionResult
-
-trait PlantAttentionService extends PlantAttentionProjection, PlantAttentionRefresh
 
 object PlantAttentionService:
 
-  private val plantOrdering: Ordering[Plant] =
-    Ordering.by: plant =>
-      (
-        plant.details.location.value,
-        plant.details.species.value,
-        plant.details.maybeNickname.map(_.value),
-        plant.id.value
-      )
-
   def make(using store: PlantJournalStore^, clock: Clock^): PlantAttentionService^{store, clock} =
-    new LivePlantAttention
+    new LivePlantAttentionService
 
   final private case class SampledPlant(plant: Plant, wateringDates: Vector[Instant])
 
-  private class LivePlantAttention(using store: PlantJournalStore^, clock: Clock^) extends PlantAttentionService:
-    private val materialized = AtomicReference(Option.empty[AttentionProjection])
+  private class LivePlantAttentionService(using store: PlantJournalStore^, clock: Clock^) extends PlantAttentionService:
+    private val currentProjection = AtomicReference(Option.empty[AttentionProjection])
 
     override def current: GetAttentionProjectionResult =
-      materialized.get().fold[GetAttentionProjectionResult](GetAttentionProjectionResult.Unavailable)(GetAttentionProjectionResult.Read.apply)
+      currentProjection
+        .get()
+        .fold[GetAttentionProjectionResult](GetAttentionProjectionResult.Unavailable)(GetAttentionProjectionResult.Read.apply)
 
     override def refreshAll: RefreshAttentionResult =
       store.getPlants match
@@ -72,7 +61,7 @@ object PlantAttentionService:
       val measuredAt = clock.now()
       val plants     = samples.iterator.map(attentionFor(_, measuredAt)).toVector.sortWith(precedes)
       val projection = AttentionProjection(measuredAt, plants)
-      materialized.set(Some(projection))
+      currentProjection.set(Some(projection))
       RefreshAttentionResult.Refreshed(projection)
 
     private def attentionFor(sample: SampledPlant, measuredAt: Instant): PlantAttention =
@@ -102,7 +91,16 @@ object PlantAttentionService:
 
     private def precedes(first: PlantAttention, second: PlantAttention): Boolean =
       compareCadence(first.cadence, second.cadence) match
-        case 0          => comparePlants(first.plant, second.plant) < 0
+        case 0 =>
+          Ordering
+            .by[Plant, (String, String, Option[String], String)]: plant =>
+              (
+                plant.details.location.value,
+                plant.details.species.value,
+                plant.details.maybeNickname.map(_.value),
+                plant.id.value
+              )
+            .compare(first.plant, second.plant) < 0
         case comparison => comparison < 0
 
     private def compareCadence(first: WateringCadence, second: WateringCadence): Int =
@@ -112,6 +110,3 @@ object PlantAttentionService:
         case (_: WateringCadence.Unavailable, _: WateringCadence.Unavailable)                                          => 0
         case (WateringCadence.Inferred(_, _, _, firstUrgency, _), WateringCadence.Inferred(_, _, _, secondUrgency, _)) =>
           -summon[Ordering[Urgency]].compare(firstUrgency, secondUrgency)
-
-    private def comparePlants(first: Plant, second: Plant): Int =
-      plantOrdering.compare(first, second)
