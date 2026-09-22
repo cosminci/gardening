@@ -194,6 +194,7 @@
 .operation-history table {
   width: 100%;
   min-width: 38rem;
+  table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
 }
@@ -217,17 +218,20 @@
   overflow-wrap: anywhere;
 }
 
+.operation-history :is(th, td):nth-child(1) {
+  width: clamp(7rem, 10vw, 10rem);
+}
+
+.operation-history :is(th, td):nth-child(2) {
+  width: clamp(5.5rem, 8vw, 8rem);
+}
+
+.operation-history :is(th, td):nth-child(3) {
+  width: 22%;
+}
+
 .operation-history td:nth-child(1) {
-  width: 7rem;
   font-weight: 750;
-}
-
-.operation-history td:nth-child(2) {
-  width: 8rem;
-}
-
-.operation-history td:nth-child(4) {
-  width: 25%;
 }
 
 .operation-history__row .operation__edit {
