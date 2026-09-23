@@ -4,14 +4,29 @@
 
 ## HTTP API
 
-[`contract/openapi.yaml`](../contract/openapi.yaml) is the authoritative HTTP contract for liveness, plants, attention, operations, substrate-components, and pesticides. The attention endpoint returns the latest complete materialized projection without imposing presentation order. The operation-list endpoint is an offset-paginated read bounded to ten operations; omitted window parameters return the three recent operations. The catalog endpoints list, create, and edit nomenclatures; plant substrates and care operations reference catalog entries by identifier. The contract is generated from the Tapir endpoints, so other field limits and response shapes are not restated here.
+[`contract/openapi.yaml`](../contract/openapi.yaml) is the authoritative source for request, response, and error schemas. The service exposes:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /health` | Check liveness. |
+| `GET /plants` | Read current plants by status; active is the default, archived is available on request. |
+| `GET /attention` | Read the latest complete watering projection, keyed by plant identity rather than duplicating plant details. |
+| `GET /plants/{plantId}/operations` | Read operations with offset pagination; defaults to the three recent operations and allows up to ten per page. |
+| `POST /plants/{plantId}/operations` | Log care or repot at a required caller-supplied absolute date. |
+| `PUT /operations/{operationId}` | Edit operation details without changing the timestamp or kind. |
+| `GET /substrate-components` | List substrate components. |
+| `POST /substrate-components` | Add a substrate component. |
+| `PUT /substrate-components/{componentId}` | Edit a substrate component. |
+| `GET /pesticides` | List pesticides. |
+| `POST /pesticides` | Add a pesticide. |
+| `PUT /pesticides/{pesticideId}` | Edit a pesticide. |
 
 ## Error responses
 
-The OpenAPI contract defines each endpoint's status codes and response bodies. Invalid operation windows are rejected at the HTTP boundary. Journal and catalog reads and writes surface backend failures explicitly. Operation editing additionally distinguishes a missing operation from an attempted care/repot kind change; catalog editing distinguishes a missing nomenclature. Clients validate attention states before constructing frontend domain values and must not treat malformed or failed responses as success.
+Malformed, missing, or non-absolute operation dates; unknown plant statuses; invalid operation windows; and malformed journal or catalog input are rejected as client errors. Editing a missing operation or catalog entry is distinct from changing an operation's kind. Journal and catalog failures are reported as server errors without exposing internal exception details. Clients reject unknown attention states and treat failed reads or identity mismatches as load failures, not partial success. Status codes and error bodies are defined by the generated contract.
 
 ## Versioning & compatibility
 
 HTTP changes start in the Tapir endpoints and regenerate both the committed OpenAPI document and its generated TypeScript declarations. Contract drift is rejected by `dagger call contract-drift`.
 
-The persistent schema is versioned by the append-only Flyway migrations in [`backend/src/main/resources/db/migration/`](../backend/src/main/resources/db/migration/). Those migrations, rather than a duplicated schema description here, are the database contract.
+The persistent schema is defined by the [Flyway migration directory](../backend/src/main/resources/db/migration/), not repeated here.

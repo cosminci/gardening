@@ -4,11 +4,13 @@
 
 ## Service overview
 
-plant-journal keeps the household's plants, current substrates, and dated care history. A direct-style Scala backend owns the journal rules, persists them in SQLite, and materializes watering attention; a SolidJS browser orders active plants by that attention, shows recent and paginated historical operations, and provides operation logging and editing.
+plant-journal keeps the household's plants, current substrates, and dated care history. The backend persists journal state and periodically measures watering attention; the browser reads current plant details separately, orders active plants by attention, and presents recent and historical operations for logging and editing.
 
 ## Domain model
 
-A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. Plant attention pairs an active Plant with unavailable or available watering attention measured from its latest bounded watering sample. Available attention carries the sample count, average interval, and elapsed time and is current, overdue, or red alert. Substrate-components and Pesticides are editable nomenclatures with stable identifiers, names, and optional usage information; each Pesticide also has a Fungicide, Insecticide, or Treatment type. A Substrate records component identifiers and percentage shares, while a Care operation records selected pesticide identifiers. Moisture-levels, Action-types, and Pesticide types are fixed English vocabularies; free text remains verbatim.
+- A Plant has descriptive details, an active or archived status, and a current Substrate. Each dated Operation belongs to one Plant: Care records moisture, actions, and optional pesticide selections; Repot records a new substrate. The latest repot by date and identifier determines the current substrate.
+- A Substrate is a mix of percentage shares referencing Substrate-components. Substrate-components and Pesticides are editable nomenclatures with stable identifiers; pesticide type and the moisture and action vocabularies are fixed.
+- An attention projection has a measurement time and, for each active Plant, its identifier and watering assessment. The assessment is unavailable with insufficient history or current, overdue, or red alert when cadence can be inferred. Plant details are read independently of this periodically refreshed measurement.
 
 ```mermaid
 erDiagram
@@ -19,28 +21,26 @@ erDiagram
     REPOT ||--|| SUBSTRATE : "establishes"
     SUBSTRATE ||--|{ SUBSTRATE_PART : contains
     SUBSTRATE_PART }o--|| SUBSTRATE_COMPONENT : selects
-    CARE }o--o{ ACTION_TYPE : records
-    CARE }o--|| MOISTURE_LEVEL : observes
     CARE }o--o{ PESTICIDE : applies
+    ATTENTION_PROJECTION ||--o{ PLANT_ATTENTION : contains
+    PLANT_ATTENTION }o--|| PLANT : "matches by ID"
 ```
 
 ## Processing rules
 
-- Journal reads return active plants and bounded windows of a requested plant's operations. Operation pages are newest-first, with identifiers breaking timestamp ties. Every persisted row is validated before plant-status filtering, so malformed archived rows cannot disappear silently.
-- Logging assigns the operation identifier and timestamp in the backend. Care logging changes only the journal; repot logging also changes the plant's current substrate.
-- A repot log succeeds only after both the operation and current substrate are persisted. If the substrate update or its prerequisite read fails, the new operation is removed; a failed compensation is reported with the original failure.
-- Editing may change only kind-specific operation details. Editing the latest repot also updates current substrate; editing an older repot does not. A failed latest-repot substrate update restores the previous operation details.
-- Log and edit workflows are serialized so their synchronization and compensation steps cannot interleave.
+- Plant reads return current details for active plants by default or archived plants on request. They validate all stored plants before status filtering. Attention reads return the latest complete, separately measured identity-and-watering projection for active plants; the browser joins it to current plant details by identifier.
+- The logging form starts at the current local minute, accepts edits, and submits the selected time as an absolute instant. The backend persists that instant with a new operation identifier. Editing changes only kind-specific details, never the recorded time.
+- A latest repot log or edit also persists its substrate as the plant's current mix; an older repot or ordinary care does not. A failed post-write plant read or update compensates the operation write, reporting both failures if compensation also fails. Mutation workflows are serialized.
 - Operations cannot be deleted by users because they record care that already happened.
 - Substrate-component and pesticide catalogs can be listed, extended, and edited, but not deleted. Editing preserves the stable identifier used by existing substrates and operations.
 - The browser loads both catalogs for operation forms. Substrate-components are defined or edited beside a substrate mix; pesticides are defined or edited beside the pesticide choices. Each editor opens in an adjacent sheet without replacing the operation form.
-- The browser orders plants for display and shows each plant's three latest operations from oldest to newest. Older operations load on demand in ten-row, newest-first pages; loading, empty, and retryable failure states remain inside the expanded history.
-- Plant attention is materialized at startup and refreshed every five minutes. Each measurement reads at most the latest 20 watering timestamps per active Plant; fewer than five makes watering attention unavailable, otherwise the average interval is the arithmetic mean of consecutive timestamps.
+- Operation reads return bounded, newest-first pages, breaking timestamp ties by identifier. The browser shows the latest three oldest-to-newest on each card; older operations load on demand in ten-row, newest-first pages with local loading, empty, and retryable failure states. Recent dates use English ordinals and month names, while historical dates use `dd.mm.yyyy`; both retain their machine-readable instants and accessible edit controls.
+- Plant attention is measured at startup and refreshed every five minutes. Each measurement reads at most the latest 20 watering dates per active Plant; fewer than five makes cadence unavailable, otherwise cadence is the arithmetic mean of consecutive timestamps.
 - Urgency is the exact elapsed/average-interval ratio. A Plant is current through its average interval, overdue immediately afterward, and in red alert at the average interval plus 24 hours. A zero average interval has zero urgency at zero elapsed and unbounded urgency after time advances.
 - The browser orders unavailable attention first, then available attention by descending urgency, then location, species, nickname, and Plant identifier. A card whose index slot changes Plant resets its local operation-history state.
 - Each card presents its watering attention in a narrow leading column: a round state icon, an applicable time-to-water or late duration, and a keyboard-accessible information control. Available attention exposes the sample count, natural-language average interval, and browser-relative evaluation age; unavailable attention explains that there are insufficient watering operations.
-- Recent and historical operations share display semantics and the same editing sheet while retaining layouts suited to cards and rows. Long values wrap, note line breaks remain visible, narrow tables scroll without losing column association, and reduced-motion preferences suppress expansion animation.
-- After a successful log, the browser reloads the journal. A historical edit refreshes its visible row without creating a separate editing path.
+- Recent and historical operations use the same editing sheet. Long values wrap, note line breaks remain visible, narrow tables scroll without losing column association, and reduced-motion preferences suppress expansion animation.
+- After a successful log or edit, the browser reloads current plant details and recent operations. Logging refetches expanded history, while a historical edit updates its visible row from the saved operation. Attention retains its measured state until the next refresh.
 
 ## Edge cases
 
@@ -48,9 +48,12 @@ erDiagram
 - A missing plant or operation in a single-record workflow is distinct from an empty collection.
 - Editing an operation as the other operation kind is rejected without changing the journal.
 - Editing a missing nomenclature is distinct from a catalog-access failure.
+- An invalid or missing local date remains in the logging form with an accessible error; an invalid or missing absolute date is rejected at the HTTP boundary.
+- An unknown plant status is rejected rather than returning an empty list.
 - Independently malformed persisted rows are all reported together and attributed to their plant or operation identifiers.
 - Database-access failures are reported separately from stored-data corruption.
-- API failures remain explicit failures in the browser; the interface does not present stale writes as successful.
+- Failed plant or attention reads and unmatched or duplicate attention identifiers produce a load failure rather than an incomplete or stale successful view.
+- API failures remain explicit failures in the browser; the interface does not present failed writes as successful.
 - A startup attention-read failure prevents startup. A later refresh failure retains the last complete projection and does not stop HTTP service.
 - Plants without waterings remain visible with unavailable attention. Equal watering timestamps are ordered by Operation identifier. Unknown attention values fail at the HTTP client boundary rather than rendering a reassuring default.
 
@@ -60,7 +63,7 @@ erDiagram
 - A Care operation carries no Substrate; a Repot operation always carries one.
 - An Operation's identifier, Plant, timestamp, and care-or-repot kind never change after logging.
 - Every operation page is ordered by timestamp descending, then identifier descending.
-- When a Plant has repot operations, its current Substrate matches its latest repot after every successful log or edit.
+- When a Plant has repot operations, its current Substrate matches its latest repot by date and identifier after every successful log or edit.
 - Nomenclature identifiers remain stable when their editable name, information, or pesticide type changes.
 - Every Pesticide has exactly one supported Pesticide type.
 - Every attention sample count is between 0 and 20, and watering samples are newest-first with Operation identifiers breaking timestamp ties.
@@ -69,7 +72,7 @@ erDiagram
 
 ## Component architecture
 
-The domain defines journal behavior, the materialized attention monitor, and use-case-shaped capability ports. The application wires direct-style adapters into those capabilities; adapters translate HTTP, persistence, clock, and identifier concerns without owning business orchestration. The SQLite plant adapter implements both persistence ports because they share the same schema, transactor, and validated plant and timestamp decoding.
+Domain services own journal behavior and watering assessment through separate, use-case-shaped capability ports. The application injects HTTP, persistence, clock, and identifier adapters into the services without moving business orchestration into those adapters. The SQLite adapter implements both persistence ports: journal reads validate plants and operations, while attention reads select active plant identities and bounded watering dates.
 
 ```mermaid
 flowchart LR
@@ -79,8 +82,8 @@ flowchart LR
     HTTP --> Attention["PlantAttentionMonitor"]
     Journal --> StorePort["PlantJournalStore capability"]
     Attention --> AttentionPort["PlantAttentionStore capability"]
-    Journal --> Clock["Clock capability"]
     Journal --> IDs["IdGenerator capability"]
+    Attention --> Clock["Clock capability"]
     StorePort --> SQLite["SQLite adapter"]
     AttentionPort --> SQLite
 ```

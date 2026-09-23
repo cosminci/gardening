@@ -82,7 +82,7 @@ all implementation PRs merge. The final PR only archives the proposal and synchr
 documentation; it introduces no new product behavior.
 
 - **Specs live in-repo** under [`specs/changes/<slug>/proposal.md`](specs/changes/), archived to `specs/changes/archive/YYYY-MM-DD-<slug>/`. The living docs are `specs/{design,contracts,testing,operational}.md` (the pipeline's are `ci/specs/`); each follows a strict template in [`specs/templates/`](specs/templates/) — one fact in one place, empty sections omitted — so they stay lean as the app grows.
-- **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored, never reviewed).
+- **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored, never included in a PR). An independent reviewer fills a separate checklist before each phase is declared complete; see the SDD skill for the review protocol.
 
 ## Branching & commits
 
