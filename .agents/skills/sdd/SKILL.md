@@ -135,9 +135,9 @@ Omit only when no living document changes. -->
 
 ## Phase 3 — Tests projected from the spec
 
-Derive tests from the spec's behaviour and acceptance criteria, before implementation. Never reverse-engineer tests from code — a test must trace to a spec statement, and fail only when a stated behaviour changes. Follow the testing conventions in CONTRIBUTING.md (MUnit / Vitest tiers, naming, mocking). `superpowers:test-driven-development` is available.
+Derive tests from the spec's behaviour and acceptance criteria, before implementation. Review the owning suites as projections of each module's complete supported use cases, using the implementation authoring checklist below; change the projection when behavior changes. Never reverse-engineer tests from code — a test must trace to a spec statement, and fail only when a stated behaviour changes. Follow the testing conventions in CONTRIBUTING.md (MUnit / Vitest tiers, naming, mocking). `superpowers:test-driven-development` is available.
 
-Gate: every acceptance criterion and enumerated edge case maps to at least one test; the new tests fail for the right reason before implementation.
+Gate: every acceptance criterion and enumerated edge case maps to at least one test; changed tests fail for the right reason before implementation.
 
 ## Phase 4 — Implementation PR(s)
 
@@ -170,10 +170,16 @@ when the checklist records why.
   A small number of use cases should cover the dominant behavior; add exceptional cases only when
   they represent real user or domain behavior, and fold them into an existing use case when that
   makes the behavior clearer.
+- [ ] Review each affected suite as a whole against the module's supported behavior. Edit, extend,
+  simplify, merge, or remove existing tests as the use cases evolve; add a test only when the
+  behavior is not already represented. Do not append cases just to chase coverage.
 - [ ] Order tests, fields, methods, and other declarations from top to bottom and left to right by
   semantic importance and value.
 - [ ] Use this test-suite shape without exception: reusable, non-trivial mock data first; use-case
   tests second; then `Ref` values and `buildX` helpers, where `X` is the tested trait.
+- [ ] In backend component and HTTP seam tests, configure and observe collaborators through `Refs`;
+  call `buildX(refs)` with no other arguments. Construct port substitutes inside that builder,
+  not in test use cases or separate stub classes.
 - [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
   cannot leak beyond its boundary and a codec cannot express the format cleanly.
 - [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need

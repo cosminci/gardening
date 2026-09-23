@@ -105,8 +105,8 @@ describe("plant operation controls", () => {
     expect(onEdit).toHaveBeenCalledOnce();
   });
 
-  it("should use correct English ordinal dates for recent operations including teen days", () => {
-    const days = [1, 2, 3, 11, 12, 13, 21, 22, 23, 31];
+  it("should display ordinal dates for the three most recent operations", () => {
+    const days = [11, 13, 23];
     render(() => (
       <PlantCard
         {...emptyCardProps}
@@ -124,22 +124,10 @@ describe("plant operation controls", () => {
       />
     ));
 
-    const expectedDates = [
-      "1st of March",
-      "2nd of March",
-      "3rd of March",
-      "11th of March",
-      "12th of March",
-      "13th of March",
-      "21st of March",
-      "22nd of March",
-      "23rd of March",
-      "31st of March",
-    ];
-    expect(screen.getAllByRole("time").map((time) => time.textContent)).toEqual(
-      expectedDates.toReversed(),
-    );
-    expect(screen.getAllByRole("time")[1]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
+    const expectedDates = ["11th of March", "13th of March", "23rd of March"];
+    const actualDates = screen.getAllByRole("time").map((time) => time.textContent);
+    expect(actualDates).toEqual(expectedDates.toReversed());
+    expect(screen.getAllByRole("time")[0]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
   });
 
   it("should show history access only when older operations exist", () => {

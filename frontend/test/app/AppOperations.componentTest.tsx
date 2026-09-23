@@ -80,14 +80,15 @@ Vitest.describe("changing the journal", () => {
       moisture: "wet",
       maybeNote: Journal.note("Recovered"),
     };
-    Vitest.expect(startViewTransition).toHaveBeenCalledOnce();
-    Vitest.expect(logged).toEqual([
+    const expectedLogged = [
       {
         plantId: "p1",
         date: Journal.instant(new Date(selectedDate).toISOString()),
         details: expectedOperation,
       },
-    ]);
+    ];
+    Vitest.expect(startViewTransition).toHaveBeenCalledOnce();
+    Vitest.expect(logged).toEqual(expectedLogged);
   });
 
   Vitest.it("should edit repot details without allowing its operation type to change", async () => {
@@ -148,9 +149,8 @@ Vitest.describe("changing the journal", () => {
       Vitest.expect(edited).toEqual([{ operationId: "o1", details: expectedOperation }]);
     });
     Vitest.expect(await Testing.screen.findByText("Less perlite")).toBeInTheDocument();
-    Vitest.expect(Testing.screen.getByRole("article", { name: "Fern" })).toHaveTextContent(
-      "Perlite 80%",
-    );
+    const card = Testing.screen.getByRole("article", { name: "Fern" });
+    Vitest.expect(card).toHaveTextContent("Perlite 80%");
     await Testing.waitFor(() => {
       Vitest.expect(
         Testing.screen.getByRole("button", {

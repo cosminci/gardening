@@ -47,16 +47,14 @@ describe("HttpJournalClient", () => {
       ),
     );
 
-    await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: [activePlant] });
-    await expect(journal.getPlants("archived")).resolves.toEqual({
-      kind: "read",
-      plants: [archivedPlant],
-    });
+    const activeResult = await journal.getPlants();
+    const archivedResult = await journal.getPlants("archived");
+    const requestedStatuses = requests.map((request) => new URL(request.url).search);
+    const expectedArchivedResult = { kind: "read", plants: [archivedPlant] };
 
-    expect(requests.map((request) => new URL(request.url).search)).toEqual([
-      "",
-      "?status=archived",
-    ]);
+    expect(activeResult).toEqual({ kind: "read", plants: [activePlant] });
+    expect(archivedResult).toEqual(expectedArchivedResult);
+    expect(requestedStatuses).toEqual(["", "?status=archived"]);
   });
 
   it("should report failed plant reads instead of returning stale details", async () => {
@@ -318,12 +316,15 @@ describe("HttpJournalClient", () => {
       },
     ];
 
-    await expect(
-      journal.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
-    ).resolves.toEqual({
+    const operationsResult = await journal.getOperations(Journal.plantId("p1"), {
+      offset: 0,
+      size: 3,
+    });
+    const expectedResult = {
       kind: "read",
       page: { operations: expectedOperations, hasNextPage: true },
-    });
+    };
+    expect(operationsResult).toEqual(expectedResult);
     expect(requests[0]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
@@ -423,12 +424,13 @@ describe("HttpJournalClient", () => {
       },
     };
 
-    await expect(
-      journal.logOperation(Journal.plantId("p1"), Journal.instant("2026-01-01T00:00:00Z"), care),
-    ).resolves.toEqual({
-      kind: "logged",
-      id: Journal.operationId("logged"),
-    });
+    const loggedResult = await journal.logOperation(
+      Journal.plantId("p1"),
+      Journal.instant("2026-01-01T00:00:00Z"),
+      care,
+    );
+    const expectedLogged = { kind: "logged", id: Journal.operationId("logged") };
+    expect(loggedResult).toEqual(expectedLogged);
     await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toEqual({
       kind: "operationTypeMismatch",
     });
@@ -447,7 +449,7 @@ describe("HttpJournalClient", () => {
         "PUT /operations/o1",
       ],
     );
-    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+    const expectedRequests = [
       {
         date: "2026-01-01T00:00:00Z",
         details: {
@@ -473,7 +475,9 @@ describe("HttpJournalClient", () => {
         substrate: [{ componentId: perliteId, share: 80 }],
         notes: "Fresh",
       },
-    ]);
+    ];
+    const actualRequests = await Promise.all(requests.map((request) => request.json()));
+    expect(actualRequests).toEqual(expectedRequests);
   });
 
   it("should send substrate component and pesticide catalog changes", async () => {

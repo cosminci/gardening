@@ -110,10 +110,8 @@ describe("browsing the journal", () => {
       "3rd of MarchEditRepotSubstratePerlite 100%",
       "5th of AprilEditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
     ]);
-    expect(within(card).getByText("5th of April")).toHaveAttribute(
-      "datetime",
-      "2026-04-04T22:30:00Z",
-    );
+    const recentDate = within(card).getByText("5th of April");
+    expect(recentDate).toHaveAttribute("datetime", "2026-04-04T22:30:00Z");
     expect(
       screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
     ).toEqual(["Monstera deliciosa", "Fern"]);
@@ -260,9 +258,8 @@ describe("browsing the journal", () => {
       });
       const view = render(() => <App journal={journal} />);
 
-      expect(await screen.findByRole("alert")).toHaveTextContent(
-        "The journal could not be loaded.",
-      );
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("The journal could not be loaded.");
       expect(screen.queryByRole("article")).not.toBeInTheDocument();
       view.unmount();
     }
