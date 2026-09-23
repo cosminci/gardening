@@ -48,7 +48,10 @@ Give the person logging an operation control over when it happened, make dates r
 
 ## Doc Sync
 
-- `specs/design.md` — Domain model and Processing rules for timestamp ownership, local presentation, status-filtered plant reads, and attention joined by identity; Invariants for immutable timestamps and latest repot.
-- `specs/contracts.md` — HTTP API and Error responses for caller-supplied operation date, status-filtered plant reads, and identity-only attention; Versioning & compatibility for the pre-deployment schema baseline.
-- `specs/testing.md` — Service-specific strategy and Fixtures & data setup for submitted dates, date display, the consolidated schema, active/archived reads, and post-repot freshness.
-- `specs/operational.md` — Runtime dependencies for the consolidated baseline and local development database recreation.
+At archive, review the living docs against the archived care-journal, nomenclature, and history changes, the completed attention change, and the implemented behavior. Retain only current, significant facts in each template's owning section; remove stale claims and duplicated detail.
+
+- `GLOSSARY.md` — Plant status and plant attention definitions once archived plants can be read and attention no longer carries plant details.
+- `specs/design.md` — Rework Domain model and its diagram around current plant, operation, catalog, and attention relationships; reconcile Processing rules, Edge cases, Invariants, and Component architecture with timestamp ownership, local presentation, status-filtered reads, and identity-matched attention.
+- `specs/contracts.md` — HTTP API and Error responses for submitted dates, status-filtered plant reads, and identity-only attention; reconcile the endpoint summary with the generated contract; update Versioning & compatibility for the pre-deployment baseline.
+- `specs/testing.md` — Service-specific strategy and Fixtures & data setup for submitted dates, date display, the consolidated schema, active/archived reads, and repot freshness; remove superseded upgrade-test claims.
+- `specs/operational.md` — Runtime dependencies for the consolidated baseline and local development database recreation; verify Scaling characteristics against current behavior.
