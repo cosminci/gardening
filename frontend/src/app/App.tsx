@@ -34,12 +34,14 @@ export const App: Component<AppProps> = (props) => {
 
   const loadJournal = async (animate = false) => {
     const journal = props.journal;
-    const [attentionResult, componentsResult, pesticidesResult] = await Promise.all([
+    const [plantsResult, attentionResult, componentsResult, pesticidesResult] = await Promise.all([
+      journal.getPlants(),
       journal.getAttention(),
       journal.getSubstrateComponents(),
       journal.getPesticides(),
     ]);
     if (
+      plantsResult.kind !== "read" ||
       attentionResult.kind !== "read" ||
       componentsResult.kind !== "read" ||
       pesticidesResult.kind !== "read"
@@ -50,8 +52,24 @@ export const App: Component<AppProps> = (props) => {
     setSubstrateComponents(componentsResult.entries);
     setPesticides(pesticidesResult.entries);
 
+    const attentionById = new Map(
+      attentionResult.projection.plants.map((sample) => [sample.plantId, sample]),
+    );
+    const plants = plantsResult.plants.map((plant) => {
+      const sample = attentionById.get(plant.id);
+      return sample === undefined ? undefined : { plant, watering: sample.watering };
+    });
+    const joined = plants.filter((plant): plant is Journal.PlantAttention => plant !== undefined);
+    if (
+      joined.length !== plantsResult.plants.length ||
+      joined.length !== attentionById.size ||
+      attentionResult.projection.plants.length !== attentionById.size
+    ) {
+      setView("failed");
+      return;
+    }
     const results = await Promise.all(
-      orderPlantAttention(attentionResult.projection.plants).map(async (attention) => ({
+      orderPlantAttention(joined).map(async (attention) => ({
         attention,
         measuredAt: attentionResult.projection.measuredAt,
         operationsResult: await journal.getOperations(attention.plant.id, {
@@ -75,12 +93,16 @@ export const App: Component<AppProps> = (props) => {
     await displayJournalUpdate(animate && formTarget() === undefined, display);
   };
 
-  const saveOperation = async (target: OperationTarget, details: Journal.OperationDetails) => {
+  const saveOperation = async (
+    target: OperationTarget,
+    details: Journal.OperationDetails,
+    date: Journal.Instant,
+  ) => {
     const setTargetError = (message: string) => formTarget() === target && setSaveError(message);
     let editedOperation: Journal.Operation | undefined;
     try {
       if (target.kind === "log") {
-        const result = await props.journal.logOperation(target.plantId, details);
+        const result = await props.journal.logOperation(target.plantId, date, details);
         if (result.kind !== "logged") {
           setTargetError("The operation could not be saved.");
           return;
@@ -204,7 +226,7 @@ export const App: Component<AppProps> = (props) => {
             substrateComponents={substrateComponents()}
             pesticides={pesticides()}
             saveError={saveError()}
-            onSubmit={(details) => saveOperation(target, details)}
+            onSubmit={(details, date) => saveOperation(target, details, date)}
             onAddSubstrateComponent={addSubstrateComponent}
             onEditSubstrateComponent={editSubstrateComponent}
             onAddPesticide={addPesticide}

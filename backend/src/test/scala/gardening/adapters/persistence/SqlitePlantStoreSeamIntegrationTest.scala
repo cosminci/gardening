@@ -51,6 +51,24 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.getPlant(PlantId("p1")), expectedResult)
       assertEquals(store.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
 
+  test("should list current plants by status without hiding corrupt records"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "active")
+      seedPlant(dataSource, id = "archived", status = PlantStatus.Archived)
+
+      val activePlant   = Plant(PlantId("active"), defaultPlantDetails)
+      val archivedPlant = Plant(PlantId("archived"), defaultPlantDetails.copy(status = PlantStatus.Archived))
+
+      assertEquals(store.getPlants(PlantStatus.Active), GetPlantsResult.Read(Vector(activePlant)))
+      assertEquals(store.getPlants(PlantStatus.Archived), GetPlantsResult.Read(Vector(archivedPlant)))
+      execute(dataSource, "update plant set substrate = '[]' where id = ?", "archived")
+      store.getPlants(PlantStatus.Active) match
+        case GetPlantsResult.ReadFailed(DatabaseCorruption(reason)) =>
+          assertEquals(reason.getMessage, "invalid stored substrate: DecodingFailure at : Empty")
+        case other => fail(s"expected ReadFailed, got $other")
+
   test("should fail when stored plant data is corrupt"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
@@ -123,9 +141,9 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val secondWateringHistory = WateringHistory.from(secondWaterings.reverse.map(_.date)).fold(message => fail(message), identity)
       val emptyWateringHistory  = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
       val expectedSamples       = Vector(
-        PlantAttentionSample(Plant(firstPlantId, defaultPlantDetails), firstWateringHistory),
-        PlantAttentionSample(Plant(secondPlantId, defaultPlantDetails), secondWateringHistory),
-        PlantAttentionSample(Plant(PlantId("no-waterings"), defaultPlantDetails), emptyWateringHistory)
+        PlantAttentionSample(firstPlantId, firstWateringHistory),
+        PlantAttentionSample(secondPlantId, secondWateringHistory),
+        PlantAttentionSample(PlantId("no-waterings"), emptyWateringHistory)
       )
       assertEquals(store.getAttentionSamples(size = 20), GetAttentionSamplesResult.Read(expectedSamples))
 
@@ -143,48 +161,28 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
           assertEquals(reason.getMessage, "invalid stored operation date: today")
         case other => fail(s"expected ReadFailed, got $other")
 
-  test("should report archived plant corruption through the attention read"):
+  test("should exclude archived plants from the attention read"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
       val store      = resource.store
       seedPlant(dataSource, id = "archived", status = PlantStatus.Archived)
       execute(dataSource, "update plant set substrate = '[]' where id = ?", "archived")
 
-      store.getAttentionSamples(size = 20) match
-        case GetAttentionSamplesResult.ReadFailed(DatabaseCorruption(reason)) =>
-          assertEquals(reason.getMessage, "invalid stored substrate: DecodingFailure at : Empty")
-        case other => fail(s"expected ReadFailed, got $other")
+      assertEquals(store.getAttentionSamples(size = 20), GetAttentionSamplesResult.Read(Vector.empty))
 
-  test("should retain chronological operation order after migrating existing timestamps"):
+  test("should initialize the complete journal schema in one migration"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val _ = Flyway.configure().dataSource(connection.dataSource).target(MigrationVersion.fromVersion("2")).load().migrate()
+      val migration = Flyway.configure().dataSource(connection.dataSource).load()
+      val _         = migration.migrate()
       seedPlant(connection.dataSource, id = "p1")
 
       val details = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
       val older   = Operation(OperationId("o1"), PlantId("p1"), date, details)
       val newer   = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
-      val payload = """{"actions":[],"pesticides":[],"moisture":"Wet","note":null}"""
-      execute(
-        connection.dataSource,
-        "insert into operation (id, plant_id, date, kind, payload) values (?, ?, ?, ?, ?)",
-        older.id.value,
-        older.plantId.value,
-        older.date.toString,
-        "Care",
-        payload
-      )
-      execute(
-        connection.dataSource,
-        "insert into operation (id, plant_id, date, kind, payload) values (?, ?, ?, ?, ?)",
-        newer.id.value,
-        newer.plantId.value,
-        newer.date.toString,
-        "Care",
-        payload
-      )
-
-      val _     = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      val store = SqlitePlantStore.make(connection.transactor)
+      val store   = SqlitePlantStore.make(connection.transactor)
+      assertEquals(migration.info().applied().toVector.map(_.getVersion), Vector(MigrationVersion.fromVersion("1")))
+      assertEquals(store.addOperation(older), LogOperationResult.Logged(older.id))
+      assertEquals(store.addOperation(newer), LogOperationResult.Logged(newer.id))
       assertEquals(store.getOperations(PlantId("p1"), fullWindow), GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false)))
 
   test("should round-trip a care observation without actions"):
@@ -262,6 +260,8 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(store.updatePlant(updatedPlant), UpdatePlantResult.Updated)
       assertEquals(store.getPlant(updatedPlant.id), GetPlantResult.Read(updatedPlant))
+      assertEquals(store.getPlants(PlantStatus.Active), GetPlantsResult.Read(Vector.empty))
+      assertEquals(store.getPlants(PlantStatus.Archived), GetPlantsResult.Read(Vector(updatedPlant)))
 
   test("should return no operation for an unknown id"):
     Using.resource(storeResource): resource =>
@@ -477,6 +477,9 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       store.getPlant(PlantId("p1")) match
         case GetPlantResult.ReadFailed(_) => ()
         case other                        => fail(s"expected ReadFailed, got $other")
+      store.getPlants(PlantStatus.Active) match
+        case GetPlantsResult.ReadFailed(_) => ()
+        case other                         => fail(s"expected ReadFailed, got $other")
       store.getOperation(OperationId("o1")) match
         case GetOperationResult.ReadFailed(_) => ()
         case other                            => fail(s"expected ReadFailed, got $other")

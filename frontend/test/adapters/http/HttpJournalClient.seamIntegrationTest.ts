@@ -33,6 +33,43 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
   expect(result).resolves.toEqual(expected);
 
 describe("HttpJournalClient", () => {
+  it("should read current plants with active default and archived status filtering", async () => {
+    const activePlant = plant("p1", "Fern");
+    const archivedPlant = {
+      ...plant("p2"),
+      details: { ...plant("p2").details, status: "archived" as const },
+    };
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [jsonResponse([wirePlant(activePlant)]), jsonResponse([wirePlant(archivedPlant)])],
+        requests,
+      ),
+    );
+
+    await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: [activePlant] });
+    await expect(journal.getPlants("archived")).resolves.toEqual({
+      kind: "read",
+      plants: [archivedPlant],
+    });
+
+    expect(requests.map((request) => new URL(request.url).search)).toEqual([
+      "",
+      "?status=archived",
+    ]);
+  });
+
+  it("should report failed plant reads instead of returning stale details", async () => {
+    const reason = new Error("offline");
+    const httpJournal = makeHttpJournalClient(
+      respondingWith([jsonResponse({ message: "plants unavailable" }, 503)]),
+    );
+    const networkJournal = makeHttpJournalClient(respondingWith([reason]));
+
+    await expect(httpJournal.getPlants()).resolves.toMatchObject({ kind: "readFailed" });
+    await expect(networkJournal.getPlants()).resolves.toEqual({ kind: "readFailed", reason });
+  });
+
   it("should translate the attention projection into domain values", async () => {
     const noSamples = plant("no-samples");
     const unknown = plant("unknown");
@@ -48,15 +85,15 @@ describe("HttpJournalClient", () => {
             measuredAt: "2026-01-10T00:00:00Z",
             plants: [
               {
-                plant: wirePlant(noSamples),
+                plantId: noSamples.id,
                 watering: { kind: "unavailable", sampleCount: 0, elapsedMillis: null },
               },
               {
-                plant: wirePlant(unknown),
+                plantId: unknown.id,
                 watering: { kind: "unavailable", sampleCount: 4, elapsedMillis: "86400000" },
               },
               {
-                plant: wirePlant(finite),
+                plantId: finite.id,
                 watering: {
                   kind: "overdue",
                   sampleCount: 5,
@@ -65,7 +102,7 @@ describe("HttpJournalClient", () => {
                 },
               },
               {
-                plant: wirePlant(unbounded),
+                plantId: unbounded.id,
                 watering: {
                   kind: "overdue",
                   sampleCount: 5,
@@ -74,7 +111,7 @@ describe("HttpJournalClient", () => {
                 },
               },
               {
-                plant: wirePlant(current),
+                plantId: current.id,
                 watering: {
                   kind: "current",
                   sampleCount: 5,
@@ -83,7 +120,7 @@ describe("HttpJournalClient", () => {
                 },
               },
               {
-                plant: wirePlant(redAlert),
+                plantId: redAlert.id,
                 watering: {
                   kind: "redAlert",
                   sampleCount: 5,
@@ -104,7 +141,7 @@ describe("HttpJournalClient", () => {
         measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
         plants: [
           {
-            plant: noSamples,
+            plantId: noSamples.id,
             watering: {
               kind: "unavailable",
               sampleCount: 0,
@@ -112,7 +149,7 @@ describe("HttpJournalClient", () => {
             },
           },
           {
-            plant: unknown,
+            plantId: unknown.id,
             watering: {
               kind: "unavailable",
               sampleCount: 4,
@@ -120,7 +157,7 @@ describe("HttpJournalClient", () => {
             },
           },
           {
-            plant: finite,
+            plantId: finite.id,
             watering: {
               kind: "overdue",
               sampleCount: 5,
@@ -129,7 +166,7 @@ describe("HttpJournalClient", () => {
             },
           },
           {
-            plant: unbounded,
+            plantId: unbounded.id,
             watering: {
               kind: "overdue",
               sampleCount: 5,
@@ -138,7 +175,7 @@ describe("HttpJournalClient", () => {
             },
           },
           {
-            plant: current,
+            plantId: current.id,
             watering: {
               kind: "current",
               sampleCount: 5,
@@ -147,7 +184,7 @@ describe("HttpJournalClient", () => {
             },
           },
           {
-            plant: redAlert,
+            plantId: redAlert.id,
             watering: {
               kind: "redAlert",
               sampleCount: 5,
@@ -168,7 +205,7 @@ describe("HttpJournalClient", () => {
           measuredAt: "2026-01-10T00:00:00Z",
           plants: [
             {
-              plant: wirePlant(plant("p1")),
+              plantId: plant("p1").id,
               watering: {
                 kind: "overdue",
                 sampleCount: 5,
@@ -194,7 +231,7 @@ describe("HttpJournalClient", () => {
           measuredAt: "2026-01-10T00:00:00Z",
           plants: [
             {
-              plant: wirePlant(plant("p1")),
+              plantId: plant("p1").id,
               watering: {
                 kind: "futureState",
                 sampleCount: 5,
@@ -386,7 +423,9 @@ describe("HttpJournalClient", () => {
       },
     };
 
-    await expect(journal.logOperation(Journal.plantId("p1"), care)).resolves.toEqual({
+    await expect(
+      journal.logOperation(Journal.plantId("p1"), Journal.instant("2026-01-01T00:00:00Z"), care),
+    ).resolves.toEqual({
       kind: "logged",
       id: Journal.operationId("logged"),
     });
@@ -410,11 +449,14 @@ describe("HttpJournalClient", () => {
     );
     await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
       {
-        kind: "care",
-        actions: ["watered"],
-        pesticides: ["00000000-0000-4000-8001-000000000003"],
-        moisture: "wet",
-        notes: null,
+        date: "2026-01-01T00:00:00Z",
+        details: {
+          kind: "care",
+          actions: ["watered"],
+          pesticides: ["00000000-0000-4000-8001-000000000003"],
+          moisture: "wet",
+          notes: null,
+        },
       },
       {
         kind: "repot",
@@ -552,7 +594,14 @@ describe("HttpJournalClient", () => {
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",
     );
-    await expectKind(httpFailures.logOperation(Journal.plantId("p1"), details), "loggingFailed");
+    await expectKind(
+      httpFailures.logOperation(
+        Journal.plantId("p1"),
+        Journal.instant("2026-01-01T00:00:00Z"),
+        details,
+      ),
+      "loggingFailed",
+    );
     await expectResult(httpFailures.editOperation(Journal.operationId("missing"), details), {
       kind: "operationMissing",
     });
@@ -582,7 +631,11 @@ describe("HttpJournalClient", () => {
       "readFailed",
     );
     await expectNetworkFailure(
-      networkFailures.logOperation(Journal.plantId("p1"), details),
+      networkFailures.logOperation(
+        Journal.plantId("p1"),
+        Journal.instant("2026-01-01T00:00:00Z"),
+        details,
+      ),
       "loggingFailed",
     );
     await expectNetworkFailure(

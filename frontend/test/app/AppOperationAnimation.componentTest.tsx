@@ -13,7 +13,7 @@ const unavailableFicusAttentionResult = {
     measuredAt: instant("2026-01-01T00:00:00Z"),
     plants: [
       {
-        plant: ficus(),
+        plantId: ficus().id,
         watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
       },
     ],
@@ -56,7 +56,7 @@ Vitest.describe("animating operation changes", () => {
       operationsPage([care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" })]),
     );
 
-    await Testing.screen.findByText("2026-05-05");
+    await Testing.screen.findByText("5th of May");
     Vitest.expect(
       Testing.screen.getByRole("dialog", { name: "Operation editor" }),
     ).toBeInTheDocument();

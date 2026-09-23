@@ -3,6 +3,7 @@ package gardening.domain.journal
 import gardening.domain.*
 
 trait PlantJournalStore:
+  def getPlants(status: PlantStatus): GetPlantsResult
   def getPlant(id: PlantId): GetPlantResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperation(id: OperationId): GetOperationResult

@@ -95,14 +95,51 @@ describe("plant operation controls", () => {
     ));
 
     const firstEdit = screen.getByRole("button", {
-      name: "Edit recent care operation 1 from 2026-03-03",
+      name: "Edit recent care operation 1 from 3rd of March",
     });
     expect(firstEdit).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Edit recent care operation 2 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent care operation 2 from 3rd of March" }),
     ).toBeInTheDocument();
     fireEvent.click(firstEdit);
     expect(onEdit).toHaveBeenCalledOnce();
+  });
+
+  it("should use correct English ordinal dates for recent operations including teen days", () => {
+    const days = [1, 2, 3, 11, 12, 13, 21, 22, 23, 31];
+    render(() => (
+      <PlantCard
+        {...emptyCardProps}
+        attention={currentFicusAttention}
+        operationPage={{
+          operations: days.map((day) =>
+            care({
+              id: `o${String(day)}`,
+              date: `2026-03-${String(day).padStart(2, "0")}T08:00:00Z`,
+              moisture: "wet",
+            }),
+          ),
+          hasNextPage: false,
+        }}
+      />
+    ));
+
+    const expectedDates = [
+      "1st of March",
+      "2nd of March",
+      "3rd of March",
+      "11th of March",
+      "12th of March",
+      "13th of March",
+      "21st of March",
+      "22nd of March",
+      "23rd of March",
+      "31st of March",
+    ];
+    expect(screen.getAllByRole("time").map((time) => time.textContent)).toEqual(
+      expectedDates.toReversed(),
+    );
+    expect(screen.getAllByRole("time")[1]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
   });
 
   it("should show history access only when older operations exist", () => {

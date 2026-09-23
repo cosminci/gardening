@@ -25,6 +25,8 @@ final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object JournalApi:
 
+  final private case class LogOperationRequest(date: Instant, details: OperationDetails)
+
   extension (attention: WateringAttention)
     // $COVERAGE-OFF$
     private def kind =
@@ -35,7 +37,10 @@ object JournalApi:
         case _: WateringAttention.RedAlert    => "redAlert"
     // $COVERAGE-ON$
 
-  private val journalEndpoint      = endpoint.errorOut(JournalError.generic)
+  private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
+  private val getPlantsEndpoint =
+    journalEndpoint.get.in("plants").in(query[PlantStatus]("status").default(PlantStatus.Active))
+      .out(jsonBody[Vector[Plant]]).summary("List plants by status")
   private val getAttentionEndpoint =
     endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
@@ -48,7 +53,7 @@ object JournalApi:
       .summary("List a bounded page of plant operations")
 
   private val logOperationEndpoint =
-    journalEndpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[OperationDetails])
+    journalEndpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[LogOperationRequest])
       .out(statusCode(StatusCode.Created)).out(jsonBody[LoggedOperation]).summary("Log a plant operation")
 
   private val editOperationEndpoint =
@@ -76,6 +81,7 @@ object JournalApi:
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(
+      getPlantsEndpoint,
       getAttentionEndpoint,
       getOperationsEndpoint,
       logOperationEndpoint,
@@ -90,14 +96,19 @@ object JournalApi:
 
   def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
+      getPlantsEndpoint.handle: status =>
+        journal.getPlants(status) match
+          case GetPlantsResult.Read(plants)  => plants.asRight
+          case GetPlantsResult.ReadFailed(_) =>
+            (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
       getAttentionEndpoint.handleSuccess(_ => attention.current),
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
           case GetOperationsResult.ReadFailed(_) =>
             (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
-      logOperationEndpoint.handle: (plantId, details) =>
-        journal.logOperation(PlantId(plantId), details) match
+      logOperationEndpoint.handle: (plantId, request) =>
+        journal.logOperation(PlantId(plantId), request.date, request.details) match
           case LogOperationResult.Logged(id) =>
             LoggedOperation(id.value).asRight
           case LogOperationResult.LoggingFailed(_) =>
@@ -188,6 +199,14 @@ object JournalApi:
     )(value => value)
     .schema(operationPageSizeSchema)
 
+  private given TapirCodec.PlainCodec[PlantStatus] = TapirCodec.string
+    .mapDecode(value =>
+      PlantStatus.values.find(status => lowerCamel(status.toString).equals(value)) match
+        case Some(status) => DecodeResult.Value(status)
+        case None         => DecodeResult.Error(value, IllegalArgumentException(s"invalid plant status: $value"))
+    )(status => lowerCamel(status.toString))
+    .schema(enumSchema[PlantStatus])
+
   // Tapir requires bidirectional codecs for output bodies even though these values are never decoded by the server.
   // $COVERAGE-OFF$
   private given Codec[PlantId]     = stringCodec(PlantId.apply, _.value)
@@ -195,9 +214,9 @@ object JournalApi:
   private given Codec[Species]     = stringCodec(Species.apply, _.value)
   private given Codec[Nickname]    = stringCodec(Nickname.apply, _.value)
   private given Codec[Location]    = stringCodec(Location.apply, _.value)
-  private given Codec[Instant]     =
-    Codec.from(Decoder.decodeString.emapTry(value => Try(Instant.parse(value))), Encoder.encodeString.contramap(_.toString))
   // $COVERAGE-ON$
+  private given Codec[Instant] =
+    Codec.from(Decoder.decodeString.emapTry(value => Try(Instant.parse(value))), Encoder.encodeString.contramap(_.toString))
   private given Codec[Note]                 = stringCodec(Note.apply, _.value)
   private given Codec[NomenclatureName]     = stringCodec(NomenclatureName.apply, _.value)
   private given Codec[NomenclatureInfo]     = stringCodec(NomenclatureInfo.apply, _.value)
@@ -230,6 +249,7 @@ object JournalApi:
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
   private given Codec.AsObject[OperationDetails]    = ConfiguredCodec.derived
+  private given Codec.AsObject[LogOperationRequest] = ConfiguredCodec.derived
   private given Codec.AsObject[PlantDetails]        = ConfiguredCodec.derived
   private given Codec.AsObject[Plant]               = ConfiguredCodec.derived
   private given Codec.AsObject[WateringAttention]   = ConfiguredCodec.derived
@@ -292,6 +312,7 @@ object JournalApi:
   private given Schema[OperationPage] = Schema
     .derived[OperationPage]
     .modify(_.operations)(_.copy(isOptional = false))
+  private given Schema[LogOperationRequest]    = Schema.derived
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
   private given Schema[PesticideData] = Schema.derived[PesticideData]

@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List plants by status */
+        get: operations["getPlants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attention": {
         parameters: {
             query?: never;
@@ -179,6 +196,12 @@ export interface components {
             status: string;
             version: string;
         };
+        /** LogOperationRequest */
+        LogOperationRequest: {
+            /** Format: date-time */
+            date: string;
+            details: components["schemas"]["OperationDetails"];
+        };
         /** LoggedOperation */
         LoggedOperation: {
             id: string;
@@ -227,7 +250,7 @@ export interface components {
         };
         /** PlantAttention */
         PlantAttention: {
-            plant: components["schemas"]["Plant"];
+            plantId: string;
             watering: components["schemas"]["WateringAttention"];
         };
         /** PlantDetails */
@@ -348,6 +371,44 @@ export interface operations {
             };
         };
     };
+    getPlants: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PlantStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plant"][];
+                };
+            };
+            /** @description Invalid value for: query parameter status */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getAttention: {
         parameters: {
             query?: never;
@@ -419,7 +480,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["OperationDetails"];
+                "application/json": components["schemas"]["LogOperationRequest"];
             };
         };
         responses: {

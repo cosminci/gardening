@@ -51,6 +51,11 @@ Vitest.describe("operation history", () => {
 
     const table = await Testing.screen.findByRole("table");
     Vitest.expect(Testing.within(table).getAllByRole("columnheader")).toHaveLength(4);
+    Vitest.expect(Testing.within(table).getAllByText("03.03.2026")).toHaveLength(2);
+    Vitest.expect(Testing.within(table).getAllByText("03.03.2026")[0]).toHaveAttribute(
+      "datetime",
+      "2026-03-03T00:00:00Z",
+    );
     Vitest.expect(Testing.within(table).getByText("Long note")).toBeInTheDocument();
     Vitest.expect(windows).toEqual([{ offset: 3, size: 10 }]);
     const hide = Testing.screen.getByRole("button", { name: "Hide operation history" });
@@ -58,12 +63,12 @@ Vitest.describe("operation history", () => {
 
     Testing.fireEvent.click(
       Testing.within(table).getByRole("button", {
-        name: "Edit historical care operation 1 from 2026-03-03",
+        name: "Edit historical care operation 1 from 03.03.2026",
       }),
     );
     Vitest.expect(
       Testing.within(table).getByRole("button", {
-        name: "Edit historical care operation 2 from 2026-03-03",
+        name: "Edit historical care operation 2 from 03.03.2026",
       }),
     ).toBeInTheDocument();
     Vitest.expect(edited).toEqual([firstOlder]);

@@ -10,7 +10,7 @@ const unavailableFicusAttentionResult = {
     measuredAt: instant("2026-01-01T00:00:00Z"),
     plants: [
       {
-        plant: ficus(),
+        plantId: ficus().id,
         watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
       },
     ],
@@ -26,10 +26,10 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "operationMissing" },
     });
     render(() => <App journal={journal} />);
-    await screen.findByText("2026-03-03");
+    await screen.findByText("3rd of March");
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 3rd of March" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
@@ -44,10 +44,10 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "operationTypeMismatch" },
     });
     render(() => <App journal={journal} />);
-    await screen.findByText("2026-03-03");
+    await screen.findByText("3rd of March");
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 3rd of March" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 
@@ -65,10 +65,10 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "editFailed", reason },
     });
     render(() => <App journal={journal} />);
-    await screen.findByText("2026-03-03");
+    await screen.findByText("3rd of March");
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Edit recent repot operation 1 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent repot operation 1 from 3rd of March" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save operation" }));
 

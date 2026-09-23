@@ -81,6 +81,7 @@ export const operationsPage = (
 
 export const buildJournal = ({
   getAttentionResults,
+  getPlantsResults,
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
@@ -99,6 +100,7 @@ export const buildJournal = ({
   operationWindows = [],
 }: {
   getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
+  getPlantsResults?: readonly [Journal.GetPlantsResult, ...Journal.GetPlantsResult[]];
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
   >;
@@ -110,7 +112,7 @@ export const buildJournal = ({
   getPesticidesResult?: Journal.CatalogReadResult<Journal.Pesticide>;
   pesticideAddResult?: Journal.CatalogAddResult<Journal.Pesticide>;
   pesticideEditResult?: Journal.CatalogEditResult<Journal.Pesticide>;
-  logged?: { plantId: string; details: Journal.OperationDetails }[];
+  logged?: { plantId: string; date: Journal.Instant; details: Journal.OperationDetails }[];
   edited?: { operationId: string; details: Journal.OperationDetails }[];
   addedComponents?: Journal.SubstrateComponentData[];
   editedComponents?: {
@@ -123,9 +125,17 @@ export const buildJournal = ({
 } = {}): Journal.JournalClient => {
   const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
   let attentionReads = 0;
+  let plantReads = 0;
+  const plants = [ficus(), monstera()].filter(
+    (plant) =>
+      attentionResponses[0].kind === "read" &&
+      attentionResponses[0].projection.plants.some((sample) => sample.plantId === plant.id),
+  );
+  const plantResponses = getPlantsResults ?? ([{ kind: "read", plants }] as const);
   const operationReads = new Map<string, number>();
 
   return {
+    getPlants: () => Promise.resolve(queuedResult(plantResponses, plantReads++)),
     getAttention: () => {
       const read = attentionReads++;
       return Promise.resolve(queuedResult(attentionResponses, read));
@@ -140,8 +150,8 @@ export const buildJournal = ({
       operationReads.set(id, read + 1);
       return Promise.resolve(queuedResult(results, read));
     },
-    logOperation: (id, details) => {
-      logged.push({ plantId: id, details });
+    logOperation: (id, date, details) => {
+      logged.push({ plantId: id, date, details });
       return Promise.resolve(logOperationResult);
     },
     editOperation: (id, details) => {

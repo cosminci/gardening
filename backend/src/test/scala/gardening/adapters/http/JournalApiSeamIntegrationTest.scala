@@ -34,7 +34,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
   private val repotRequest   =
     """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
-  private val operationsJson =
+  private val loggedCareRequest = s"""{"date":"$date","details":$careRequest}"""
+  private val operationsJson    =
     """{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
   private val repotJson =
     """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
@@ -80,19 +81,19 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       measuredAt = date,
       plants = Vector(
         PlantAttention(
-          plant = unknownPlant,
+          plantId = unknownPlant.id,
           watering = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = 12.hours.some)
         ),
         PlantAttention(
-          plant = plant,
+          plantId = plant.id,
           watering = WateringAttention.RedAlert(sampleCount = 5, averageInterval = 24.hours, elapsed = 49.hours)
         ),
         PlantAttention(
-          plant = currentPlant,
+          plantId = currentPlant.id,
           watering = WateringAttention.Current(sampleCount = 5, averageInterval = 24.hours, elapsed = 12.hours)
         ),
         PlantAttention(
-          plant = zeroAveragePlant,
+          plantId = zeroAveragePlant.id,
           watering = WateringAttention.Overdue(sampleCount = 5, averageInterval = 0.millis, elapsed = 1.milli)
         )
       )
@@ -103,19 +104,19 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
          |  "measuredAt": "$date",
          |  "plants": [
          |    {
-         |      "plant": {"id":"unknown","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "unknown",
          |      "watering": {"sampleCount":4,"elapsedMillis":"43200000","kind":"unavailable"}
          |    },
          |    {
-         |      "plant": {"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "p1",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"176400000","kind":"redAlert"}
          |    },
          |    {
-         |      "plant": {"id":"current","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "current",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"43200000","kind":"current"}
          |    },
          |    {
-         |      "plant": {"id":"zero-average","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "zero-average",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"0","elapsedMillis":"1","kind":"overdue"}
          |    }
          |  ]
@@ -130,6 +131,50 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code, StatusCode.Ok)
     assertEquals(refs.requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
+  test("should list active plants by default and archived plants on request"):
+    val active         = plant
+    val archived       = plant.copy(id = PlantId("archived"), details = plant.details.copy(status = PlantStatus.Archived))
+    val refs           = Refs()
+    val activeServer   = buildServer(refs = refs, plantsResult = GetPlantsResult.Read(Vector(active)))
+    val archivedServer = buildServer(refs = refs, plantsResult = GetPlantsResult.Read(Vector(archived)))
+
+    val activeResponse   = get("/plants", activeServer)
+    val archivedResponse = get("/plants?status=archived", archivedServer)
+    assertEquals(activeResponse.code, StatusCode.Ok)
+    assertEquals(archivedResponse.code, StatusCode.Ok)
+    assertEquals(
+      jsonBody(activeResponse),
+      json(
+        s"""[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}]"""
+      )
+    )
+    assertEquals(
+      jsonBody(archivedResponse),
+      json(
+        s"""[{"id":"archived","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"archived"}}]"""
+      )
+    )
+    assertEquals(refs.requestedStatuses.get(), Vector(PlantStatus.Active, PlantStatus.Archived))
+    assertEquals(get("/plants?status=unknown", activeServer).code, StatusCode.BadRequest)
+    assertEquals(refs.requestedStatuses.get(), Vector(PlantStatus.Active, PlantStatus.Archived))
+
+  test("should return a read error when plant details cannot be loaded"):
+    val server = buildServer(plantsResult = GetPlantsResult.ReadFailed(RuntimeException("offline")))
+
+    val response = get("/plants", server)
+    assertEquals(response.code, StatusCode.InternalServerError)
+
+  test("should require a valid absolute operation instant"):
+    val refs   = Refs()
+    val server = buildServer(refs = refs)
+    assertEquals(post(s"/plants/${plant.id.value}/operations", loggedCareRequest, server).code, StatusCode.Created)
+    List(
+      s"""{"details":$careRequest}""",
+      s"""{"date":"tomorrow","details":$careRequest}""",
+      s"""{"date":"2026-01-01T00:00","details":$careRequest}"""
+    ).foreach(body => assertEquals(post(s"/plants/${plant.id.value}/operations", body, server).code, StatusCode.BadRequest))
+    assertEquals(refs.loggedOperations.get(), Vector((plant.id, date, care)))
+
   test("should log care and replace the details of an existing repot"):
     val refs   = Refs()
     val server = buildServer(
@@ -138,11 +183,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       editOperationResult = EditOperationResult.Edited(repotOperation)
     )
 
-    val logResponse   = post(s"/plants/${plant.id.value}/operations", careRequest, server)
+    val logResponse   = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, server)
     val editResponse  = put(s"/operations/${repotOperation.id.value}", repotRequest, server)
     assertEquals(logResponse.code  -> jsonBody(logResponse), StatusCode.Created -> json("""{"id":"logged"}"""))
     assertEquals(editResponse.code -> jsonBody(editResponse), StatusCode.Ok     -> json(repotJson))
-    assertEquals(refs.loggedOperations.get(), Vector(plant.id -> care))
+    assertEquals(refs.loggedOperations.get(), Vector((plant.id, date, care)))
     assertEquals(refs.editedOperations.get(), Vector(repotOperation.id -> repot))
 
   test("should reject invalid operation details without logging an operation"):
@@ -157,7 +202,9 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":60},{"componentId":"00000000-0000-4000-8000-000000000004","share":60}],"notes":null}""",
       """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
-    invalidBodies.foreach(body => assertEquals(post(s"/plants/${plant.id.value}/operations", body, server).code, StatusCode.BadRequest))
+    invalidBodies.foreach: details =>
+      val body = s"""{"date":"$date","details":$details}"""
+      assertEquals(post(s"/plants/${plant.id.value}/operations", body, server).code, StatusCode.BadRequest)
     assertEquals(refs.loggedOperations.get(), Vector.empty)
 
   test("should hide storage failures returned by read operations"):
@@ -171,7 +218,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should hide the cause when logging an operation fails"):
     val server   = buildServer(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
-    val response = post(s"/plants/${plant.id.value}/operations", careRequest, server)
+    val response = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, server)
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be logged"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -256,13 +303,15 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   private case class Refs(
       requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
-      loggedOperations: AtomicReference[Vector[(PlantId, OperationDetails)]] = AtomicReference(Vector.empty),
+      requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
+      loggedOperations: AtomicReference[Vector[(PlantId, Instant, OperationDetails)]] = AtomicReference(Vector.empty),
       editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
   )
 
   private def buildServer(
       refs: Refs = Refs(),
       attentionProjection: AttentionProjection = AttentionProjection(date, Vector.empty),
+      plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
@@ -274,11 +323,14 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) =
     val journal = new PlantJournal:
+      override def getPlants(status: PlantStatus): GetPlantsResult =
+        refs.requestedStatuses.updateAndGet(_ :+ status)
+        plantsResult
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
         getOperationsResult
-      override def logOperation(plantId: PlantId, details: OperationDetails): LogOperationResult =
-        refs.loggedOperations.updateAndGet(_ :+ (plantId -> details)).pipe(_ => logOperationResult)
+      override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
+        refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => logOperationResult)
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
         refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
       override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = componentReadResult

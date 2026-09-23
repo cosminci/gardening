@@ -1,6 +1,6 @@
 package gardening.domain.attention
 
-import gardening.domain.Plant
+import gardening.domain.PlantId
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.collection.MaxLength
 import io.github.iltotore.iron.constraint.numeric.Interval
@@ -18,7 +18,7 @@ object WateringHistory:
   extension (history: WateringHistory)
     def sampleCount: WateringSampleCount = history.size.assume[Interval.Closed[0, 20]]
 
-final case class PlantAttentionSample(plant: Plant, wateringDates: WateringHistory)
+final case class PlantAttentionSample(plantId: PlantId, wateringDates: WateringHistory)
 
 enum GetAttentionSamplesResult:
   case Read(samples: Vector[PlantAttentionSample])
@@ -43,7 +43,7 @@ object WateringAttention:
   final case class Overdue(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration)  extends Available
   final case class RedAlert(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
 
-final case class PlantAttention(plant: Plant, watering: WateringAttention)
+final case class PlantAttention(plantId: PlantId, watering: WateringAttention)
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
 
 enum RefreshAttentionResult:

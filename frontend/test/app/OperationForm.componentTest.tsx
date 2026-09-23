@@ -1,5 +1,5 @@
 import * as Testing from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { OperationForm } from "../../src/app/OperationForm";
 import * as Journal from "../../src/domain/Journal";
 import { care, repot } from "./JournalTestSupport";
@@ -37,7 +37,85 @@ const pesticides: readonly Journal.Pesticide[] = [
   },
 ];
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
+
 describe("OperationForm", () => {
+  it("should log the default local minute and a keyboard-edited local minute as instants", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 23, 14, 35, 48));
+    const submitted: Journal.Instant[] = [];
+    Testing.render(() => (
+      <OperationForm
+        initial={undefined}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={(_, date) => {
+          submitted.push(date);
+          return Promise.resolve();
+        }}
+        onCancel={() => undefined}
+      />
+    ));
+
+    const date = Testing.screen.getByLabelText("Date and time");
+    expect(date).toHaveAttribute("type", "datetime-local");
+    expect(date).toHaveValue("2026-09-23T14:35");
+    date.focus();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    await Promise.resolve();
+    Testing.fireEvent.input(date, { target: { value: "2026-08-14T10:07" } });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+    const expectedDates = [
+      Journal.instant(new Date(2026, 8, 23, 14, 35).toISOString()),
+      Journal.instant(new Date(2026, 7, 14, 10, 7).toISOString()),
+    ];
+    expect(submitted).toEqual(expectedDates);
+  });
+
+  it("should keep missing and invalid operation dates in the form with an accessible error", () => {
+    const submitted: Journal.Instant[] = [];
+    Testing.render(() => (
+      <OperationForm
+        initial={undefined}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={(_, date) => {
+          submitted.push(date);
+          return Promise.resolve();
+        }}
+        onCancel={() => undefined}
+      />
+    ));
+
+    const date = Testing.screen.getByLabelText("Date and time");
+    Testing.fireEvent.input(date, { target: { value: "" } });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    const alert = Testing.screen.getByRole("alert");
+    expect(date).toHaveAttribute("aria-invalid", "true");
+    expect(date).toHaveAttribute("aria-describedby", alert.id);
+    expect(alert).toHaveTextContent("Enter a valid date and time.");
+    Testing.fireEvent.input(date, { target: { value: "not a date" } });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    vi.stubEnv("TZ", "America/New_York");
+    Testing.fireEvent.input(date, { target: { value: "2026-03-08T02:30" } });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    expect(Testing.screen.getByRole("alert")).toHaveTextContent("Enter a valid date and time.");
+    expect(submitted).toEqual([]);
+    expect(Testing.screen.getByRole("form", { name: "Log operation" })).toBeInTheDocument();
+  });
+
   it("should preserve care details, omit None, and allow collapsing", () => {
     let cancelled = false;
     Testing.render(() => (

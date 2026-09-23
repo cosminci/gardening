@@ -54,7 +54,7 @@ object PlantAttentionMonitor:
           val timeSinceWatering = elapsed(latestWatering, measuredAt)
           if sampleCount < 5 then WateringAttention.Unavailable(sampleCount, timeSinceWatering.some)
           else assessWatering(dates, sampleCount, timeSinceWatering)
-    PlantAttention(sample.plant, watering)
+    PlantAttention(sample.plantId, watering)
 
   private def assessWatering(dates: Vector[Instant], sampleCount: WateringSampleCount, timeSinceWatering: FiniteDuration) =
     val intervals = dates.reverse.sliding(2).flatMap: window =>

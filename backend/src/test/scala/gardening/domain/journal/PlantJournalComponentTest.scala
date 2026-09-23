@@ -72,6 +72,17 @@ class PlantJournalComponentTest extends munit.FunSuite:
       GetOperationsResult.ReadFailed(readFailure)
     )
 
+  test("should return current plants by status and surface read failures"):
+    val failure = RuntimeException("plant read failed")
+    val store   = StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))
+
+    assertEquals(buildJournal(store).getPlants(PlantStatus.Active), GetPlantsResult.Read(Vector(plant)))
+    assertEquals(store.requestedStatuses.get(), Vector(PlantStatus.Active))
+    assertEquals(
+      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.ReadFailed(failure))).getPlants(PlantStatus.Archived),
+      GetPlantsResult.ReadFailed(failure)
+    )
+
   test("should assign catalog identifiers and delegate nomenclature operations"):
     val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
     val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
@@ -105,10 +116,10 @@ class PlantJournalComponentTest extends munit.FunSuite:
       )
     )
     val validStore = StoreStub(pesticideReadResult = CatalogReadResult.Read(pesticides))
-    assertEquals(buildJournal(validStore).logOperation(plant.id, selectedCare), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(buildJournal(validStore).logOperation(plant.id, date, selectedCare), LogOperationResult.Logged(OperationId("id-1")))
 
     val unknownPesticideStore = StoreStub()
-    buildJournal(unknownPesticideStore).logOperation(plant.id, selectedCare) match
+    buildJournal(unknownPesticideStore).logOperation(plant.id, date, selectedCare) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(unknownPesticideStore.recordedOperations.get(), Vector.empty)
@@ -116,7 +127,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val readFailure          = RuntimeException("catalog unavailable")
     val unreadablePesticides = StoreStub(pesticideReadResult = CatalogReadResult.ReadFailed(readFailure))
     assertEquals(
-      buildJournal(unreadablePesticides).logOperation(plant.id, selectedCare),
+      buildJournal(unreadablePesticides).logOperation(plant.id, date, selectedCare),
       LogOperationResult.LoggingFailed(readFailure)
     )
 
@@ -125,13 +136,13 @@ class PlantJournalComponentTest extends munit.FunSuite:
       .of(List(SubstratePart(perliteId, 50), SubstratePart(lecaId, 50)))
       .getOrElse(fail("invalid test substrate"))
     val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
-    buildJournal(unknownComponentStore).logOperation(plant.id, repotWithUnknownComponents) match
+    buildJournal(unknownComponentStore).logOperation(plant.id, date, repotWithUnknownComponents) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(unknownComponentStore.recordedOperations.get(), Vector.empty)
 
     val unreadableComponents = StoreStub(componentReadResult = CatalogReadResult.ReadFailed(readFailure))
-    assertEquals(buildJournal(unreadableComponents).logOperation(plant.id, repot), LogOperationResult.LoggingFailed(readFailure))
+    assertEquals(buildJournal(unreadableComponents).logOperation(plant.id, date, repot), LogOperationResult.LoggingFailed(readFailure))
 
     buildJournal(unknownPesticideStore).editOperation(operation.id, selectedCare) match
       case EditOperationResult.EditFailed(reason) =>
@@ -140,11 +151,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
       case other => fail(s"expected EditFailed, got $other")
     assertEquals(unknownPesticideStore.updatedOperations.get(), Vector.empty)
 
-  test("should assign the backend timestamp when recording care"):
-    val store = StoreStub()
+  test("should record the caller's operation instant"):
+    val store        = StoreStub()
+    val selectedDate = date.plusSeconds(120)
 
-    assertEquals(buildJournal(store).logOperation(PlantId("p1"), care), LogOperationResult.Logged(OperationId("id-1")))
-    assertEquals(store.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), date, care)))
+    assertEquals(buildJournal(store).logOperation(PlantId("p1"), selectedDate, care), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(store.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), selectedDate, care)))
     assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should update a plant after recording the latest repot"):
@@ -152,7 +164,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val store        = StoreStub()
 
-    assertEquals(buildJournal(store).logOperation(PlantId("p1"), newRepot), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(buildJournal(store).logOperation(PlantId("p1"), date, newRepot), LogOperationResult.Logged(OperationId("id-1")))
     assertEquals(store.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)))
     assertEquals(store.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
@@ -164,38 +176,50 @@ class PlantJournalComponentTest extends munit.FunSuite:
       addOperationResult = LogOperationResult.Logged(logged.id)
     )
 
-    assertEquals(buildJournal(store, idGen = () => logged.id.value).logOperation(plant.id, repot), LogOperationResult.Logged(logged.id))
+    assertEquals(buildJournal(store, idGen = () => logged.id.value).logOperation(plant.id, date, repot), LogOperationResult.Logged(logged.id))
     assertEquals(store.updatedPlants.get(), Vector.empty)
     assertEquals(store.removedOperations.get(), Vector.empty)
+
+  test("should preserve the current substrate when logging a historical repot"):
+    val newerSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val olderSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newerRepot     = Operation(OperationId("newer"), plant.id, date, OperationDetails.Repot(newerSubstrate, none))
+    val olderRepot     = OperationDetails.Repot(olderSubstrate, none)
+    val store          = StoreStub(
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false))
+    )
+
+    assertEquals(buildJournal(store).logOperation(plant.id, date.minusSeconds(60), olderRepot), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(store.updatedPlants.get(), Vector.empty)
 
   test("should finish concurrent repot logs in timestamp order"):
     val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
-    val firstClockCall  = CountDownLatch(1)
+    val firstIdCall     = CountDownLatch(1)
     val releaseFirst    = CountDownLatch(1)
-    val secondClockCall = CountDownLatch(1)
-    val clockCalls      = AtomicInteger()
-    val clock           = new Clock:
-      override def now(): Instant =
-        clockCalls.incrementAndGet() match
+    val secondIdCall    = CountDownLatch(1)
+    val idCalls         = AtomicInteger()
+    val idGen           = new IdGenerator:
+      override def nextId(): String =
+        idCalls.incrementAndGet() match
           case 1 =>
-            firstClockCall.countDown()
+            firstIdCall.countDown()
             releaseFirst.await()
-            date
+            "id-1"
           case _ =>
-            secondClockCall.countDown()
-            date.plusNanos(1)
+            secondIdCall.countDown()
+            "id-2"
     val store   = StoreStub()
-    val journal = buildJournal(store, clock = clock)
+    val journal = buildJournal(store, idGen = idGen)
 
     val firstThread = Thread.ofVirtual().start: () =>
-      val _ = journal.logOperation(PlantId("p1"), firstRepot)
-    assert(firstClockCall.await(1, java.util.concurrent.TimeUnit.SECONDS))
+      val _ = journal.logOperation(PlantId("p1"), date, firstRepot)
+    assert(firstIdCall.await(1, java.util.concurrent.TimeUnit.SECONDS))
     val secondThread = Thread.ofVirtual().start: () =>
-      val _ = journal.logOperation(PlantId("p1"), secondRepot)
-    val overtook = secondClockCall.await(100, MILLISECONDS)
+      val _ = journal.logOperation(PlantId("p1"), date.plusNanos(1), secondRepot)
+    val overtook = secondIdCall.await(100, MILLISECONDS)
     releaseFirst.countDown()
     firstThread.join()
     secondThread.join()
@@ -213,20 +237,20 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val notUpdated        = StoreStub(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
     assertEquals(
-      buildJournal(unreadableHistory).logOperation(PlantId("p1"), repot),
+      buildJournal(unreadableHistory).logOperation(PlantId("p1"), date, repot),
       LogOperationResult.LoggingFailed(historyFailure)
     )
-    buildJournal(missingPlant).logOperation(PlantId("p1"), repot) match
+    buildJournal(missingPlant).logOperation(PlantId("p1"), date, repot) match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(missingPlant.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(
-      buildJournal(unreadable).logOperation(PlantId("p1"), repot),
+      buildJournal(unreadable).logOperation(PlantId("p1"), date, repot),
       LogOperationResult.LoggingFailed(readFailure)
     )
     assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(
-      buildJournal(notUpdated).logOperation(PlantId("p1"), repot),
+      buildJournal(notUpdated).logOperation(PlantId("p1"), date, repot),
       LogOperationResult.LoggingFailed(updateFailure)
     )
     assertEquals(notUpdated.removedOperations.get(), Vector(OperationId("id-1")))
@@ -240,7 +264,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
     )
 
-    buildJournal(store).logOperation(PlantId("p1"), repot) match
+    buildJournal(store).logOperation(PlantId("p1"), date, repot) match
       case LogOperationResult.LoggingFailed(reason) =>
         assertEquals(reason.getCause, updateFailure)
         assertEquals(reason.getSuppressed.toList, List(removeFailure))
@@ -250,7 +274,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val cause = RuntimeException("store down")
     val store = StoreStub(addOperationResult = LogOperationResult.LoggingFailed(cause))
 
-    assertEquals(buildJournal(store).logOperation(PlantId("p1"), repot), LogOperationResult.LoggingFailed(cause))
+    assertEquals(buildJournal(store).logOperation(PlantId("p1"), date, repot), LogOperationResult.LoggingFailed(cause))
     assertEquals(store.updatedPlants.get(), Vector.empty)
     assertEquals(store.removedOperations.get(), Vector.empty)
 
@@ -397,6 +421,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(buildJournal(store).editOperation(operation.id, care), EditOperationResult.EditFailed(cause))
 
   final private case class StoreStub(
+      getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       nextOperationsResult: Option[GetOperationsResult] = none,
@@ -414,6 +439,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) extends PlantJournalStore:
     private val operationReads                                                                    = AtomicInteger(0)
+    val requestedStatuses: AtomicReference[Vector[PlantStatus]]                                   = AtomicReference(Vector.empty)
     val requestedOperationWindows: AtomicReference[Vector[(PlantId, OperationWindow)]]            = AtomicReference(Vector.empty)
     val recordedOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
     val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]]               = new AtomicReference(Vector.empty)
@@ -425,6 +451,9 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val addedPesticides: AtomicReference[Vector[Pesticide]]                                       = new AtomicReference(Vector.empty)
     val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
+    override def getPlants(status: PlantStatus): GetPlantsResult =
+      requestedStatuses.updateAndGet(_ :+ status)
+      getPlantsResult
     override def getPlant(id: PlantId): GetPlantResult                                         = getPlantResult
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       requestedOperationWindows.updateAndGet(_ :+ (plantId -> window))
@@ -454,7 +483,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   private def buildJournal(
       store: PlantJournalStore^,
-      idGen: IdGenerator^ = () => "id-1",
-      clock: Clock^ = () => date
+      idGen: IdGenerator^ = () => "id-1"
   ) =
-    PlantJournal.make(using store, idGen, clock)
+    PlantJournal.make(using store, idGen)
