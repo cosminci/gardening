@@ -12,7 +12,9 @@ Scale the ceremony to the change: a one-line behaviour tweak needs a short spec 
 
 ## Before you start — create the checklist
 
-Create `.agent-work/<slug>/checklist.md` listing every phase gate below plus every quality-standard item that applies to the artifacts you'll produce. Include the [implementation authoring checklist](#implementation-authoring-checklist) for every change that writes code. Check items off as you go; before finishing, inspect every touched code and test file against each applicable item, then confirm it is satisfied or explicitly justified. The checklist is your proof of discipline — it is never reviewed and never leaves `.agent-work/`.
+Create `.agent-work/<slug>/checklist.md` listing every phase gate below plus every quality-standard item that applies to the artifacts you'll produce. Include the [implementation authoring checklist](#implementation-authoring-checklist) for every change that writes code. Check items off as you go; before finishing, inspect every touched code and test file against each applicable item, then confirm it is satisfied or explicitly justified. The checklist stays in `.agent-work/`; its checked boxes are claims to verify, not proof by themselves.
+
+Before declaring a phase complete, have an independent reviewer fill a separate copy of its applicable checklist from the spec, templates, implementation, and validation evidence **without reading the author's checked copy first**. Reconcile every disagreement by changing the artifact or recording a justified exception, then have the reviewer confirm the result. Keep both copies in `.agent-work/`; never self-approve an unchecked or unreviewed gate.
 
 ## Phase 1 — Classify
 

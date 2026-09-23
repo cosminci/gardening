@@ -6,7 +6,7 @@ The aims are constant: keep cognitive load low and even across the codebase, mak
 
 ## 1. Ports & Adapters
 
-The core is isolated from the outside world. Business logic lives in `domain` (pure values and rules) and `application` (use-case services). Every external dependency is named by a **port** — a capability `trait` in `capabilities/`, expressed in domain terms, not in a vendor's terms. Concrete **adapters** implement those ports and live apart, under `adapters/` (`http`, `persistence`, `system`). The composition root in `app/` is the only place that binds an adapter to a port, injecting it with `using`.
+The core is isolated from the outside world. Business logic lives in `domain` (pure values, rules, and use-case services). Every external dependency is named by a **port** — a capability `trait` in `capabilities/`, expressed in domain terms, not in a vendor's terms. Concrete **adapters** implement those ports and live apart, under `adapters/` (`http`, `persistence`, `system`). The composition root in `app/` is the only place that binds an adapter to a port, injecting it with `using`.
 
 Because the core depends only on ports, it is exhaustively unit-tested by substituting them. Adapters are proven at their seam — the persistence adapter against a real in-memory SQLite, the HTTP adapter against the served contract — never by mocking the thing they exist to talk to.
 
@@ -16,7 +16,8 @@ The domain is modelled explicitly and made hard to misuse:
 
 - **Strong types over primitives.** Identifiers, quantities, and labels are their own types (`PlantId`, `OperationId`, a percentage that is known to be in range), not bare `String`/`Int`.
 - **Invalid states are unrepresentable.** Prefer a type that cannot hold a bad value over a check that might be forgotten; prefer a total `enum` and exhaustive matches over open-ended strings. Avoid nullable/optional fields where a value is always present.
-- **The domain holds no capabilities.** Domain values carry data and rules only — no clock, no database, no I/O. Services in `application` orchestrate ports around pure domain calls.
+- **Domain values hold no capabilities.** Values carry data and rules only — no clock, database, or I/O. Domain services orchestrate capability ports around those pure values.
+- **Give event time an explicit owner.** When an event can be recorded after it happened, its timestamp is caller input, not an implicit server clock read. Convert local entry to an absolute instant at the boundary, validate it, and preserve it as part of the event's history.
 - **Ubiquitous language.** Code, docs, and the UI use one vocabulary, in English, matching how we talk about plants and care. Romanian source records are translated at the boundary (see §4), never carried inward.
 
 ## 3. Fractal Design
@@ -30,6 +31,7 @@ The system reads the same at every zoom level: `main` is the most zoomed-out vie
 - **DRY applies to knowledge, not lines.** Centralize a rule, decision, or contract when independent divergence would be a bug. Allow incidental code similarity when the duplicated code represents separate knowledge or responsibilities.
 - **Every abstraction must own a real seam.** Extract an interface, component, or helper only when it names a stable responsibility and has real consumers. Do not replace local code with configuration bags, pass-through layers, or generic frameworks that merely hide differences.
 - **Represent one fact once.** When one measurement determines a classification, model the valid classifications as one closed type carrying the measurements that apply to each case. Do not expose parallel fields that callers can combine into contradictions.
+- **Keep mutable records separate from cached projections.** A projection carries identity and derived measurements; read current entity details from their authoritative source and join by identity. A failed read or mismatched identity must not appear as a successful, current view.
 - **Layout follows content constraints, not one viewport.** UI components own their structural boxes, use fluid bounds, and define narrow-width behavior. Decorative layers must not stand in for structure that controls layout.
 
 ## 4. Anti-Corruption Layer
