@@ -1,6 +1,7 @@
 package gardening.adapters.http
 
 import cats.syntax.either.*
+import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.*
 import gardening.domain.journal.*
@@ -24,7 +25,7 @@ final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object JournalApi:
 
-  private enum WireWateringAttention:
+  private enum WateringAttentionOutput:
     case Unavailable(sampleCount: WateringSampleCount, maybeElapsedMillis: Option[String])
     case Current(
         sampleCount: WateringSampleCount,
@@ -41,6 +42,15 @@ object JournalApi:
         averageIntervalMillis: String,
         elapsedMillis: String
     )
+
+    // $COVERAGE-OFF$
+    def kind =
+      this match
+        case _: Unavailable => "unavailable"
+        case _: Current     => "current"
+        case _: Overdue     => "overdue"
+        case _: RedAlert    => "redAlert"
+    // $COVERAGE-ON$
 
   private val journalEndpoint      = endpoint.errorOut(JournalError.generic)
   private val getAttentionEndpoint =
@@ -232,13 +242,13 @@ object JournalApi:
     Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).left.map(_.toString)),
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
-  private given Codec.AsObject[OperationDetails]      = ConfiguredCodec.derived
-  private given Codec.AsObject[PlantDetails]          = ConfiguredCodec.derived
-  private given Codec.AsObject[Plant]                 = ConfiguredCodec.derived
-  private given Codec.AsObject[WireWateringAttention] = ConfiguredCodec.derived
-  private given Codec.AsObject[WateringAttention]     = Codec.AsObject.from(
+  private given Codec.AsObject[OperationDetails]        = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantDetails]            = ConfiguredCodec.derived
+  private given Codec.AsObject[Plant]                   = ConfiguredCodec.derived
+  private given Codec.AsObject[WateringAttentionOutput] = ConfiguredCodec.derived
+  private given Codec.AsObject[WateringAttention]       = Codec.AsObject.from(
     Decoder.failedWithMessage("watering attention is output-only"),
-    Encoder.AsObject.instance(watering => summon[Codec.AsObject[WireWateringAttention]].encodeObject(wireWatering(watering)))
+    Encoder.AsObject.instance(watering => summon[Codec.AsObject[WateringAttentionOutput]].encodeObject(wireWatering(watering)))
   )
   private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
@@ -246,24 +256,24 @@ object JournalApi:
   private def wireWatering(watering: WateringAttention) =
     watering match
       case unavailable: WateringAttention.Unavailable =>
-        WireWateringAttention.Unavailable(
+        WateringAttentionOutput.Unavailable(
           sampleCount = unavailable.sampleCount,
           maybeElapsedMillis = unavailable.maybeElapsed.map(_.toMillis.toString)
         )
       case current: WateringAttention.Current =>
-        WireWateringAttention.Current(
+        WateringAttentionOutput.Current(
           sampleCount = current.sampleCount,
           averageIntervalMillis = current.averageInterval.toMillis.toString,
           elapsedMillis = current.elapsed.toMillis.toString
         )
       case overdue: WateringAttention.Overdue =>
-        WireWateringAttention.Overdue(
+        WateringAttentionOutput.Overdue(
           sampleCount = overdue.sampleCount,
           averageIntervalMillis = overdue.averageInterval.toMillis.toString,
           elapsedMillis = overdue.elapsed.toMillis.toString
         )
       case redAlert: WateringAttention.RedAlert =>
-        WireWateringAttention.RedAlert(
+        WateringAttentionOutput.RedAlert(
           sampleCount = redAlert.sampleCount,
           averageIntervalMillis = redAlert.averageInterval.toMillis.toString,
           elapsedMillis = redAlert.elapsed.toMillis.toString
@@ -285,15 +295,23 @@ object JournalApi:
   private given Schema[WateringSampleCount] = Schema.schemaForInt
     .validate(Validator.min(0).and(Validator.max(20)))
     .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
-  private given Schema[WireWateringAttention.Current]     = Schema.derived
-  private given Schema[WireWateringAttention.Overdue]     = Schema.derived
-  private given Schema[WireWateringAttention.RedAlert]    = Schema.derived
-  private given Schema[WireWateringAttention.Unavailable] = Schema
-    .derived[WireWateringAttention.Unavailable]
+  private given Schema[WateringAttentionOutput.Current]     = Schema.derived[WateringAttentionOutput.Current].name(Schema.SName("WateringCurrent"))
+  private given Schema[WateringAttentionOutput.Overdue]     = Schema.derived[WateringAttentionOutput.Overdue].name(Schema.SName("WateringOverdue"))
+  private given Schema[WateringAttentionOutput.RedAlert]    = Schema.derived[WateringAttentionOutput.RedAlert].name(Schema.SName("WateringRedAlert"))
+  private given Schema[WateringAttentionOutput.Unavailable] = Schema
+    .derived[WateringAttentionOutput.Unavailable]
+    .name(Schema.SName("WateringUnavailable"))
     .modify(_.maybeElapsedMillis)(_.copy(isOptional = false).nullable)
-  private given Schema[WireWateringAttention] = Schema.derived
-  private given Schema[WateringAttention]     =
-    summon[Schema[WireWateringAttention]].map(_ => Option.empty[WateringAttention])(wireWatering)
+  private given Schema[WateringAttentionOutput] = Schema
+    .oneOfUsingField[WateringAttentionOutput, String](_.kind, identity)(
+      "unavailable" -> summon[Schema[WateringAttentionOutput.Unavailable]],
+      "current"     -> summon[Schema[WateringAttentionOutput.Current]],
+      "overdue"     -> summon[Schema[WateringAttentionOutput.Overdue]],
+      "redAlert"    -> summon[Schema[WateringAttentionOutput.RedAlert]]
+    )
+    .name(Schema.SName("WateringAttention"))
+  private given Schema[WateringAttention] =
+    summon[Schema[WateringAttentionOutput]].map(_ => none[WateringAttention])(wireWatering)
   private given Schema[PlantAttention]      = Schema.derived
   private given Schema[AttentionProjection] = Schema.derived[AttentionProjection].modify(_.plants)(_.copy(isOptional = false))
   private given Schema[Substrate]           = summon[Schema[List[SubstratePart]]]

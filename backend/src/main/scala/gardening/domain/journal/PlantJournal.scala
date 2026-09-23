@@ -1,6 +1,7 @@
 package gardening.domain.journal
 
 import cats.syntax.either.*
+import cats.syntax.option.*
 import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
@@ -137,7 +138,7 @@ object PlantJournal:
               case None if page.hasNextPage =>
                 val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
                 read(OperationWindow(nextOffset, window.size))
-              case None => Option.empty[Operation].asRight
+              case None => none[Operation].asRight
           case GetOperationsResult.ReadFailed(reason) =>
             PlantUpdateInterruption.Failed(reason).asLeft
 
@@ -174,7 +175,7 @@ object PlantJournal:
                 RuntimeException("repot persistence and compensation failed", primary).tap(_.addSuppressed(compensation)).asLeft
 
     extension (condition: Boolean)
-      private def orSkip: Either[PlantUpdateInterruption, Unit] =
+      private def orSkip =
         Either.cond(condition, (), PlantUpdateInterruption.NotLatestRepot)
 
     extension (mutex: ReentrantLock)

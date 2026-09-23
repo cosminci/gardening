@@ -6,6 +6,10 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
   { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
   { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
 ];
+const emptyAttentionResult: Journal.GetAttentionResult = {
+  kind: "read",
+  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants: [] },
+};
 
 export const ficus = (): Journal.Plant => ({
   id: Journal.plantId("p1"),
@@ -27,38 +31,6 @@ export const monstera = (): Journal.Plant => ({
     substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(40) }]),
     status: "active",
   },
-});
-
-export const unavailableAttention = (
-  plant: Journal.Plant,
-  sampleCount = 0,
-): Journal.PlantAttention => ({
-  plant,
-  watering: { kind: "unavailable", sampleCount, maybeElapsed: null },
-});
-
-export const scoredAttention = (
-  plant: Journal.Plant,
-  kind: "current" | "overdue" | "redAlert" = "current",
-  averageInterval = Journal.milliseconds("86400000"),
-  elapsed = Journal.milliseconds(
-    kind === "current" ? "43200000" : kind === "overdue" ? "90000000" : "176400000",
-  ),
-): Journal.PlantAttention => ({
-  plant,
-  watering: {
-    kind,
-    sampleCount: 5,
-    averageInterval,
-    elapsed,
-  },
-});
-
-export const attentionResult = (
-  plants: readonly Journal.PlantAttention[] = [],
-): Journal.GetAttentionResult => ({
-  kind: "read",
-  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants },
 });
 
 export const care = ({
@@ -149,7 +121,7 @@ export const buildJournal = ({
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): Journal.JournalClient => {
-  const attentionResponses = getAttentionResults ?? ([attentionResult([])] as const);
+  const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
   let attentionReads = 0;
   const operationReads = new Map<string, number>();
 

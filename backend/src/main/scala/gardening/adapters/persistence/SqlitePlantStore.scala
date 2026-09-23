@@ -13,7 +13,6 @@ import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.collection.MaxLength
 import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
 import java.time.format.DateTimeFormatterBuilder
@@ -101,7 +100,13 @@ object SqlitePlantStore:
       for
         plant         <- toPlant(plantRow)
         wateringDates <- storedDates.traverse(parseOperationDate)
-      yield PlantAttentionSample(plant, wateringDates.assume[MaxLength[20]])
+        // The SQL query limits each history to the maximum representable length.
+        // $COVERAGE-OFF$
+        wateringHistory <- WateringHistory
+          .from(wateringDates)
+          .leftMap(message => DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message")))
+      // $COVERAGE-ON$
+      yield PlantAttentionSample(plant, wateringHistory)
 
     private def decodeWateringDates(value: String) =
       trust(decode[Vector[String]](value))

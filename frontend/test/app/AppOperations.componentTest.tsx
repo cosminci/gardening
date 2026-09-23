@@ -8,6 +8,19 @@ Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 
+const unavailableFicusAttentionResult: Journal.GetAttentionResult = {
+  kind: "read",
+  projection: {
+    measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+    plants: [
+      {
+        plant: JournalFixtures.ficus(),
+        watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+      },
+    ],
+  },
+};
+
 Vitest.describe("changing the journal", () => {
   Vitest.it("should log care and refresh the plant's operation history", async () => {
     const startViewTransition = Vitest.vi.fn((update: () => void) => {
@@ -20,11 +33,7 @@ Vitest.describe("changing the journal", () => {
     });
     const logged: { plantId: string; details: Journal.OperationDetails }[] = [];
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage(),
@@ -85,11 +94,7 @@ Vitest.describe("changing the journal", () => {
       },
     };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([updated])],
       },
@@ -136,11 +141,7 @@ Vitest.describe("changing the journal", () => {
 
   Vitest.it("should close the operation editor with Escape", async () => {
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const { container } = Testing.render(() => <App journal={journal} />);
@@ -179,11 +180,7 @@ Vitest.describe("changing the journal", () => {
     const addedComponent = { name: Journal.nomenclatureName("Pumice"), maybeInfo: null };
     const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
       componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
@@ -278,11 +275,7 @@ Vitest.describe("changing the journal", () => {
       pesticides: new Set([neemId]),
     });
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
       pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
@@ -378,6 +371,92 @@ Vitest.describe("changing the journal", () => {
     });
     await Testing.waitFor(() => {
       Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  Vitest.it("should reorder plant cards when logging an operation changes attention", async () => {
+    const ficusPlant = JournalFixtures.ficus();
+    const monsteraPlant = JournalFixtures.monstera();
+    const ficusUrgentAttention: Journal.PlantAttention = {
+      plant: ficusPlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("176400000"),
+      },
+    };
+    const monsteraCurrentAttention: Journal.PlantAttention = {
+      plant: monsteraPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("43200000"),
+      },
+    };
+    const initialAttentionResult: Journal.GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+        plants: [ficusUrgentAttention, monsteraCurrentAttention],
+      },
+    };
+    const ficusCurrentAttention: Journal.PlantAttention = {
+      plant: ficusPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("43200000"),
+      },
+    };
+    const monsteraUrgentAttention: Journal.PlantAttention = {
+      plant: monsteraPlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("176400000"),
+      },
+    };
+    const reorderedAttentionResult: Journal.GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
+        plants: [monsteraUrgentAttention, ficusCurrentAttention],
+      },
+    };
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [initialAttentionResult, reorderedAttentionResult],
+      getOperationsByPlantId: {
+        p1: [
+          JournalFixtures.operationsPage(),
+          JournalFixtures.operationsPage([
+            JournalFixtures.care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" }),
+          ]),
+        ],
+        p2: [JournalFixtures.operationsPage(), JournalFixtures.operationsPage()],
+      },
+      logOperationResult: { kind: "logged", id: Journal.operationId("new") },
+    });
+    Testing.render(() => <App journal={journal} />);
+
+    const initialArticles = await Testing.screen.findAllByRole("article");
+    Vitest.expect(initialArticles.map((article) => article.getAttribute("aria-label"))).toEqual([
+      "Fern",
+      "Monstera deliciosa",
+    ]);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+    await Testing.waitFor(() => {
+      const updatedArticles = Testing.screen.getAllByRole("article");
+      Vitest.expect(updatedArticles.map((article) => article.getAttribute("aria-label"))).toEqual([
+        "Monstera deliciosa",
+        "Fern",
+      ]);
     });
   });
 });

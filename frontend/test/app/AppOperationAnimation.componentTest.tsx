@@ -2,17 +2,23 @@ import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import type { GetOperationsResult, OperationWindow, PlantId } from "../../src/domain/Journal";
-import { operationId } from "../../src/domain/Journal";
-import {
-  attentionResult,
-  buildJournal,
-  care,
-  ficus,
-  operationsPage,
-  unavailableAttention,
-} from "./JournalTestSupport";
+import { instant, operationId } from "../../src/domain/Journal";
+import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
+
+const unavailableFicusAttentionResult = {
+  kind: "read" as const,
+  projection: {
+    measuredAt: instant("2026-01-01T00:00:00Z"),
+    plants: [
+      {
+        plant: ficus(),
+        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+      },
+    ],
+  },
+};
 
 Vitest.describe("animating operation changes", () => {
   Vitest.it("should not animate a refresh beneath a newly opened editor", async () => {
@@ -26,7 +32,7 @@ Vitest.describe("animating operation changes", () => {
       finishRefresh = resolve;
     });
     const base = buildJournal({
-      getAttentionResults: [attentionResult([unavailableAttention(ficus())])],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });

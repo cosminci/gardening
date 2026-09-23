@@ -2,14 +2,33 @@ import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import {
+  instant,
   milliseconds,
   nickname,
   nomenclatureName,
   pesticideId,
   plantId,
 } from "../../src/domain/Journal";
-import type { OperationWindow, Plant, PlantId } from "../../src/domain/Journal";
+import type {
+  GetAttentionResult,
+  OperationWindow,
+  PlantAttention,
+  PlantId,
+} from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
+
+const unavailableFicusAttentionResult: GetAttentionResult = {
+  kind: "read",
+  projection: {
+    measuredAt: instant("2026-01-01T00:00:00Z"),
+    plants: [
+      {
+        plant: JournalFixtures.ficus(),
+        watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+      },
+    ],
+  },
+};
 
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
@@ -45,13 +64,28 @@ describe("browsing the journal", () => {
       plantId: PlantId;
       window: OperationWindow;
     }[] = [];
+    const monsteraUnavailableAttention: PlantAttention = {
+      plant: JournalFixtures.monstera(),
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const ficusRedAlertAttention: PlantAttention = {
+      plant: JournalFixtures.ficus(),
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: milliseconds("86400000"),
+        elapsed: milliseconds("176400000"),
+      },
+    };
+    const browsingAttentionResult: GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: instant("2026-01-01T00:00:00Z"),
+        plants: [monsteraUnavailableAttention, ficusRedAlertAttention],
+      },
+    };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.monstera()),
-          JournalFixtures.scoredAttention(JournalFixtures.ficus(), "redAlert"),
-        ]),
-      ],
+      getAttentionResults: [browsingAttentionResult],
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage([treated, repot, moderateCare], true)],
         p2: [JournalFixtures.operationsPage()],
@@ -105,33 +139,68 @@ describe("browsing the journal", () => {
   });
 
   it("should render backend attention in presentation order", async () => {
-    const plant = (id: string, plantNickname: string): Plant => ({
+    const unknownPlant = {
       ...JournalFixtures.ficus(),
-      id: plantId(id),
+      id: plantId("unknown"),
       details: {
         ...JournalFixtures.ficus().details,
-        maybeNickname: nickname(plantNickname),
+        maybeNickname: nickname("Unknown"),
       },
-    });
-    const unknown = plant("unknown", "Unknown");
-    const urgent = plant("urgent", "Urgent");
-    const recentlyWatered = plant("current", "Current");
+    };
+    const unknownUnavailableAttention: PlantAttention = {
+      plant: unknownPlant,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const urgentPlant = {
+      ...JournalFixtures.ficus(),
+      id: plantId("urgent"),
+      details: {
+        ...JournalFixtures.ficus().details,
+        maybeNickname: nickname("Urgent"),
+      },
+    };
+    const urgentRedAlertAttention: PlantAttention = {
+      plant: urgentPlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: milliseconds("0"),
+        elapsed: milliseconds("1"),
+      },
+    };
+    const recentlyWateredPlant = {
+      ...JournalFixtures.ficus(),
+      id: plantId("current"),
+      details: {
+        ...JournalFixtures.ficus().details,
+        maybeNickname: nickname("Current"),
+      },
+    };
+    const recentlyWateredCurrentAttention: PlantAttention = {
+      plant: recentlyWateredPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: milliseconds("10"),
+        elapsed: milliseconds("1"),
+      },
+    };
+    const browsingAttentionResult: GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: instant("2026-01-01T00:00:00Z"),
+        plants: [
+          recentlyWateredCurrentAttention,
+          urgentRedAlertAttention,
+          unknownUnavailableAttention,
+        ],
+      },
+    };
     const operationWindows: { plantId: PlantId; window: OperationWindow }[] = [];
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.scoredAttention(
-            recentlyWatered,
-            "current",
-            milliseconds("10"),
-            milliseconds("1"),
-          ),
-          JournalFixtures.scoredAttention(urgent, "redAlert", milliseconds("0"), milliseconds("1")),
-          JournalFixtures.unavailableAttention(unknown),
-        ]),
-      ],
+      getAttentionResults: [browsingAttentionResult],
       getOperationsByPlantId: Object.fromEntries(
-        [unknown, urgent, recentlyWatered].map(({ id }) => [
+        [unknownPlant, urgentPlant, recentlyWateredPlant].map(({ id }) => [
           id,
           [JournalFixtures.operationsPage()],
         ]),
@@ -152,11 +221,7 @@ describe("browsing the journal", () => {
 
   it("should identify a journal containing one active plant", async () => {
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
@@ -180,11 +245,7 @@ describe("browsing the journal", () => {
   it("should report an operation history read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        JournalFixtures.attentionResult([
-          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
-        ]),
-      ],
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 

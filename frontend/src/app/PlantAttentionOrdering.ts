@@ -3,26 +3,24 @@ import type * as Journal from "../domain/Journal";
 const compareText = (first: string, second: string) =>
   Number(first > second) - Number(first < second);
 
-interface AttentionScore {
-  readonly unbounded: boolean;
-  readonly numerator: bigint;
-  readonly denominator: bigint;
-}
+type AttentionScore =
+  | { readonly kind: "unbounded" }
+  | { readonly kind: "ratio"; readonly numerator: bigint; readonly denominator: bigint };
 
 const attentionScore = (watering: Journal.WateringAttention): AttentionScore | null => {
   if (watering.kind === "unavailable") return null;
   const zeroAverage = watering.averageInterval === 0n;
-  const unbounded = zeroAverage && watering.elapsed > 0n;
+  if (zeroAverage && watering.elapsed > 0n) return { kind: "unbounded" };
   return {
-    unbounded,
+    kind: "ratio",
     numerator: watering.elapsed,
-    denominator: unbounded ? 0n : zeroAverage ? 1n : watering.averageInterval,
+    denominator: zeroAverage ? 1n : watering.averageInterval,
   };
 };
 
 const compareAttentionScores = (first: AttentionScore, second: AttentionScore) => {
-  const unbounded = Number(second.unbounded) - Number(first.unbounded);
-  if (unbounded !== 0) return unbounded;
+  if (first.kind === "unbounded" || second.kind === "unbounded")
+    return Number(second.kind === "unbounded") - Number(first.kind === "unbounded");
 
   const firstProduct = first.numerator * second.denominator;
   const secondProduct = second.numerator * first.denominator;

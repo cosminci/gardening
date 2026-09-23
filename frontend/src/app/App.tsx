@@ -15,6 +15,7 @@ interface AppProps {
 
 interface PlantHistory {
   readonly attention: Journal.PlantAttention;
+  readonly measuredAt: Journal.Instant;
   readonly page: Journal.OperationPage;
 }
 
@@ -52,6 +53,7 @@ export const App: Component<AppProps> = (props) => {
     const results = await Promise.all(
       orderPlantAttention(attentionResult.projection.plants).map(async (attention) => ({
         attention,
+        measuredAt: attentionResult.projection.measuredAt,
         operationsResult: await journal.getOperations(attention.plant.id, {
           offset: 0,
           size: recentOperationCount,
@@ -59,8 +61,9 @@ export const App: Component<AppProps> = (props) => {
       })),
     );
     const loaded: PlantHistory[] = [];
-    for (const { attention, operationsResult } of results)
-      if (operationsResult.kind === "read") loaded.push({ attention, page: operationsResult.page });
+    for (const { attention, measuredAt, operationsResult } of results)
+      if (operationsResult.kind === "read")
+        loaded.push({ attention, measuredAt, page: operationsResult.page });
       else {
         setView("failed");
         return;
@@ -172,6 +175,7 @@ export const App: Component<AppProps> = (props) => {
               {(history) => (
                 <PlantCard
                   attention={history().attention}
+                  measuredAt={history().measuredAt}
                   operationPage={history().page}
                   substrateComponents={substrateComponents()}
                   pesticides={pesticides()}

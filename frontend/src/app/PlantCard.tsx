@@ -1,6 +1,7 @@
-import { For, Match, Show, Switch } from "solid-js";
-import type { Component } from "solid-js";
+import { For, Show } from "solid-js";
+import type { Component, JSX } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import { InfoControl } from "./InfoControl";
 import { formatSubstrate, plantDisplayName } from "./JournalLabels";
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
@@ -10,6 +11,7 @@ import "./plant-history.css";
 
 interface PlantCardProps {
   readonly attention: Journal.PlantAttention;
+  readonly measuredAt: Journal.Instant;
   readonly operationPage: Journal.OperationPage;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
@@ -19,24 +21,125 @@ interface PlantCardProps {
   readonly onEdit: (operation: Journal.Operation) => void;
 }
 
-const WateringStatus: Component<{ watering: Journal.WateringAttention }> = (props) => (
-  <Switch fallback={<p class="watering-status watering-status--current">Watering current</p>}>
-    <Match when={props.watering.kind === "unavailable"}>
-      <p class="watering-status watering-status--unknown">Watering cadence unknown</p>
-    </Match>
-    <Match when={props.watering.kind === "redAlert"}>
-      <p class="watering-status watering-status--red-alert">
-        <span class="watering-status__symbol" aria-hidden="true">
-          !
-        </span>
-        <span>Watering red alert</span>
-      </p>
-    </Match>
-    <Match when={props.watering.kind === "overdue"}>
-      <p class="watering-status watering-status--overdue">Watering overdue</p>
-    </Match>
-  </Switch>
-);
+interface WateringPresentation {
+  readonly label: string;
+  readonly symbol: string;
+  readonly delta: string;
+  readonly details: JSX.Element;
+}
+
+const hour = 60n * 60n * 1000n;
+const minute = 60_000;
+
+const formatDuration = (duration: bigint) => {
+  const roundedHours = (duration + hour - 1n) / hour;
+  const days = roundedHours / 24n;
+  const hours = roundedHours % 24n;
+  return days > 0n
+    ? `${String(days)}d${hours > 0n ? `${String(hours)}h` : ""}`
+    : `${String(hours)}h`;
+};
+
+const formatAverageInterval = (duration: bigint) => {
+  const roundedHours = (duration + hour - 1n) / hour;
+  const days = roundedHours / 24n;
+  const hours = roundedHours % 24n;
+  const dayDescription = days === 1n ? "1 day" : `${String(days)} days`;
+  const hourDescription = hours === 1n ? "1 hour" : `${String(hours)} hours`;
+  return days === 0n
+    ? hourDescription
+    : hours === 0n
+      ? dayDescription
+      : `${dayDescription} and ${hourDescription}`;
+};
+
+const formatEvaluationAge = (measuredAt: Journal.Instant) => {
+  const minutesAgo = Math.max(
+    0,
+    Math.floor((Date.now() - new Date(measuredAt).getTime()) / minute),
+  );
+  return `${String(minutesAgo)} ${minutesAgo === 1 ? "minute" : "minutes"} ago`;
+};
+
+const wateringPresentation = (
+  watering: Journal.WateringAttention,
+  measuredAt: Journal.Instant,
+): WateringPresentation => {
+  const evaluationAge = formatEvaluationAge(measuredAt);
+  const details = (averageInterval: string) => (
+    <dl class="watering-attention__details">
+      <div>
+        <dt>Watering operations</dt>
+        <dd>{String(watering.sampleCount)} considered</dd>
+      </div>
+      <div>
+        <dt>Average interval</dt>
+        <dd>{averageInterval}</dd>
+      </div>
+      <div>
+        <dt>Evaluated</dt>
+        <dd>{evaluationAge}</dd>
+      </div>
+    </dl>
+  );
+
+  switch (watering.kind) {
+    case "unavailable":
+      return {
+        label: "Watering cadence unavailable",
+        symbol: "?",
+        delta: "",
+        details: (
+          <p class="watering-attention__unavailable-details">Insufficient watering operations.</p>
+        ),
+      };
+    case "current":
+      return {
+        label: "Watering current",
+        symbol: "✓",
+        delta: `in ${formatDuration(watering.averageInterval - watering.elapsed)}`,
+        details: details(formatAverageInterval(watering.averageInterval)),
+      };
+    case "overdue":
+      return {
+        label: "Watering overdue",
+        symbol: "!",
+        delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
+        details: details(formatAverageInterval(watering.averageInterval)),
+      };
+    case "redAlert":
+      return {
+        label: "Watering red alert",
+        symbol: "×",
+        delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
+        details: details(formatAverageInterval(watering.averageInterval)),
+      };
+  }
+};
+
+const WateringStatus: Component<{
+  watering: Journal.WateringAttention;
+  measuredAt: Journal.Instant;
+  plantName: string;
+  plantId: Journal.PlantId;
+}> = (props) => {
+  const presentation = () => wateringPresentation(props.watering, props.measuredAt);
+  const detailsId = () => `watering-attention-${props.plantId}`;
+
+  return (
+    <aside class={`watering-attention watering-attention--${props.watering.kind}`}>
+      <span class="watering-attention__icon" aria-label={presentation().label}>
+        <span aria-hidden="true">{presentation().symbol}</span>
+      </span>
+      <span class="watering-attention__delta">{presentation().delta}</span>
+      <InfoControl
+        id={detailsId()}
+        label={`Watering attention details for ${props.plantName}`}
+        notes={presentation().details}
+      />
+    </aside>
+  );
+};
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const plant = () => props.attention.plant;
@@ -46,6 +149,12 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
   return (
     <article class="plant-card" aria-label={name()}>
       <div class="plant-card__row">
+        <WateringStatus
+          watering={props.attention.watering}
+          measuredAt={props.measuredAt}
+          plantName={name()}
+          plantId={plant().id}
+        />
         <div class="plant-summary">
           <header class="plant-card__header">
             <div>
@@ -53,7 +162,6 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{plant().details.species}</p>
             </div>
-            <WateringStatus watering={props.attention.watering} />
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>

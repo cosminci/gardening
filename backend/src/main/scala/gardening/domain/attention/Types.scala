@@ -13,7 +13,7 @@ type WateringSampleCount = Int :| Interval.Closed[0, 20]
 type WateringHistory     = Vector[Instant] :| MaxLength[20]
 
 object WateringHistory:
-  def from(dates: Vector[Instant]): Either[String, Vector[Instant] :| MaxLength[20]] = dates.refineEither[MaxLength[20]]
+  def from(dates: Vector[Instant]): Either[String, WateringHistory] = dates.refineEither[MaxLength[20]]
 
   extension (history: WateringHistory)
     def sampleCount: WateringSampleCount = history.size.assume[Interval.Closed[0, 20]]

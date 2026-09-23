@@ -10,7 +10,7 @@ Derive plant attention from bounded watering history and publish it for presenta
 ## What & Why
 
 - Active plants are ordered by display name in the browser; watering cadence, attention classification, and attention ordering are not modelled.
-- The backend will own materialized attention measurements through a vendor-neutral read port. The browser will order those measurements for presentation; a future metrics adapter can consume them without UI ordering semantics.
+- The backend will own materialized attention measurements through a vendor-neutral read port. The browser will order and present those measurements; a future metrics adapter can consume them without UI ordering semantics.
 
 ## Domain / Design Notes
 
@@ -31,10 +31,9 @@ object WateringAttention:
     def averageInterval: FiniteDuration
     def elapsed: FiniteDuration
 
-  object Available:
-    final case class Current(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
-    final case class Overdue(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
-    final case class RedAlert(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+  final case class Current(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+  final case class Overdue(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+  final case class RedAlert(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
 
 enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)
@@ -73,7 +72,8 @@ trait PlantAttentionStore:
 - Equal timestamps produce deterministic attention values. In the browser, unknown plants precede scored plants; higher urgency precedes lower urgency; and urgency ties use the defined plant-field order, placing recently watered scored plants near the bottom.
 - At the average interval a plant is current; immediately after it is overdue; immediately below average plus 24 hours it remains overdue; at and above that threshold it is red alert. Unknown cadence has no overdue or red-alert state.
 - Startup and each five-minute interval publish a newly measured complete projection, including watering logs and edits that changed stored qualifying operations since the prior measurement. Startup failure aborts the application; a later refresh failure never exposes a partial projection.
-- The browser orders attention values and preserves backend state. Red-alert cards show a large `!` with non-live `Watering red alert` text; overdue and unknown cadence are distinct without relying on color. Card controls, keyboard focus, desktop layout, and landscape-mobile layout remain usable after reorder.
+- The browser orders attention values and preserves backend state. Each card presents a compact attention column before its summary: a same-sized round status icon for unknown cadence, current, overdue, or red alert; an applicable `in` time until watering or `late` overdue duration; and an information control. Mixed day-and-hour durations have no space between their units. Current is green, overdue is yellow/orange, and red alert is red with a cross, with text and accessible names preserving the state distinction independently of color.
+- Hovering or focusing the attention information control exposes the classification inputs not otherwise shown: qualifying watering sample count, inferred average in natural language when available, and projection evaluation age calculated from the browser clock. Unavailable cadence instead explains that there are insufficient watering operations. Card controls, keyboard focus, desktop layout, and landscape-mobile layout remain usable after reorder.
 - The operation-read API remains bounded for all callers. The attention read port contains measurement time and one watering classification carrying its applicable sample count, average interval, and elapsed time, without metrics-vendor dependencies.
 
 ## Doc Sync

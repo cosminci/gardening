@@ -1,11 +1,11 @@
 import { createSignal } from "solid-js";
-import type { Component } from "solid-js";
+import type { Component, JSX } from "solid-js";
 import "./info-control.css";
 
 interface InfoControlProps {
   readonly id: string;
   readonly label: string;
-  readonly notes: string | null;
+  readonly notes: JSX.Element | null;
 }
 
 export const InfoControl: Component<InfoControlProps> = (props) => {

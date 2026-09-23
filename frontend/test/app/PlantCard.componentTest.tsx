@@ -1,17 +1,76 @@
-import { fireEvent, render, screen } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
-import { pesticideLabel, substrateComponentLabel } from "../../src/app/JournalLabels";
+import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlantCard } from "../../src/app/PlantCard";
-import { nomenclatureName, pesticideId, substrateComponentId } from "../../src/domain/Journal";
-import { care, ficus, scoredAttention, unavailableAttention } from "./JournalTestSupport";
+import {
+  instant,
+  milliseconds,
+  nomenclatureName,
+  pesticideId,
+  substrateComponentId,
+} from "../../src/domain/Journal";
+import { care, ficus } from "./JournalTestSupport";
+
+const ficusPlant = ficus();
+const attentionMeasuredAt = instant("2026-01-01T00:00:00Z");
+const currentFicusAttention = {
+  plant: ficusPlant,
+  watering: {
+    kind: "current" as const,
+    sampleCount: 5,
+    averageInterval: milliseconds("187200000"),
+    elapsed: milliseconds("144000000"),
+  },
+};
+const unknownFicusAttention = {
+  plant: ficusPlant,
+  watering: {
+    kind: "unavailable" as const,
+    sampleCount: 4,
+    maybeElapsed: null,
+  },
+};
+const redAlertFicusAttention = {
+  plant: ficusPlant,
+  watering: {
+    kind: "redAlert" as const,
+    sampleCount: 5,
+    averageInterval: milliseconds("3600000"),
+    elapsed: milliseconds("176400000"),
+  },
+};
+const overdueFicusAttention = {
+  plant: ficusPlant,
+  watering: {
+    kind: "overdue" as const,
+    sampleCount: 5,
+    averageInterval: milliseconds("86400000"),
+    elapsed: milliseconds("90000000"),
+  },
+};
+const emptyCardProps = {
+  measuredAt: attentionMeasuredAt,
+  operationPage: { operations: [], hasNextPage: false },
+  substrateComponents: [],
+  pesticides: [],
+  getOperations: () =>
+    Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
+  onLog: () => undefined,
+  onEdit: () => undefined,
+  operationChange: undefined,
+};
 
 describe("plant operation controls", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("should distinguish edit controls for same-day care operations", () => {
     const componentId = substrateComponentId("00000000-0000-4000-8000-000000000003");
     const onEdit = vi.fn();
     render(() => (
       <PlantCard
-        attention={scoredAttention(ficus())}
+        attention={currentFicusAttention}
+        measuredAt={attentionMeasuredAt}
         operationPage={{
           operations: [
             care({ id: "o2", date: "2026-03-03T12:00:00Z", moisture: "wet" }),
@@ -48,7 +107,8 @@ describe("plant operation controls", () => {
 
   it("should show history access only when older operations exist", () => {
     const props = {
-      attention: scoredAttention(ficus()),
+      attention: currentFicusAttention,
+      measuredAt: attentionMeasuredAt,
       substrateComponents: [],
       pesticides: [],
       getOperations: () =>
@@ -83,45 +143,82 @@ describe("plant operation controls", () => {
     expect(screen.getByRole("button", { name: "Show operation history" })).toBeInTheDocument();
   });
 
-  it.each([
-    ["unknown", unavailableAttention(ficus(), 4), "Watering cadence unknown"],
-    ["overdue", scoredAttention(ficus(), "overdue"), "Watering overdue"],
-    ["current", scoredAttention(ficus(), "current"), "Watering current"],
-  ])("should render %s watering status without a live region", (_, attention, label) => {
-    render(() => <PlantCard {...emptyCardProps} attention={attention} />);
+  it(`should render ${unknownFicusAttention.watering.kind} watering with an unavailable cadence`, () => {
+    render(() => <PlantCard {...emptyCardProps} attention={unknownFicusAttention} />);
 
-    expect(screen.getByText(label)).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Watering cadence unavailable")).toHaveTextContent("?");
+    fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
+    const expectedDetails = "Insufficient watering operations.";
+    expect(screen.getByRole("tooltip")).toHaveTextContent(expectedDetails);
   });
 
-  it("should render an accessible red-alert warning without a live region", () => {
+  it(`should render ${currentFicusAttention.watering.kind} watering with time until it is due`, () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
+    render(() => <PlantCard {...emptyCardProps} attention={currentFicusAttention} />);
+
+    expect(screen.getByLabelText("Watering current")).toHaveTextContent("✓");
+    expect(screen.getByText("in 12h")).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip.querySelector("dl")).toHaveClass("watering-attention__details");
+    expect(within(tooltip).getByText("Watering operations")).toBeInTheDocument();
+    expect(within(tooltip).getByText("5 considered")).toBeInTheDocument();
+    expect(within(tooltip).getByText("2 days and 4 hours")).toBeInTheDocument();
+    expect(within(tooltip).getByText("3 minutes ago")).toBeInTheDocument();
+  });
+
+  it(`should render ${overdueFicusAttention.watering.kind} watering with the overdue duration`, () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
+    render(() => <PlantCard {...emptyCardProps} attention={overdueFicusAttention} />);
+
+    expect(screen.getByLabelText("Watering overdue")).toHaveTextContent("!");
+    expect(screen.getByText("late 1h")).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
+    expect(within(screen.getByRole("tooltip")).getByText("1 day")).toBeInTheDocument();
+  });
+
+  it(`should render ${redAlertFicusAttention.watering.kind} watering with the overdue duration`, () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:01:00Z"));
+    render(() => <PlantCard {...emptyCardProps} attention={redAlertFicusAttention} />);
+
+    expect(screen.getByLabelText("Watering red alert")).toHaveTextContent("×");
+    expect(screen.getByText("late 2d")).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
+    expect(within(screen.getByRole("tooltip")).getByText("1 hour")).toBeInTheDocument();
+    expect(within(screen.getByRole("tooltip")).getByText("1 minute ago")).toBeInTheDocument();
+  });
+
+  it("should render an unrecognized persisted substrate component", () => {
+    const expectedComponentId = substrateComponentId("00000000-0000-4000-8000-000000000003");
+    render(() => <PlantCard {...emptyCardProps} attention={currentFicusAttention} />);
+
+    expect(screen.getByText(`${expectedComponentId} 100%`)).toBeInTheDocument();
+  });
+
+  it("should render an unrecognized persisted pesticide", () => {
+    const expectedPesticideId = pesticideId("10000000-0000-4000-8001-000000000099");
     render(() => (
-      <PlantCard {...emptyCardProps} attention={scoredAttention(ficus(), "redAlert")} />
+      <PlantCard
+        {...emptyCardProps}
+        attention={currentFicusAttention}
+        operationPage={{
+          operations: [
+            care({
+              id: "pesticide",
+              date: "2026-03-03T08:00:00Z",
+              moisture: "dry",
+              actions: new Set(["pesticide"]),
+              pesticides: new Set([expectedPesticideId]),
+            }),
+          ],
+          hasNextPage: false,
+        }}
+      />
     ));
 
-    expect(screen.getByText("Watering red alert")).toBeInTheDocument();
-    expect(screen.getByText("!", { selector: "span" })).toHaveAttribute("aria-hidden", "true");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("should identify an unrecognized persisted substrate component", () => {
-    const id = substrateComponentId("10000000-0000-4000-8000-000000000099");
-    expect(substrateComponentLabel(id, [])).toBe(id);
-  });
-
-  const emptyCardProps = {
-    operationPage: { operations: [], hasNextPage: false },
-    substrateComponents: [],
-    pesticides: [],
-    getOperations: () =>
-      Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
-    onLog: () => undefined,
-    onEdit: () => undefined,
-    operationChange: undefined,
-  };
-
-  it("should identify an unrecognized persisted pesticide", () => {
-    const id = pesticideId("10000000-0000-4000-8001-000000000099");
-    expect(pesticideLabel(id, [])).toBe(id);
+    expect(screen.getByText(expectedPesticideId)).toBeInTheDocument();
   });
 });

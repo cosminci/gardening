@@ -138,8 +138,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       editOperationResult = EditOperationResult.Edited(repotOperation)
     )
 
-    val logResponse   = logOperation(careRequest, server)
-    val editResponse  = editOperation(repotRequest, server)
+    val logResponse   = post(s"/plants/${plant.id.value}/operations", careRequest, server)
+    val editResponse  = put(s"/operations/${repotOperation.id.value}", repotRequest, server)
     assertEquals(logResponse.code  -> jsonBody(logResponse), StatusCode.Created -> json("""{"id":"logged"}"""))
     assertEquals(editResponse.code -> jsonBody(editResponse), StatusCode.Ok     -> json(repotJson))
     assertEquals(refs.loggedOperations.get(), Vector(plant.id -> care))
@@ -157,7 +157,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":60},{"componentId":"00000000-0000-4000-8000-000000000004","share":60}],"notes":null}""",
       """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
-    invalidBodies.foreach(body => assertEquals(logOperation(body, server).code, StatusCode.BadRequest))
+    invalidBodies.foreach(body => assertEquals(post(s"/plants/${plant.id.value}/operations", body, server).code, StatusCode.BadRequest))
     assertEquals(refs.loggedOperations.get(), Vector.empty)
 
   test("should hide storage failures returned by read operations"):
@@ -171,20 +171,26 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should hide the cause when logging an operation fails"):
     val server   = buildServer(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
-    val response = logOperation(careRequest, server)
+    val response = post(s"/plants/${plant.id.value}/operations", careRequest, server)
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be logged"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should report when the operation to edit does not exist"):
-    val response = editOperation(careRequest, buildServer(editOperationResult = EditOperationResult.OperationMissing))
+    val response =
+      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(editOperationResult = EditOperationResult.OperationMissing))
     assertEquals(response.code -> jsonBody(response), StatusCode.NotFound -> json("""{"message":"operation not found"}"""))
 
   test("should reject changing an operation to another type"):
-    val response = editOperation(careRequest, buildServer(editOperationResult = EditOperationResult.OperationTypeMismatch))
+    val response =
+      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(editOperationResult = EditOperationResult.OperationTypeMismatch))
     assertEquals(response.code -> jsonBody(response), StatusCode.Conflict -> json("""{"message":"operation type cannot be changed"}"""))
 
   test("should hide storage failures returned when editing"):
-    val response = editOperation(careRequest, buildServer(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
+    val response = put(
+      s"/operations/${repotOperation.id.value}",
+      careRequest,
+      buildServer(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline")))
+    )
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -248,31 +254,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertResponse(post("/pesticides", pesticideDataJson, server), StatusCode.InternalServerError, catalogWriteError)
     assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server), StatusCode.InternalServerError, catalogWriteError)
 
-  private def getOperations(server: TestServer, offset: Int = 3, pageSize: Int = 10) =
-    basicRequest
-      .get(uri"http://test/plants/${plant.id.value}/operations?offset=$offset&pageSize=$pageSize")
-      .send(server)
-
-  private def logOperation(body: String, server: TestServer) =
-    basicRequest.post(uri"http://test/plants/${plant.id.value}/operations").body(body).contentType("application/json").send(server)
-
-  private def editOperation(body: String, server: TestServer) =
-    basicRequest.put(uri"http://test/operations/${repotOperation.id.value}").body(body).contentType("application/json").send(server)
-
-  private def get(path: String, server: TestServer) =
-    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(server)
-
-  private def post(path: String, body: String, server: TestServer) =
-    basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
-
-  private def put(path: String, body: String, server: TestServer) =
-    basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
-
-  private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
-  private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
-  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
-    assertEquals(response.code -> jsonBody(response), status -> json(body))
-
   private case class Refs(
       requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
       loggedOperations: AtomicReference[Vector[(PlantId, OperationDetails)]] = AtomicReference(Vector.empty),
@@ -315,3 +296,22 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]
+
+  private def getOperations(server: TestServer, offset: Int = 3, pageSize: Int = 10) =
+    basicRequest
+      .get(uri"http://test/plants/${plant.id.value}/operations?offset=$offset&pageSize=$pageSize")
+      .send(server)
+
+  private def get(path: String, server: TestServer) =
+    basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(server)
+
+  private def post(path: String, body: String, server: TestServer) =
+    basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
+
+  private def put(path: String, body: String, server: TestServer) =
+    basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
+
+  private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
+  private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
+  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
+    assertEquals(response.code -> jsonBody(response), status -> json(body))

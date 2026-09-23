@@ -49,7 +49,7 @@ object PlantAttentionMonitor:
     val sampleCount = dates.sampleCount
     val watering    =
       dates.headOption match
-        case None                 => WateringAttention.Unavailable(sampleCount, Option.empty)
+        case None                 => WateringAttention.Unavailable(sampleCount, none)
         case Some(latestWatering) =>
           val timeSinceWatering = elapsed(latestWatering, measuredAt)
           if sampleCount < 5 then WateringAttention.Unavailable(sampleCount, timeSinceWatering.some)

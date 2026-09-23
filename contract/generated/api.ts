@@ -174,18 +174,6 @@ export interface components {
              */
             kind: "care";
         };
-        /** Current */
-        Current: {
-            /** Format: int32 */
-            sampleCount: number;
-            averageIntervalMillis: string;
-            elapsedMillis: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "current";
-        };
         /** HealthResponse */
         HealthResponse: {
             status: string;
@@ -215,18 +203,6 @@ export interface components {
             operations: components["schemas"]["Operation"][];
             hasNextPage: boolean;
         };
-        /** Overdue */
-        Overdue: {
-            /** Format: int32 */
-            sampleCount: number;
-            averageIntervalMillis: string;
-            elapsedMillis: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "overdue";
-        };
         /** Pesticide */
         Pesticide: {
             /** Format: uuid */
@@ -252,7 +228,7 @@ export interface components {
         /** PlantAttention */
         PlantAttention: {
             plant: components["schemas"]["Plant"];
-            watering: components["schemas"]["WireWateringAttention"];
+            watering: components["schemas"]["WateringAttention"];
         };
         /** PlantDetails */
         PlantDetails: {
@@ -267,18 +243,6 @@ export interface components {
          * @enum {string}
          */
         PlantStatus: "active" | "archived";
-        /** RedAlert */
-        RedAlert: {
-            /** Format: int32 */
-            sampleCount: number;
-            averageIntervalMillis: string;
-            elapsedMillis: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "redAlert";
-        };
         /** Repot */
         Repot: {
             substrate: components["schemas"]["SubstratePart"][];
@@ -307,8 +271,46 @@ export interface components {
             /** Format: int32 */
             share: number;
         };
-        /** Unavailable */
-        Unavailable: {
+        /** WateringAttention */
+        WateringAttention: components["schemas"]["WateringCurrent"] | components["schemas"]["WateringOverdue"] | components["schemas"]["WateringRedAlert"] | components["schemas"]["WateringUnavailable"];
+        /** WateringCurrent */
+        WateringCurrent: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "current";
+        };
+        /** WateringOverdue */
+        WateringOverdue: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "overdue";
+        };
+        /** WateringRedAlert */
+        WateringRedAlert: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "redAlert";
+        };
+        /** WateringUnavailable */
+        WateringUnavailable: {
             /** Format: int32 */
             sampleCount: number;
             elapsedMillis: string | null;
@@ -318,8 +320,6 @@ export interface components {
              */
             kind: "unavailable";
         };
-        /** WireWateringAttention */
-        WireWateringAttention: components["schemas"]["Current"] | components["schemas"]["Overdue"] | components["schemas"]["RedAlert"] | components["schemas"]["Unavailable"];
     };
     responses: never;
     parameters: never;

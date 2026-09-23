@@ -178,7 +178,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
 
     assertEquals(monitor.current, expectedProjection)
 
-  test("should recompute elapsed watering time when refreshed without new waterings"):
+  test(s"should return ${WateringAttention.Current} immediately after construction before any refresh"):
     val initialMeasurementTime = referenceTime
     val averageInterval        = 1.day
     val initialElapsed         = 12.hours
@@ -192,19 +192,34 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
     val currentTime = AtomicReference(initialMeasurementTime)
     val monitor     = buildMonitor(refs, () => currentTime.get(), sampleResults).getOrElse(fail("initial attention failed"))
 
-    val initialWatering   = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = initialElapsed)
-    val initialProjection = AttentionProjection(measuredAt = initialMeasurementTime, plants = Vector(PlantAttention(plant, initialWatering)))
+    val initialWatering    = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = initialElapsed)
+    val expectedProjection = AttentionProjection(measuredAt = initialMeasurementTime, plants = Vector(PlantAttention(plant, initialWatering)))
 
-    assertEquals(monitor.current, initialProjection)
+    assertEquals(monitor.current, expectedProjection)
 
+  test(s"should return ${WateringAttention.Overdue} when refreshed to a later time without new waterings"):
+    val initialMeasurementTime = referenceTime
+    val averageInterval        = 1.day
+    val initialElapsed         = 12.hours
+    val latestWatering         = initialMeasurementTime - initialElapsed
+    val wateringDates          = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory        = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults          = Vector(samplesRead)
+
+    val refs                     = Refs()
+    val currentTime              = AtomicReference(initialMeasurementTime)
+    val monitor                  = buildMonitor(refs, () => currentTime.get(), sampleResults).getOrElse(fail("initial attention failed"))
     val refreshedMeasurementTime = initialMeasurementTime + 1.day
-    val refreshedElapsed         = initialElapsed + 1.day
-    val refreshedWatering        = WateringAttention.Overdue(sampleCount = 5, averageInterval = averageInterval, elapsed = refreshedElapsed)
+    currentTime.set(refreshedMeasurementTime)
+    val refreshResult = monitor.refreshAll
+
+    val refreshedElapsed    = initialElapsed + 1.day
+    val refreshedWatering   = WateringAttention.Overdue(sampleCount = 5, averageInterval = averageInterval, elapsed = refreshedElapsed)
     val refreshedProjection = AttentionProjection(measuredAt = refreshedMeasurementTime, plants = Vector(PlantAttention(plant, refreshedWatering)))
     val expectedRefresh     = RefreshAttentionResult.Refreshed(refreshedProjection)
-    currentTime.set(refreshedMeasurementTime)
 
-    assertEquals(monitor.refreshAll, expectedRefresh)
+    assertEquals(refreshResult, expectedRefresh)
 
   test(s"should infer ${WateringAttention.Current} from a fifth recorded watering when refreshed"):
     val measurementTime       = referenceTime
@@ -278,9 +293,9 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
     val refs          = Refs()
     val monitorResult = buildMonitor(refs, getAttentionSamplesResults = Vector(samplesReadFailed))
 
-    monitorResult match
-      case Left(reason) => assertEquals(reason, failure)
-      case Right(_)     => fail("expected initial attention failure")
+    val expectedResult = Left(failure)
+
+    assertEquals(monitorResult, expectedResult)
 
   extension (instant: Instant)
     private def +(duration: FiniteDuration) = instant.plus(duration.toJava)

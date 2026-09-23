@@ -45,13 +45,11 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val store      = resource.store
       seedPlant(dataSource, id = "p1", maybeNickname = "Fig".some, substrate = List(perliteId -> 100))
 
-      store.getPlant(PlantId("p1")) match
-        case GetPlantResult.Read(plant) =>
-          assertEquals(plant.id, PlantId("p1"))
-          assertEquals(plant.details.maybeNickname, Nickname("Fig").some)
-          assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
-          assertEquals(store.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
-        case other => fail(s"expected one plant, got $other")
+      val expectedDetails = PlantDetails(Species("Ficus lyrata"), Nickname("Fig").some, Location("Balcony"), perliteSubstrate, PlantStatus.Active)
+      val expectedResult  = GetPlantResult.Read(Plant(PlantId("p1"), expectedDetails))
+
+      assertEquals(store.getPlant(PlantId("p1")), expectedResult)
+      assertEquals(store.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
 
   test("should fail when stored plant data is corrupt"):
     Using.resource(storeResource): resource =>
@@ -59,8 +57,8 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val store      = resource.store
       seedPlant(dataSource, id = "duplicate-components", substrate = List(perliteId -> 60, perliteId -> 60))
 
-      val plant = intercept[DatabaseCorruption](store.getPlant(PlantId("duplicate-components")))
-      assertEquals(plant.err.getMessage, "invalid stored substrate: DecodingFailure at : DuplicateComponent")
+      val corruption = intercept[DatabaseCorruption](store.getPlant(PlantId("duplicate-components")))
+      assertEquals(corruption.err.getMessage, "invalid stored substrate: DecodingFailure at : DuplicateComponent")
 
   test("should round-trip a care operation without changing plant substrate"):
     Using.resource(storeResource): resource =>
@@ -73,9 +71,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(queryString(dataSource, "select kind from operation where id = ?", operation.id.value), "Care")
       assertEquals(store.getOperations(PlantId("p1"), fullWindow), GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false)))
-      store.getPlant(PlantId("p1")) match
-        case GetPlantResult.Read(plant) => assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
-        case other                      => fail(s"expected one plant, got $other")
+      assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should page operations by timestamp descending with an identifier tie-breaker"):
     Using.resource(storeResource): resource =>
@@ -160,8 +156,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         case other => fail(s"expected ReadFailed, got $other")
 
   test("should retain chronological operation order after migrating existing timestamps"):
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
-    try
+    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val _ = Flyway.configure().dataSource(connection.dataSource).target(MigrationVersion.fromVersion("2")).load().migrate()
       seedPlant(connection.dataSource, id = "p1")
 
@@ -191,7 +186,6 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val _     = Flyway.configure().dataSource(connection.dataSource).load().migrate()
       val store = SqlitePlantStore.make(connection.transactor)
       assertEquals(store.getOperations(PlantId("p1"), fullWindow), GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false)))
-    finally connection.close()
 
   test("should round-trip a care observation without actions"):
     Using.resource(storeResource): resource =>
@@ -213,9 +207,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
       assertEquals(queryString(dataSource, "select kind from operation where id = ?", operation.id.value), "Repot")
       assertEquals(store.getOperation(operation.id), GetOperationResult.Read(operation))
-      store.getPlant(PlantId("p1")) match
-        case GetPlantResult.Read(plant) => assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
-        case other                      => fail(s"expected one plant, got $other")
+      assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should reject unknown operation kinds and malformed JSON payloads"):
     Using.resource(storeResource): resource =>
@@ -287,11 +279,11 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val repotPayload = s"""{"substrate":[{"component":"${perliteId.value}","share":60},{"component":"${perliteId.value}","share":60}]}"""
       execute(dataSource, "update operation set payload = ? where id = ?", repotPayload, "o1")
 
-      val operations = intercept[DatabaseCorruption](store.getOperations(PlantId("p1"), fullWindow))
-      assertEquals(operations.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
+      val pageCorruption = intercept[DatabaseCorruption](store.getOperations(PlantId("p1"), fullWindow))
+      assertEquals(pageCorruption.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
 
-      val operation = intercept[DatabaseCorruption](store.getOperation(repot.id))
-      assertEquals(operation.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
+      val singleCorruption = intercept[DatabaseCorruption](store.getOperation(repot.id))
+      assertEquals(singleCorruption.err.getMessage, "invalid stored operation payload: DecodingFailure at .substrate: DuplicateComponent")
 
       val careOperation = Operation(OperationId("o2"), PlantId("p1"), date.plusNanos(1), care)
       assertEquals(store.addOperation(careOperation), LogOperationResult.Logged(careOperation.id))
@@ -313,9 +305,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
 
       assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
-      store.getPlant(PlantId("p1")) match
-        case GetPlantResult.Read(plant) => assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
-        case other                      => fail(s"expected one plant, got $other")
+      assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should remove and restore operations for compensation"):
     Using.resource(storeResource): resource =>
@@ -377,9 +367,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
 
       assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
-      store.getPlant(PlantId("p1")) match
-        case GetPlantResult.Read(plant) => assertEquals(plant.details.substrate.parts, List(SubstratePart(perliteId, share = 100)))
-        case other                      => fail(s"expected one plant, got $other")
+      assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should seed, add, and edit substrate components"):
     Using.resource(storeResource): resource =>
@@ -481,8 +469,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         case other                           => fail(s"expected EditFailed, got $other")
 
   test("should return read failures when the journal schema is unavailable"):
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
-    try
+    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val store = SqlitePlantStore.make(connection.transactor)
       store.getOperations(PlantId("p1"), fullWindow) match
         case GetOperationsResult.ReadFailed(_) => ()
@@ -502,7 +489,6 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       store.getPesticides match
         case CatalogReadResult.ReadFailed(_) => ()
         case other                           => fail(s"expected ReadFailed, got $other")
-    finally connection.close()
 
   final private case class StoreResource(
       connection: SqliteConnection,
