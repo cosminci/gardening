@@ -5,9 +5,7 @@ import gardening.domain.*
 trait PlantJournalStore:
   def getPlant(id: PlantId): GetPlantResult
   def getPlants: GetPlantsResult
-  def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
-    getOperations(plantId, OperationSelection.All, window)
-  def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult
+  def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperation(id: OperationId): GetOperationResult
   def addOperation(operation: Operation): LogOperationResult
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult

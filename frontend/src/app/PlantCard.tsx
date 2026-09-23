@@ -44,11 +44,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{plant().details.species}</p>
             </div>
-            <p
-              class={`watering-status watering-status--${wateringStatus().className}`}
-              role={wateringStatus().warning ? "alert" : "status"}
-              aria-label={wateringStatus().label}
-            >
+            <p class={`watering-status watering-status--${wateringStatus().className}`}>
               <Show when={wateringStatus().warning}>
                 <span class="watering-status__symbol" aria-hidden="true">
                   !

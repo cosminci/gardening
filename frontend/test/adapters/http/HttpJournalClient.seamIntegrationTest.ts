@@ -4,7 +4,6 @@ import * as Journal from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
-const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
 const expectKind = (result: Promise<unknown>, kind: string) =>
   expect(result).resolves.toMatchObject({ kind });
 const expectResult = (result: Promise<unknown>, expected: object) =>
@@ -12,11 +11,11 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
 
 describe("HttpJournalClient", () => {
   it("should translate the attention projection into domain values", async () => {
-    const plant = (id: string) => ({
+    const plant = (id: string, nickname: string | null = null) => ({
       id,
       details: {
         species: "Ficus lyrata",
-        nickname: null,
+        nickname,
         location: "Balcony",
         substrate: [{ componentId: perliteId, share: 100 }],
         status: "active" as const,
@@ -39,7 +38,7 @@ describe("HttpJournalClient", () => {
                 state: null,
               },
               {
-                plant: plant("finite"),
+                plant: plant("finite", "Fern"),
                 sampleCount: 5,
                 cadenceAvailable: true,
                 averageInterval: "PT24H",
@@ -77,7 +76,7 @@ describe("HttpJournalClient", () => {
             cadence: { kind: "unavailable", sampleCount: 4, maybeElapsed: null },
           },
           {
-            plant: { id: "finite" },
+            plant: { id: "finite", details: { maybeNickname: "Fern" } },
             cadence: {
               kind: "inferred",
               sampleCount: 5,
@@ -116,43 +115,50 @@ describe("HttpJournalClient", () => {
     });
   });
 
+  it("should reject an unknown watering state", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({
+          measuredAt: "2026-01-10T00:00:00Z",
+          plants: [
+            {
+              plant: {
+                id: "p1",
+                details: {
+                  species: "Ficus lyrata",
+                  nickname: null,
+                  location: "Balcony",
+                  substrate: [{ componentId: perliteId, share: 100 }],
+                  status: "active",
+                },
+              },
+              sampleCount: 5,
+              cadenceAvailable: true,
+              averageInterval: "PT24H",
+              elapsed: "PT25H",
+              urgency: {
+                unbounded: false,
+                numeratorNanos: "90000000000000",
+                denominatorNanos: "86400000000000",
+              },
+              state: "futureState",
+            },
+          ],
+        }),
+      ]),
+    );
+
+    await expect(journal.getAttention()).resolves.toMatchObject({
+      kind: "readFailed",
+      reason: new Error("invalid watering state: futureState"),
+    });
+  });
+
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const requests: Request[] = [];
     const fetch = respondingWith(
       [
-        jsonResponse([
-          {
-            id: "p1",
-            details: {
-              species: "Ficus lyrata",
-              nickname: "Fern",
-              location: "Balcony",
-              substrate: [
-                {
-                  componentId: perliteId,
-                  share: 100,
-                },
-              ],
-              status: "active",
-            },
-          },
-          {
-            id: "p2",
-            details: {
-              species: "Monstera deliciosa",
-              nickname: null,
-              location: "Kitchen",
-              substrate: [
-                {
-                  componentId: pineBarkId,
-                  share: 40,
-                },
-              ],
-              status: "active",
-            },
-          },
-        ]),
         jsonResponse({
           operations: [
             {
@@ -186,28 +192,6 @@ describe("HttpJournalClient", () => {
       requests,
     );
     const journal = makeHttpJournalClient(fetch);
-    const expectedPlants = [
-      {
-        id: Journal.plantId("p1"),
-        details: {
-          species: "Ficus lyrata",
-          maybeNickname: "Fern",
-          location: "Balcony",
-          substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
-          status: "active",
-        },
-      },
-      {
-        id: Journal.plantId("p2"),
-        details: {
-          species: "Monstera deliciosa",
-          maybeNickname: null,
-          location: "Kitchen",
-          substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(40) }]),
-          status: "active",
-        },
-      },
-    ];
     const expectedPesticides = new Set([pesticide]);
     const expectedOperations = [
       {
@@ -236,14 +220,13 @@ describe("HttpJournalClient", () => {
       },
     ];
 
-    await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: expectedPlants });
     await expect(
       journal.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
     ).resolves.toEqual({
       kind: "read",
       page: { operations: expectedOperations, hasNextPage: true },
     });
-    expect(requests[1]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
+    expect(requests[0]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
   it("should translate substrate component and pesticide catalogs", async () => {
@@ -468,7 +451,6 @@ describe("HttpJournalClient", () => {
       respondingWith([
         jsonResponse({ message: "attention unavailable" }, 503),
         jsonResponse({ message: "journal could not be read" }, 500),
-        jsonResponse({ message: "journal could not be read" }, 500),
         jsonResponse("invalid body", 400),
         jsonResponse({ message: "operation not found" }, 404),
         jsonResponse({ message: "journal could not be changed" }, 500),
@@ -490,9 +472,7 @@ describe("HttpJournalClient", () => {
       pesticideType: "insecticide" as const,
       maybeInfo: null,
     };
-
     await expectKind(httpFailures.getAttention(), "readFailed");
-    await expectKind(httpFailures.getPlants(), "readFailed");
     await expectKind(
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",
@@ -517,13 +497,11 @@ describe("HttpJournalClient", () => {
 
     const reason = new Error("offline");
     const networkFailures = makeHttpJournalClient(
-      respondingWith(new Array<Error>(11).fill(reason)),
+      respondingWith(new Array<Error>(10).fill(reason)),
     );
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
-
     await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
-    await expectNetworkFailure(networkFailures.getPlants(), "readFailed");
     await expectNetworkFailure(
       networkFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",

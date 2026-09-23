@@ -5,12 +5,9 @@ import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 
 type OperationOffset   = Int :| GreaterEqual[0]
-type OperationPageSize = Int :| Interval.Closed[1, 20]
+type OperationPageSize = Int :| Interval.Closed[1, 10]
 final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
 final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
-
-enum OperationSelection:
-  case All, Watering
 
 enum CatalogReadResult[+A]:
   case Read(entries: Vector[A])

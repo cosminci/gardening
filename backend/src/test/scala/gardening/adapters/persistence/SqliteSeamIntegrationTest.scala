@@ -17,7 +17,7 @@ class SqliteSeamIntegrationTest extends FunSuite:
       val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
       seedPlant(connection.dataSource)
 
-      SqlitePlantJournalStore.make(connection.transactor).getPlants match
+      SqlitePlantStore.make(connection.transactor).getPlants match
         case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
         case other                        => fail(s"expected Read, got $other")
     finally connection.close()
@@ -33,17 +33,16 @@ class SqliteSeamIntegrationTest extends FunSuite:
 
       val reopenedConnection = Sqlite.connect(SqliteLocation.File(path.toString))
       try
-        SqlitePlantJournalStore.make(reopenedConnection.transactor).getPlants match
+        SqlitePlantStore.make(reopenedConnection.transactor).getPlants match
           case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
           case other                        => fail(s"expected Read, got $other")
       finally reopenedConnection.close()
     finally Files.delete(path)
 
-  private def seedPlant(dataSource: DataSource): Unit =
+  private def seedPlant(dataSource: DataSource) =
     val connection = dataSource.getConnection()
     try
-      val statement =
-        connection.prepareStatement("insert into plant (id, species, location, status, substrate) values (?, ?, ?, ?, ?)")
+      val statement = connection.prepareStatement("insert into plant (id, species, location, status, substrate) values (?, ?, ?, ?, ?)")
       try
         statement.setString(1, "p1")
         statement.setString(2, "Ficus lyrata")

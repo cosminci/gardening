@@ -16,7 +16,7 @@ import sttp.tapir.generic.Configuration as TapirConfiguration
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
 import sttp.tapir.server.ServerEndpoint
-import java.time.Instant
+import java.time.{Duration, Instant}
 import scala.deriving.Mirror
 import scala.util.Try
 
@@ -93,7 +93,7 @@ object JournalApi:
       editPesticideEndpoint
     )
 
-  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionService): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
       getPlantsEndpoint.handle: _ =>
         journal.getPlants match
@@ -178,8 +178,8 @@ object JournalApi:
     .validate(Validator.min(0))
     .map(_.refineOption[GreaterEqual[0]])(value => value)
   private lazy val operationPageSizeSchema = Schema.schemaForInt
-    .validate(Validator.min(1).and(Validator.max(20)))
-    .map(_.refineOption[Interval.Closed[1, 20]])(value => value)
+    .validate(Validator.min(1).and(Validator.max(10)))
+    .map(_.refineOption[Interval.Closed[1, 10]])(value => value)
   // $COVERAGE-ON$
 
   private given TapirCodec.PlainCodec[OperationOffset] = TapirCodec.int
@@ -192,9 +192,9 @@ object JournalApi:
 
   private given TapirCodec.PlainCodec[OperationPageSize] = TapirCodec.int
     .mapDecode(value =>
-      value.refineOption[Interval.Closed[1, 20]] match
+      value.refineOption[Interval.Closed[1, 10]] match
         case Some(size) => DecodeResult.Value(size)
-        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 20"))
+        case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 10"))
     )(value => value)
     .schema(operationPageSizeSchema)
 
@@ -269,7 +269,7 @@ object JournalApi:
           Some(durationNanos(averageInterval).toString)
         )
 
-  private def durationNanos(duration: java.time.Duration): BigInt =
+  private def durationNanos(duration: Duration): BigInt =
     BigInt(duration.getSeconds) * 1_000_000_000 + duration.getNano
 
   private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo

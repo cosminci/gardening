@@ -70,6 +70,20 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
 
   createEffect(
     on(
+      () => props.plantId,
+      () => {
+        latestRequest += 1;
+        requestedPage = 1;
+        setExpanded(false);
+        setPageNumber(1);
+        setState({ kind: "idle" });
+      },
+      { defer: true },
+    ),
+  );
+
+  createEffect(
+    on(
       () => props.operationChange,
       (change) => {
         if (!expanded() || change === undefined) return;

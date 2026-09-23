@@ -7,12 +7,16 @@ const compareUrgency = (first: Journal.Urgency, second: Journal.Urgency) => {
   if (first.kind === "unbounded") return second.kind === "unbounded" ? 0 : -1;
   if (second.kind === "unbounded") return 1;
 
-  const firstDenominator = BigInt(first.denominatorNanos);
-  const secondDenominator = BigInt(second.denominatorNanos);
-  const firstProduct =
-    BigInt(first.numeratorNanos) * (secondDenominator === 0n ? 1n : secondDenominator);
-  const secondProduct =
-    BigInt(second.numeratorNanos) * (firstDenominator === 0n ? 1n : firstDenominator);
+  const ratio = (urgency: Extract<Journal.Urgency, { kind: "finite" }>) => {
+    const denominator = BigInt(urgency.denominatorNanos);
+    return denominator === 0n
+      ? { numerator: 0n, denominator: 1n }
+      : { numerator: BigInt(urgency.numeratorNanos), denominator };
+  };
+  const firstRatio = ratio(first);
+  const secondRatio = ratio(second);
+  const firstProduct = firstRatio.numerator * secondRatio.denominator;
+  const secondProduct = secondRatio.numerator * firstRatio.denominator;
   return firstProduct > secondProduct ? -1 : firstProduct < secondProduct ? 1 : 0;
 };
 

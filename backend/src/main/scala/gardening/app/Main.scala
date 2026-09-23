@@ -3,7 +3,7 @@ package gardening.app
 import cats.syntax.either.*
 import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
 import gardening.adapters.persistence.SqliteLocation
-import gardening.domain.attention.{PlantAttentionService, RefreshAttentionResult}
+import gardening.domain.attention.PlantAttentionMonitor
 import org.flywaydb.core.Flyway
 import ox.{EitherMode, forkError, sleep, supervisedError}
 import ox.either.*
@@ -28,13 +28,13 @@ object Main:
         .flatMap: programs =>
           val endpoints =
             List(HealthApi.serverEndpoint(version)) ++
-              JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionService) ++
+              JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
               List(StaticSite.endpoint(staticDir))
           start(
             http = () =>
               val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
             ,
-            plantAttentionService = programs.plantAttentionService,
+            plantAttentionMonitor = programs.plantAttentionMonitor,
             awaitNext = () =>
               sleep(5.minutes)
               ().asRight
@@ -43,23 +43,20 @@ object Main:
 
   private[app] def start(
       http: () => Unit,
-      plantAttentionService: PlantAttentionService,
+      plantAttentionMonitor: PlantAttentionMonitor,
       awaitNext: () => Either[Throwable, Unit]
   ) =
     supervisedError(EitherMode[Throwable]()):
-      val _ = forkError(pollPlantAttention(plantAttentionService, awaitNext))
+      val _ = forkError(pollPlantAttention(plantAttentionMonitor, awaitNext))
       http().asRight
 
   private def pollPlantAttention(
-      plantAttentionService: PlantAttentionService,
+      plantAttentionMonitor: PlantAttentionMonitor,
       awaitNext: () => Either[Throwable, Unit]
   ) =
     Iterator
-      .continually(awaitNext().flatMap(_ => refreshPlantAttention(plantAttentionService)))
+      .continually(awaitNext().map: _ =>
+        val _ = plantAttentionMonitor.refreshAll
+        ())
       .collectFirst { case failure @ Left(_) => failure }
       .fold[Either[Throwable, Unit]](().asRight)(identity)
-
-  private def refreshPlantAttention(plantAttentionService: PlantAttentionService) =
-    plantAttentionService.refreshAll match
-      case RefreshAttentionResult.Refreshed(_)          => ().asRight
-      case RefreshAttentionResult.RefreshFailed(reason) => reason.asLeft

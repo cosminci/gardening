@@ -83,7 +83,7 @@ describe("plant operation controls", () => {
     expect(screen.getByRole("button", { name: "Show operation history" })).toBeInTheDocument();
   });
 
-  it("should distinguish unknown, overdue, and red-alert watering states accessibly", () => {
+  it("should distinguish watering states without creating per-card live regions", () => {
     const props = {
       operationPage: { operations: [], hasNextPage: false },
       substrateComponents: [],
@@ -97,21 +97,34 @@ describe("plant operation controls", () => {
     const { unmount: unmountUnknown } = render(() => (
       <PlantCard {...props} attention={unavailableAttention(ficus(), 4)} />
     ));
-    expect(screen.getByRole("status", { name: "Watering cadence unknown" })).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    const unknown = screen.getByText("Watering cadence unknown").closest(".watering-status");
+    expect(unknown).toBeInTheDocument();
+    expect(unknown).not.toHaveAttribute("role");
     unmountUnknown();
 
     const { unmount: unmountOverdue } = render(() => (
       <PlantCard {...props} attention={inferredAttention(ficus(), "overdue")} />
     ));
-    expect(screen.getByRole("status", { name: "Watering overdue" })).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    const overdue = screen.getByText("Watering overdue").closest(".watering-status");
+    expect(overdue).toBeInTheDocument();
+    expect(overdue).not.toHaveAttribute("role");
     unmountOverdue();
 
+    const { unmount: unmountCurrent } = render(() => (
+      <PlantCard {...props} attention={inferredAttention(ficus(), "current")} />
+    ));
+    const current = screen.getByText("Watering current").closest(".watering-status");
+    expect(current).toBeInTheDocument();
+    expect(current).not.toHaveAttribute("role");
+    unmountCurrent();
+
     render(() => <PlantCard {...props} attention={inferredAttention(ficus(), "redAlert")} />);
-    const warning = screen.getByRole("alert", { name: "Watering red alert" });
+    const warning = screen.getByText("Watering red alert").closest(".watering-status");
+    expect(warning).toBeInTheDocument();
+    expect(warning).not.toHaveAttribute("role");
     expect(warning).toHaveTextContent("!");
     expect(warning).toHaveTextContent("Watering red alert");
+    expect(screen.getByText("!", { selector: "span" })).toHaveAttribute("aria-hidden", "true");
   });
 
   it("should identify an unrecognized persisted substrate component", () => {

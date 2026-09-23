@@ -19,15 +19,14 @@ import scala.util.chaining.*
 
 class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
-  private val date      = Instant.parse("2026-01-01T00:00:00Z")
-  private val species   = Species("Ficus lyrata")
-  private val nickname  = Nickname("Fern").some
-  private val location  = Location("Balcony")
-  private val perliteId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
-  private val substrate = Substrate.of(List(SubstratePart(perliteId, 100))).getOrElse(fail("invalid substrate"))
-  private val plant     = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
-  private val care      =
-    OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
+  private val date           = Instant.parse("2026-01-01T00:00:00Z")
+  private val species        = Species("Ficus lyrata")
+  private val nickname       = Nickname("Fern").some
+  private val location       = Location("Balcony")
+  private val perliteId      = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val substrate      = Substrate.of(List(SubstratePart(perliteId, 100))).getOrElse(fail("invalid substrate"))
+  private val plant          = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
+  private val care           = OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
   private val repot          = OperationDetails.Repot(substrate, Note("fresh").some)
   private val careOperation  = Operation(OperationId("care"), plant.id, date, care)
   private val repotOperation = Operation(OperationId("repot"), plant.id, date.plusSeconds(1), repot)
@@ -75,13 +74,13 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   test("should reject invalid operation windows"):
     assertEquals(getOperations(buildJournal(), offset = -1, pageSize = 3).code, StatusCode.BadRequest)
     assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 0).code, StatusCode.BadRequest)
-    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 20).code, StatusCode.Ok)
-    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 21).code, StatusCode.BadRequest)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 10).code, StatusCode.Ok)
+    assertEquals(getOperations(buildJournal(), offset = 0, pageSize = 11).code, StatusCode.BadRequest)
 
   test("should expose the attention projection"):
     val unknownPlant     = plant.copy(id = PlantId("unknown"))
     val zeroAveragePlant = plant.copy(id = PlantId("zero-average"))
-    val attention        = new PlantAttentionService:
+    val attention        = new PlantAttentionMonitor:
       override def current: AttentionProjection =
         AttentionProjection(
           date,
@@ -275,7 +274,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def editOperation(body: String, journal: PlantJournal) =
     basicRequest.put(uri"http://test/operations/${repotOperation.id.value}").body(body).contentType("application/json").send(backend(journal))
 
-  private def get(path: String, journal: PlantJournal, attention: PlantAttentionService = emptyAttention) =
+  private def get(path: String, journal: PlantJournal, attention: PlantAttentionMonitor = emptyAttention) =
     basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(backend(journal, attention))
 
   private def post(path: String, body: String, journal: PlantJournal) =
@@ -284,18 +283,18 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private def put(path: String, body: String, journal: PlantJournal) =
     basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(backend(journal))
 
-  private def backend(journal: PlantJournal, attention: PlantAttentionService = emptyAttention) =
+  private def backend(journal: PlantJournal, attention: PlantAttentionMonitor = emptyAttention) =
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal, attention))
       .backend()
 
-  private val emptyAttention = new PlantAttentionService:
+  private val emptyAttention = new PlantAttentionMonitor:
     override def current: AttentionProjection       = AttentionProjection(date, Vector.empty)
     override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
-  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String): Unit =
+  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
     assertEquals(response.code -> jsonBody(response), status -> json(body))
 
   private def buildJournal(

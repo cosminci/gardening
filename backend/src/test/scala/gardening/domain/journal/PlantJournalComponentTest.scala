@@ -451,9 +451,9 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val addedPesticides: AtomicReference[Vector[Pesticide]]                                       = new AtomicReference(Vector.empty)
     val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
-    override def getPlant(id: PlantId): GetPlantResult                                                                        = getPlantResult
-    override def getPlants: GetPlantsResult                                                                                   = getPlantsResult
-    override def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult =
+    override def getPlant(id: PlantId): GetPlantResult                                         = getPlantResult
+    override def getPlants: GetPlantsResult                                                    = getPlantsResult
+    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       requestedOperationWindows.updateAndGet(_ :+ (plantId -> window))
       if operationReads.getAndIncrement().equals(0) then getOperationsResult
       else nextOperationsResult.getOrElse(getOperationsResult)

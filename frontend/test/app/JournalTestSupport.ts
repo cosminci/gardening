@@ -167,7 +167,6 @@ export const buildJournal = ({
       const read = attentionReads++;
       return Promise.resolve(attentionResponses[Math.min(read, attentionResponses.length - 1)]!);
     },
-    getPlants: () => Promise.resolve(getPlantsResult),
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });
       const results = getOperationsByPlantId[id];

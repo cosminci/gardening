@@ -19,3 +19,8 @@ Domain terms for the house-plant care journal. Controlled vocabulary is presente
 | **Substrate** | A non-empty component mix describing the growing medium in which a plant currently sits. |
 | **Substrate-component** | An editable nomenclature selected into a substrate mix with a percentage share. |
 | **Pesticide** | An editable nomenclature that is a fungicide, insecticide, or treatment and may be selected by a care operation. |
+| **Plant attention** | A periodically measured view of an active Plant and its watering cadence, used by the browser to decide presentation order and warning treatment. |
+| **Watering cadence** | The arithmetic mean of consecutive timestamps among a Plant's latest bounded watering sample. Cadence is unavailable until five waterings exist. |
+| **Urgency** | The exact ratio of elapsed time since the latest watering to the inferred watering cadence. A zero cadence is unbounded after time advances. |
+| **Overdue** | A watering state reached immediately after elapsed time exceeds the inferred cadence. |
+| **Red alert** | A watering state reached when elapsed time is at least the inferred cadence plus 24 hours. |

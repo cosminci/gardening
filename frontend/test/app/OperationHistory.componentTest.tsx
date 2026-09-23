@@ -210,6 +210,31 @@ Vitest.describe("operation history", () => {
     Vitest.expect(Testing.screen.queryByText("Long note")).not.toBeInTheDocument();
   });
 
+  Vitest.it("should reset history when its index slot changes plant", async () => {
+    const [plantId, setPlantId] = createSignal(Journal.plantId("p1"));
+    const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older)));
+    Testing.render(() => (
+      <OperationHistory
+        plantId={plantId()}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={undefined}
+        onEdit={() => undefined}
+      />
+    ));
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    Vitest.expect(await Testing.screen.findByText("Long note")).toBeInTheDocument();
+
+    setPlantId(Journal.plantId("p2"));
+
+    Vitest.expect(Testing.screen.queryByRole("table")).not.toBeInTheDocument();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByRole("table");
+    Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
+  });
+
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {
     const secondPage = care({
       id: "o1",

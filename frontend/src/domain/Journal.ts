@@ -184,7 +184,6 @@ export type CatalogEditResult<A> =
 
 export interface JournalClient {
   getAttention(): Promise<GetAttentionResult>;
-  getPlants(): Promise<GetPlantsResult>;
   getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
   logOperation(plantId: PlantId, details: OperationDetails): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;

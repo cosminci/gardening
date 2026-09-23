@@ -32,6 +32,11 @@
   gap: 0.75rem;
 }
 
+.plant-card__header > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .watering-status {
   display: grid;
   flex: 0 0 auto;

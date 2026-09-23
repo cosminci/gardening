@@ -18,7 +18,8 @@ Derive plant attention from bounded watering history and publish it for presenta
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
 final case class PlantAttention(plant: Plant, cadence: WateringCadence)
 type WateringSampleCount = Int :| Interval.Closed[0, 20]
-type OperationPageSize = Int :| Interval.Closed[1, 20]
+type WateringSampleSize = Int :| Interval.Closed[1, 20]
+type OperationPageSize = Int :| Interval.Closed[1, 10]
 
 enum Urgency:
   case Finite(elapsed: Duration, averageInterval: Duration)
@@ -37,24 +38,20 @@ enum WateringCadence:
 enum WateringState:
   case Current, Overdue, RedAlert
 
-enum OperationSelection:
-  case All, Watering
-
 enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)
   case RefreshFailed(reason: Throwable)
 
-trait PlantAttentionService:
+trait PlantAttentionMonitor:
   def current: AttentionProjection
   def refreshAll: RefreshAttentionResult
 
-trait PlantJournalStore:
-  def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult
-  // Existing plant, operation-mutation, and catalog capabilities are unchanged.
+trait PlantAttentionStore:
+  def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult
 ```
 
-- `WateringSampleCount` is 0–20. The shared bounded operation read accepts an `All` or `Watering` selection and a requested size up to 20; selection, timestamp-descending order, identifier tie-break, and limit are applied by persistence.
-- Plant and operation values are shared domain concepts. Journal mutation and retrieval contracts and attention calculation and projection contracts remain separate subdomains.
+- `WateringSampleCount` is 0–20. The attention-owned persistence port reads every active Plant together with up to the requested number of its watering dates. Watering selection, timestamp-descending order, identifier tie-break, and the per-plant limit are part of that domain-facing contract. SQLite returns one row per Plant and uses the operation index to seek each active Plant's bounded recent history.
+- Plant values are shared domain concepts. Journal mutation and retrieval contracts, attention persistence reads, and attention calculation and projection contracts remain separate subdomains. A persistence adapter may implement both subdomain ports without making either domain depend on the other.
 - Cadence uses the latest 5–20 watering-selected operations. Fewer than five is unavailable; otherwise the average is the arithmetic mean of consecutive timestamps.
 - Urgency is the exact elapsed/average ratio, not a floating-point approximation. A zero average has zero urgency at zero elapsed and unbounded urgency after time advances.
 - State is `Current` through the average interval, `Overdue` immediately after it, and `RedAlert` at average plus 24 hours. Unknown cadence has no state.
@@ -78,7 +75,7 @@ trait PlantJournalStore:
 - Equal timestamps produce deterministic attention values. In the browser, unknown plants precede scored plants; higher urgency precedes lower urgency; and urgency ties use the defined plant-field order, placing recently watered scored plants near the bottom.
 - At the average interval a plant is current; immediately after it is overdue; immediately below average plus 24 hours it remains overdue; at and above that threshold it is red alert. Unknown cadence has no overdue or red-alert state.
 - Startup and each five-minute interval publish a newly measured complete projection, including watering logs and edits that changed stored qualifying operations since the prior measurement. Startup failure aborts the application; a later refresh failure never exposes a partial projection.
-- The browser orders attention values and preserves backend state. Red-alert cards show a large `!` with an accessible `Watering red alert` name and warning semantics; overdue and unknown cadence are distinct without relying on color. Card controls, keyboard focus, desktop layout, and landscape-mobile layout remain usable after reorder.
+- The browser orders attention values and preserves backend state. Red-alert cards show a large `!` with non-live `Watering red alert` text; overdue and unknown cadence are distinct without relying on color. Card controls, keyboard focus, desktop layout, and landscape-mobile layout remain usable after reorder.
 - The operation-read API remains bounded for all callers. The attention read port contains measurement time, sample count, average interval, elapsed time, urgency, and state as available, without metrics-vendor dependencies.
 
 ## Doc Sync

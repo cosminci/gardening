@@ -179,7 +179,19 @@ describe("browsing the journal", () => {
 
     render(() => <App journal={journal} />);
 
-    await screen.findAllByRole("article");
+    const articles = await screen.findAllByRole("article");
+    expect(articles.map((article) => article.getAttribute("aria-label"))).toEqual([
+      "Ficus",
+      "Anthurium",
+      "Ficus",
+      "Zamioculcas",
+      "Ficus",
+      "Monstera",
+      "Monty",
+      "Monty",
+      "Zed",
+      "Orchid",
+    ]);
     expect(operationWindows.map(({ plantId: id }) => id)).toEqual([
       "z",
       "y",

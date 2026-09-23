@@ -21,17 +21,6 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async getPlants(): Promise<Journal.GetPlantsResult> {
-      try {
-        const { data, error } = await client.GET("/plants");
-        return data === undefined
-          ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", plants: data.map(toPlant) };
-      } catch (error) {
-        return { kind: "readFailed", reason: requestFailure(error) };
-      }
-    },
-
     async getOperations(id, window): Promise<Journal.GetOperationsResult> {
       try {
         const { data, error } = await client.GET("/plants/{plantId}/operations", {
@@ -213,7 +202,7 @@ const toPlantAttention = (value: Wire["PlantAttentionResponse"]): Journal.PlantA
       ),
       elapsed: required(maybeElapsed, "inferred watering cadence is missing elapsed time"),
       urgency: toUrgency(required(value.urgency, "inferred watering cadence is missing urgency")),
-      state: required(value.state, "inferred watering cadence is missing state"),
+      state: toWateringState(required(value.state, "inferred watering cadence is missing state")),
     },
   };
 };
@@ -225,6 +214,11 @@ const toUrgency = (value: Wire["UrgencyResponse"]): Journal.Urgency => {
     numeratorNanos: required(value.numeratorNanos, "finite urgency is missing its numerator"),
     denominatorNanos: required(value.denominatorNanos, "finite urgency is missing its denominator"),
   };
+};
+
+const toWateringState = (value: unknown): Journal.WateringState => {
+  if (value === "current" || value === "overdue" || value === "redAlert") return value;
+  throw new Error(`invalid watering state: ${String(value)}`);
 };
 
 const required = <Value>(value: Value | null | undefined, message: string): Value => {

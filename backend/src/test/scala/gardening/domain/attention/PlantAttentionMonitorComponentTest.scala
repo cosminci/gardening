@@ -2,14 +2,13 @@ package gardening.domain.attention
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.journal.*
 import io.github.iltotore.iron.autoRefine
 
 import java.time.{Duration, Instant}
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
-class PlantAttentionComponentTest extends munit.FunSuite:
+class PlantAttentionMonitorComponentTest extends munit.FunSuite:
 
   private val start       = Instant.parse("2026-01-01T00:00:00Z")
   private val componentId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
@@ -19,14 +18,10 @@ class PlantAttentionComponentTest extends munit.FunSuite:
     val unknown = plant("unknown", "Balcony", "Ficus", none)
     val scored  = plant("scored", "Office", "Monstera", Nickname("Monty").some)
     val store   = StoreStub(
-      plants = Vector(unknown, scored),
-      waterings = Map(
-        unknown.id -> wateringOperations(unknown.id, 4, Duration.ofDays(2)),
-        scored.id  -> wateringOperations(scored.id, 25, Duration.ofDays(2))
-      )
+      Vector(unknown, scored),
+      Map(unknown.id -> wateringDates(4, Duration.ofDays(2)), scored.id -> wateringDates(25, Duration.ofDays(2)))
     )
-    val attention =
-      PlantAttentionService.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
+    val attention  = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
     val projection = attention.current
 
     assertEquals(projection.plants.map(_.plant.id), Vector(unknown.id, scored.id))
@@ -44,21 +39,15 @@ class PlantAttentionComponentTest extends munit.FunSuite:
         assertEquals(state, WateringState.Current)
       case cadence => fail(s"expected inferred cadence, got $cadence")
 
-    assertEquals(
-      store.operationRequests.get(),
-      Vector(
-        (unknown.id, OperationSelection.Watering, OperationWindow(offset = 0, size = 20)),
-        (scored.id, OperationSelection.Watering, OperationWindow(offset = 0, size = 20))
-      )
-    )
+    assertEquals(store.wateringRequests.get(), Vector(20))
 
   test("should change from current to overdue and red alert at the defined boundaries"):
     val caredFor  = plant("p1", "Office", "Ficus", none)
-    val waterings = wateringOperations(caredFor.id, 5, Duration.ofDays(2))
-    val latest    = waterings.head.date
+    val waterings = wateringDates(5, Duration.ofDays(2))
+    val latest    = waterings.head
     val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> waterings))
     val clock     = MutableClock(latest.plus(Duration.ofDays(2)))
-    val attention = PlantAttentionService.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
 
     assertEquals(inferredState(attention.current), WateringState.Current)
     clock.current.set(latest.plus(Duration.ofDays(2)).plusNanos(1))
@@ -71,17 +60,24 @@ class PlantAttentionComponentTest extends munit.FunSuite:
     assertEquals(inferredState(attention.refreshAll), WateringState.RedAlert)
 
   test("should publish an empty projection when there are no active plants"):
-    val attention =
-      PlantAttentionService.make(using StoreStub(Vector.empty, Map.empty), FixedClock(start)).getOrElse(fail("initial attention failed"))
+    val clock     = FixedClock(start)
+    val attention = PlantAttentionMonitor.make(using StoreStub(Vector.empty, Map.empty), clock).getOrElse(fail("initial attention failed"))
 
     assertEquals(attention.current, AttentionProjection(start, Vector.empty))
 
+  test("should report unavailable cadence for a plant without waterings"):
+    val caredFor  = plant("p1", "Office", "Ficus", none)
+    val attention = PlantAttentionMonitor.make(using StoreStub(Vector(caredFor), Map(caredFor.id -> Vector.empty)), FixedClock(start))
+      .getOrElse(fail("initial attention failed"))
+
+    assertEquals(attention.current.plants, Vector(PlantAttention(caredFor, WateringCadence.Unavailable(sampleCount = 0, maybeElapsed = none))))
+
   test("should give equal timestamps a deterministic zero then unbounded urgency"):
     val caredFor  = plant("p1", "Office", "Ficus", none)
-    val waterings = Vector.tabulate(5)(index => watering(caredFor.id, index, start))
+    val waterings = Vector.fill(5)(start)
     val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> waterings))
     val clock     = MutableClock(start)
-    val attention = PlantAttentionService.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
 
     assertEquals(inferredUrgency(attention.current), Urgency.Finite(Duration.ZERO, Duration.ZERO))
     clock.current.set(start.plusNanos(1))
@@ -94,11 +90,11 @@ class PlantAttentionComponentTest extends munit.FunSuite:
     val store = StoreStub(
       Vector(fast, slow),
       Map(
-        fast.id -> wateringOperations(fast.id, 5, Duration.ofDays(10), latest = start.minus(Duration.ofDays(1))),
-        slow.id -> wateringOperations(slow.id, 5, Duration.ofDays(20), latest = start.minus(Duration.ofDays(10)))
+        fast.id -> wateringDates(5, Duration.ofDays(10), latest = start.minus(Duration.ofDays(1))),
+        slow.id -> wateringDates(5, Duration.ofDays(20), latest = start.minus(Duration.ofDays(10)))
       )
     )
-    val attention = PlantAttentionService.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
 
     assertEquals(
       attention.current.plants.map(entry => entry.plant.id -> entry.cadence),
@@ -130,61 +126,73 @@ class PlantAttentionComponentTest extends munit.FunSuite:
 
   test("should recompute after stored edits add or remove a watering"):
     val caredFor  = plant("p1", "Office", "Ficus", none)
-    val initial   = wateringOperations(caredFor.id, 4, Duration.ofDays(2))
+    val initial   = wateringDates(4, Duration.ofDays(2))
     val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> initial))
-    val attention =
-      PlantAttentionService.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
+    val attention = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
 
     assertUnavailable(attention.current)
-    store.updatedWaterings.set(Map(caredFor.id -> wateringOperations(caredFor.id, 5, Duration.ofDays(2))).some)
+    store.updatedWaterings.set(Map(caredFor.id -> wateringDates(5, Duration.ofDays(2))).some)
     assertInferred(attention.refreshAll)
     store.updatedWaterings.set(Map(caredFor.id -> initial).some)
     assertUnavailable(attention.refreshAll)
 
   test("should retain the last complete projection when refresh fails"):
     val caredFor  = plant("p1", "Office", "Ficus", none)
-    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> wateringOperations(caredFor.id, 5, Duration.ofDays(2))))
+    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> wateringDates(5, Duration.ofDays(2))))
     val clock     = FixedClock(start.plus(Duration.ofDays(50)))
-    val attention = PlantAttentionService.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
 
     val current = attention.current
 
     val failure = RuntimeException("store down")
-    store.nextPlantsResult.set(GetPlantsResult.ReadFailed(failure).some)
+    store.nextSamplesResult.set(GetAttentionSamplesResult.ReadFailed(failure).some)
     assertEquals(attention.refreshAll, RefreshAttentionResult.RefreshFailed(failure))
     assertEquals(attention.current, current)
 
-    val historyFailure = RuntimeException("history down")
-    store.nextOperationsResult.set(GetOperationsResult.ReadFailed(historyFailure).some)
-    assertEquals(attention.refreshAll, RefreshAttentionResult.RefreshFailed(historyFailure))
+  test("should reject an oversized sample without replacing the current projection"):
+    val caredFor = plant("p1", "Office", "Ficus", none)
+    val samples  = AtomicReference(Vector(PlantAttentionSample(caredFor, wateringDates(5, Duration.ofDays(2)))))
+    val store    = new PlantAttentionStore:
+      override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
+        assertEquals(size, 20)
+        GetAttentionSamplesResult.Read(samples.get())
+    val attention = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
+    val current   = attention.current
+
+    samples.set(Vector(PlantAttentionSample(caredFor, wateringDates(21, Duration.ofDays(2)))))
+
+    attention.refreshAll match
+      case RefreshAttentionResult.RefreshFailed(reason) =>
+        assertEquals(reason.getMessage, "attention store returned 21 waterings; expected at most 20")
+      case other => fail(s"expected RefreshFailed, got $other")
     assertEquals(attention.current, current)
 
   test("should fail construction when the initial projection cannot be materialized"):
     val failure = RuntimeException("store down")
     val store   = StoreStub(Vector.empty, Map.empty)
-    store.nextPlantsResult.set(GetPlantsResult.ReadFailed(failure).some)
+    store.nextSamplesResult.set(GetAttentionSamplesResult.ReadFailed(failure).some)
 
-    PlantAttentionService.make(using store, FixedClock(start)) match
+    PlantAttentionMonitor.make(using store, FixedClock(start)) match
       case Left(reason) => assertEquals(reason, failure)
       case Right(_)     => fail("expected initial attention failure")
 
-  private def inferredState(projection: AttentionProjection): WateringState =
+  private def inferredState(projection: AttentionProjection) =
     projection match
       case AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, _, state)))) => state
       case other => fail(s"expected one inferred cadence, got $other")
 
-  private def inferredState(result: RefreshAttentionResult): WateringState =
+  private def inferredState(result: RefreshAttentionResult) =
     result match
       case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, _, state))))) =>
         state
       case other => fail(s"expected one inferred cadence, got $other")
 
-  private def inferredUrgency(projection: AttentionProjection): Urgency =
+  private def inferredUrgency(projection: AttentionProjection) =
     projection match
       case AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, urgency, _)))) => urgency
       case other => fail(s"expected one inferred cadence, got $other")
 
-  private def inferredUrgency(result: RefreshAttentionResult): Urgency =
+  private def inferredUrgency(result: RefreshAttentionResult) =
     result match
       case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, urgency, _))))) =>
         urgency
@@ -198,17 +206,17 @@ class PlantAttentionComponentTest extends munit.FunSuite:
           case other                                                                => fail(s"expected inferred cadence, got $other")
       case other => fail(s"expected refreshed projection, got $other")
 
-  private def assertUnavailable(result: RefreshAttentionResult): Unit =
+  private def assertUnavailable(result: RefreshAttentionResult) =
     result match
       case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Unavailable)))) => ()
       case other => fail(s"expected unavailable cadence, got $other")
 
-  private def assertUnavailable(projection: AttentionProjection): Unit =
+  private def assertUnavailable(projection: AttentionProjection) =
     projection match
       case AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Unavailable))) => ()
       case other                                                                             => fail(s"expected unavailable cadence, got $other")
 
-  private def assertInferred(result: RefreshAttentionResult): Unit =
+  private def assertInferred(result: RefreshAttentionResult) =
     result match
       case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Inferred)))) => ()
       case other => fail(s"expected inferred cadence, got $other")
@@ -216,22 +224,13 @@ class PlantAttentionComponentTest extends munit.FunSuite:
   private def plant(id: String, location: String, species: String, maybeNickname: Option[Nickname]) =
     Plant(PlantId(id), PlantDetails(Species(species), maybeNickname, Location(location), substrate, PlantStatus.Active))
 
-  private def wateringOperations(
-      plantId: PlantId,
+  private def wateringDates(
       count: Int,
       interval: Duration,
       latest: Instant = start.plus(Duration.ofDays(48))
-  ): Vector[Operation] =
+  ) =
     Vector.tabulate(count): index =>
-      watering(plantId, index, latest.minus(interval.multipliedBy(index.toLong)))
-
-  private def watering(plantId: PlantId, index: Int, date: Instant) =
-    Operation(
-      OperationId(f"watering-$index%02d"),
-      plantId,
-      date,
-      OperationDetails.Care(Set(ActionType.Watered), Set.empty, MoistureLevel.Wet, none)
-    )
+      latest.minus(interval.multipliedBy(index.toLong))
 
   final private case class FixedClock(current: Instant) extends Clock:
     override def now(): Instant = current
@@ -244,37 +243,14 @@ class PlantAttentionComponentTest extends munit.FunSuite:
 
   final private case class StoreStub(
       plants: Vector[Plant],
-      waterings: Map[PlantId, Vector[Operation]],
-      nextPlantsResult: AtomicReference[Option[GetPlantsResult]] = AtomicReference(none),
-      nextOperationsResult: AtomicReference[Option[GetOperationsResult]] = AtomicReference(none),
-      updatedWaterings: AtomicReference[Option[Map[PlantId, Vector[Operation]]]] = AtomicReference(none),
-      operationRequests: AtomicReference[Vector[(PlantId, OperationSelection, OperationWindow)]] = AtomicReference(Vector.empty)
-  ) extends PlantJournalStore:
-    override def getPlants: GetPlantsResult            = nextPlantsResult.getAndSet(none).getOrElse(GetPlantsResult.Read(plants))
-    override def getPlant(id: PlantId): GetPlantResult =
-      plants.find(_.id.equals(id)).fold[GetPlantResult](GetPlantResult.RecordMissing)(GetPlantResult.Read.apply)
-    override def getOperations(plantId: PlantId, selection: OperationSelection, window: OperationWindow): GetOperationsResult =
-      operationRequests.updateAndGet(_ :+ ((plantId, selection, window)))
+      waterings: Map[PlantId, Vector[Instant]],
+      nextSamplesResult: AtomicReference[Option[GetAttentionSamplesResult]] = AtomicReference(none),
+      updatedWaterings: AtomicReference[Option[Map[PlantId, Vector[Instant]]]] = AtomicReference(none),
+      wateringRequests: AtomicReference[Vector[WateringSampleSize]] = AtomicReference(Vector.empty)
+  ) extends PlantAttentionStore:
+    override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
+      wateringRequests.updateAndGet(_ :+ size)
       val currentWaterings = updatedWaterings.get().getOrElse(waterings)
-      nextOperationsResult.getAndSet(none).getOrElse:
-        GetOperationsResult.Read(OperationPage(currentWaterings.getOrElse(plantId, Vector.empty).take(window.size), hasNextPage = false))
-    override def getOperation(id: OperationId): GetOperationResult      = GetOperationResult.RecordMissing
-    override def addOperation(operation: Operation): LogOperationResult = LogOperationResult.LoggingFailed(UnsupportedOperationException())
-    override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
-      EditOperationResult.EditFailed(UnsupportedOperationException())
-    override def removeOperation(id: OperationId): OperationCompensationResult =
-      OperationCompensationResult.CompensationFailed(UnsupportedOperationException())
-    override def restoreOperation(operation: Operation): OperationCompensationResult =
-      OperationCompensationResult.CompensationFailed(UnsupportedOperationException())
-    override def updatePlant(plant: Plant): UpdatePlantResult                  = UpdatePlantResult.UpdateFailed(UnsupportedOperationException())
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
-      CatalogReadResult.ReadFailed(UnsupportedOperationException())
-    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
-      CatalogAddResult.AddFailed(UnsupportedOperationException())
-    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-      CatalogEditResult.EditFailed(UnsupportedOperationException())
-    override def getPesticides: CatalogReadResult[Pesticide]                     = CatalogReadResult.ReadFailed(UnsupportedOperationException())
-    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
-      CatalogAddResult.AddFailed(UnsupportedOperationException())
-    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-      CatalogEditResult.EditFailed(UnsupportedOperationException())
+      nextSamplesResult.getAndSet(none).getOrElse:
+        GetAttentionSamplesResult.Read:
+          plants.map(plant => PlantAttentionSample(plant, currentWaterings.getOrElse(plant.id, Vector.empty).take(size)))
