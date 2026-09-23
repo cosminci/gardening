@@ -229,10 +229,10 @@ object JournalApi:
     Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).left.map(_.toString)),
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
-  private given Codec.AsObject[OperationDetails]        = ConfiguredCodec.derived
-  private given Codec.AsObject[PlantDetails]            = ConfiguredCodec.derived
-  private given Codec.AsObject[Plant]                   = ConfiguredCodec.derived
-  private given Codec.AsObject[WateringAttention]       = ConfiguredCodec.derived
+  private given Codec.AsObject[OperationDetails]    = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantDetails]        = ConfiguredCodec.derived
+  private given Codec.AsObject[Plant]               = ConfiguredCodec.derived
+  private given Codec.AsObject[WateringAttention]   = ConfiguredCodec.derived
   private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
 
@@ -305,14 +305,14 @@ object JournalApi:
 
   private def encodedFieldName(name: String) =
     name match
-      case "maybeNickname"      => "nickname"
-      case "maybeNote"          => "notes"
-      case "maybeInfo"          => "info"
-      case "maybeElapsed"       => "elapsedMillis"
-      case "averageInterval"    => "averageIntervalMillis"
-      case "elapsed"            => "elapsedMillis"
-      case "pesticideType"      => "type"
-      case _                    => name
+      case "maybeNickname"   => "nickname"
+      case "maybeNote"       => "notes"
+      case "maybeInfo"       => "info"
+      case "maybeElapsed"    => "elapsedMillis"
+      case "averageInterval" => "averageIntervalMillis"
+      case "elapsed"         => "elapsedMillis"
+      case "pesticideType"   => "type"
+      case _                 => name
 
   private def lowerCamel(name: String) =
     name.substring(0, 1).toLowerCase + name.substring(1)
