@@ -21,7 +21,7 @@ interface OperationSheetProps {
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly saveError: string | undefined;
-  readonly onSubmit: (details: Journal.OperationDetails) => Promise<void>;
+  readonly onSubmit: (details: Journal.OperationDetails, date: Journal.Instant) => Promise<void>;
   readonly onAddSubstrateComponent: (
     data: Journal.SubstrateComponentData,
   ) => Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>>;

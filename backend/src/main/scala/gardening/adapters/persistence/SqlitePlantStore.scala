@@ -27,6 +27,15 @@ object SqlitePlantStore:
 
   private class LiveSqlitePlantStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
 
+    override def getPlants(status: PlantStatus): GetPlantsResult =
+      try
+        val rows = connect(transactor)(sql"select id, species, nickname, location, substrate, status from plant order by rowid".query[PlantRow].run())
+        val plants = trust(rows.traverse(toPlant))
+        GetPlantsResult.Read(plants.filter(_.details.status === status))
+      catch
+        case error: SqlException       => GetPlantsResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetPlantsResult.ReadFailed(error)
+
     override def getPlant(id: PlantId): GetPlantResult =
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
@@ -61,7 +70,7 @@ object SqlitePlantStore:
       try
         val rows    = connect(transactor)(selectAttentionSamples(size).query[AttentionSampleRow].run())
         val samples = trust(rows.traverse(toAttentionSample))
-        GetAttentionSamplesResult.Read(samples.filter(_.plant.details.status === PlantStatus.Active))
+        GetAttentionSamplesResult.Read(samples)
       catch
         case error: SqlException       => GetAttentionSamplesResult.ReadFailed(error)
         case error: DatabaseCorruption => GetAttentionSamplesResult.ReadFailed(error)
@@ -69,18 +78,12 @@ object SqlitePlantStore:
     private def selectAttentionSamples(size: WateringSampleSize) =
       val sampleSize: Int = size
       sql"""select plant.id,
-                   plant.species,
-                   plant.nickname,
-                   plant.location,
-                   plant.substrate,
-                   plant.status,
                    coalesce((
                      select json_group_array(watering.date order by watering.date desc, watering.id desc)
                      from (
                        select operation.id, operation.date
                        from operation
-                       where plant.status = 'Active'
-                         and operation.plant_id = plant.id
+                       where operation.plant_id = plant.id
                          and operation.kind = 'Care'
                          and exists (
                            select 1
@@ -92,13 +95,12 @@ object SqlitePlantStore:
                      ) watering
                    ), json('[]')) as watering_dates
             from plant
+            where plant.status = 'Active'
             order by plant.rowid"""
 
     private def toAttentionSample(row: AttentionSampleRow) =
-      val plantRow    = PlantRow(row.id, row.species, row.nickname, row.location, row.substrate, row.status)
       val storedDates = decodeWateringDates(row.wateringDates)
       for
-        plant         <- toPlant(plantRow)
         wateringDates <- storedDates.traverse(parseOperationDate)
         // The SQL query limits each history to the maximum representable length.
         // $COVERAGE-OFF$
@@ -106,7 +108,7 @@ object SqlitePlantStore:
           .from(wateringDates)
           .leftMap(message => DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message")))
       // $COVERAGE-ON$
-      yield PlantAttentionSample(plant, wateringHistory)
+      yield PlantAttentionSample(PlantId(row.id), wateringHistory)
 
     private def decodeWateringDates(value: String) =
       trust(decode[Vector[String]](value))
@@ -370,11 +372,6 @@ object SqlitePlantStore:
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
   private case class AttentionSampleRow(
       id: String,
-      species: String,
-      nickname: Option[String],
-      location: String,
-      substrate: String,
-      status: String,
       wateringDates: String
   ) derives DbCodec
   private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec

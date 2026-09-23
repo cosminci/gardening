@@ -95,14 +95,39 @@ describe("plant operation controls", () => {
     ));
 
     const firstEdit = screen.getByRole("button", {
-      name: "Edit recent care operation 1 from 2026-03-03",
+      name: "Edit recent care operation 1 from 3rd of March",
     });
     expect(firstEdit).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Edit recent care operation 2 from 2026-03-03" }),
+      screen.getByRole("button", { name: "Edit recent care operation 2 from 3rd of March" }),
     ).toBeInTheDocument();
     fireEvent.click(firstEdit);
     expect(onEdit).toHaveBeenCalledOnce();
+  });
+
+  it("should display ordinal dates for the three most recent operations", () => {
+    const days = [11, 13, 23];
+    render(() => (
+      <PlantCard
+        {...emptyCardProps}
+        attention={currentFicusAttention}
+        operationPage={{
+          operations: days.map((day) =>
+            care({
+              id: `o${String(day)}`,
+              date: `2026-03-${String(day).padStart(2, "0")}T08:00:00Z`,
+              moisture: "wet",
+            }),
+          ),
+          hasNextPage: false,
+        }}
+      />
+    ));
+
+    const expectedDates = ["11th of March", "13th of March", "23rd of March"];
+    const actualDates = screen.getAllByRole("time").map((time) => time.textContent);
+    expect(actualDates).toEqual(expectedDates.toReversed());
+    expect(screen.getAllByRole("time")[0]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
   });
 
   it("should show history access only when older operations exist", () => {

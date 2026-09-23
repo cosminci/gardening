@@ -14,6 +14,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /plants:
+    get:
+      summary: List plants by status
+      operationId: getPlants
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/PlantStatus'
+          default: active
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plant'
+        '400':
+          description: 'Invalid value for: query parameter status'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /attention:
     get:
       summary: Read plant attention
@@ -85,7 +117,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/OperationDetails'
+              $ref: '#/components/schemas/LogOperationRequest'
         required: true
       responses:
         '201':
@@ -403,6 +435,18 @@ components:
           type: string
         version:
           type: string
+    LogOperationRequest:
+      title: LogOperationRequest
+      type: object
+      required:
+      - date
+      - details
+      properties:
+        date:
+          type: string
+          format: date-time
+        details:
+          $ref: '#/components/schemas/OperationDetails'
     LoggedOperation:
       title: LoggedOperation
       type: object
@@ -511,11 +555,11 @@ components:
       title: PlantAttention
       type: object
       required:
-      - plant
+      - plantId
       - watering
       properties:
-        plant:
-          $ref: '#/components/schemas/Plant'
+        plantId:
+          type: string
         watering:
           $ref: '#/components/schemas/WateringAttention'
     PlantDetails:

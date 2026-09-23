@@ -28,7 +28,7 @@ create table operation (
     payload text not null check (json_valid(payload))
 );
 
-create unique index operation_plant_date_idx on operation (plant_id, date);
+create index operation_plant_date_id_idx on operation (plant_id, date desc, id desc);
 
 insert into substrate_component (id, name) values
     ('00000000-0000-4000-8000-000000000001', 'Kekkila universal peat'),

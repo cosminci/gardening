@@ -43,7 +43,9 @@ export const operationEditLabel = (
   position: number,
   section: "recent" | "historical",
 ) =>
-  `Edit ${section} ${operation.details.kind} operation ${String(position)} from ${formatLocalDate(operation.date)}`;
+  `Edit ${section} ${operation.details.kind} operation ${String(position)} from ${
+    section === "recent" ? formatRecentDate(operation.date) : formatLocalDate(operation.date)
+  }`;
 
 export const operationDetailRows = (
   details: Journal.OperationDetails,
@@ -87,5 +89,14 @@ export const formatLocalDate = (value: string) => {
   const year = String(date.getFullYear());
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${day}.${month}.${year}`;
+};
+
+export const formatRecentDate = (value: string) => {
+  const date = new Date(value);
+  const day = date.getDate();
+  const suffix =
+    day % 100 >= 11 && day % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][day % 10] ?? "th");
+  const month = new Intl.DateTimeFormat("en", { month: "long" }).format(date);
+  return `${String(day)}${suffix} of ${month}`;
 };

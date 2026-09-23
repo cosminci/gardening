@@ -10,6 +10,19 @@ export const makeHttpJournalClient = (
   const client = createClient<paths>({ baseUrl: globalThis.location.origin, fetch });
 
   return {
+    async getPlants(status): Promise<Journal.GetPlantsResult> {
+      try {
+        const { data, error } = await client.GET("/plants", {
+          params: { query: status === undefined ? {} : { status } },
+        });
+        return data === undefined
+          ? { kind: "readFailed", reason: requestFailure(error) }
+          : { kind: "read", plants: data.map(toPlant) };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
     async getAttention(): Promise<Journal.GetAttentionResult> {
       try {
         const { data, error } = await client.GET("/attention");
@@ -43,11 +56,11 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async logOperation(id, details): Promise<Journal.LogOperationResult> {
+    async logOperation(id, date, details): Promise<Journal.LogOperationResult> {
       try {
         const { data, error } = await client.POST("/plants/{plantId}/operations", {
           params: { path: { plantId: id } },
-          body: toWireDetails(details),
+          body: { date, details: toWireDetails(details) },
         });
         return data === undefined
           ? { kind: "loggingFailed", reason: requestFailure(error) }
@@ -181,12 +194,12 @@ const toAttentionProjection = (value: Wire["AttentionProjection"]): Journal.Atte
   };
 };
 
-const toPlantAttention = (value: Wire["PlantAttention"]): Journal.PlantAttention => {
+const toPlantAttention = (value: Wire["PlantAttention"]): Journal.AttentionSample => {
   const watering = value.watering;
   switch (watering.kind) {
     case "unavailable":
       return {
-        plant: toPlant(value.plant),
+        plantId: Journal.plantId(value.plantId),
         watering: {
           kind: "unavailable",
           sampleCount: watering.sampleCount,
@@ -198,7 +211,7 @@ const toPlantAttention = (value: Wire["PlantAttention"]): Journal.PlantAttention
     case "overdue":
     case "redAlert":
       return {
-        plant: toPlant(value.plant),
+        plantId: Journal.plantId(value.plantId),
         watering: {
           kind: watering.kind,
           sampleCount: watering.sampleCount,

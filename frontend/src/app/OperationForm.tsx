@@ -11,7 +11,7 @@ interface OperationFormProps {
   readonly initial: Journal.OperationDetails | undefined;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
-  readonly onSubmit: (details: Journal.OperationDetails) => Promise<void>;
+  readonly onSubmit: (details: Journal.OperationDetails, date: Journal.Instant) => Promise<void>;
   readonly onAddSubstrateComponent: () => void;
   readonly onEditSubstrateComponent: (
     component: Journal.SubstrateComponent,
@@ -45,6 +45,8 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
         : [{ component: initialSubstrateComponent.id, share: 100 }],
   );
   const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
+  const [operationDate, setOperationDate] = createSignal(formatLocalMinute(new Date()));
+  const [dateError, setDateError] = createSignal(false);
   const [validationError, setValidationError] = createSignal<string>();
   const [submitting, setSubmitting] = createSignal(false);
 
@@ -67,6 +69,9 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
+    const date = parseLocalMinute(operationDate());
+    setDateError(date === undefined);
+    if (date === undefined) return;
     const error = kind() === "repot" ? validateSubstrate(parts()) : undefined;
     setValidationError(error);
     if (error !== undefined) return;
@@ -93,7 +98,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
           };
     setSubmitting(true);
     try {
-      await props.onSubmit(details);
+      await props.onSubmit(details, date);
     } finally {
       setSubmitting(false);
     }
@@ -103,6 +108,7 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
     <form
       class="operation-form"
       aria-label={props.initial === undefined ? "Log operation" : "Edit operation"}
+      noValidate
       onSubmit={(event) => void submit(event)}
     >
       <header class="operation-form__header">
@@ -120,6 +126,27 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
       </header>
 
       <div class="operation-form__body" inert={props.inactive}>
+        <Show when={props.initial === undefined}>
+          <label class="field">
+            <span>Date and time</span>
+            <input
+              type="datetime-local"
+              value={operationDate()}
+              step="60"
+              aria-invalid={dateError()}
+              aria-describedby={dateError() ? "operation-date-error" : undefined}
+              onInput={(event) => {
+                setOperationDate(event.currentTarget.value);
+                setDateError(false);
+              }}
+            />
+          </label>
+          <Show when={dateError()}>
+            <p id="operation-date-error" role="alert">
+              Enter a valid date and time.
+            </p>
+          </Show>
+        </Show>
         <label class="field">
           <span>Operation type</span>
           <select
@@ -181,6 +208,22 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
       </div>
     </form>
   );
+};
+
+const formatLocalMinute = (date: Date) => {
+  const year = String(date.getFullYear()).padStart(4, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+};
+
+const parseLocalMinute = (value: string): Journal.Instant | undefined => {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return undefined;
+  const date = new Date(value);
+  if (formatLocalMinute(date) !== value) return undefined;
+  return Journal.instant(date.toISOString());
 };
 
 const validateSubstrate = (parts: readonly SubstratePartInput[]) => {

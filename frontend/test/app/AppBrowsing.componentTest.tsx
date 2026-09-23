@@ -12,7 +12,7 @@ import {
 import type {
   GetAttentionResult,
   OperationWindow,
-  PlantAttention,
+  AttentionSample,
   PlantId,
 } from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
@@ -23,7 +23,7 @@ const unavailableFicusAttentionResult: GetAttentionResult = {
     measuredAt: instant("2026-01-01T00:00:00Z"),
     plants: [
       {
-        plant: JournalFixtures.ficus(),
+        plantId: JournalFixtures.ficus().id,
         watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
       },
     ],
@@ -64,12 +64,12 @@ describe("browsing the journal", () => {
       plantId: PlantId;
       window: OperationWindow;
     }[] = [];
-    const monsteraUnavailableAttention: PlantAttention = {
-      plant: JournalFixtures.monstera(),
+    const monsteraUnavailableAttention: AttentionSample = {
+      plantId: JournalFixtures.monstera().id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     };
-    const ficusRedAlertAttention: PlantAttention = {
-      plant: JournalFixtures.ficus(),
+    const ficusRedAlertAttention: AttentionSample = {
+      plantId: JournalFixtures.ficus().id,
       watering: {
         kind: "redAlert",
         sampleCount: 5,
@@ -86,6 +86,9 @@ describe("browsing the journal", () => {
     };
     const journal = JournalFixtures.buildJournal({
       getAttentionResults: [browsingAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [JournalFixtures.monstera(), JournalFixtures.ficus()] },
+      ],
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage([treated, repot, moderateCare], true)],
         p2: [JournalFixtures.operationsPage()],
@@ -103,14 +106,12 @@ describe("browsing the journal", () => {
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
     expect(renderedOperations.map((operation) => operation.textContent)).toEqual([
-      "2026-02-02EditCareMoistureModerate +ActionsNone recorded",
-      "2026-03-03EditRepotSubstratePerlite 100%",
-      "2026-04-05EditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
+      "2nd of FebruaryEditCareMoistureModerate +ActionsNone recorded",
+      "3rd of MarchEditRepotSubstratePerlite 100%",
+      "5th of AprilEditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
     ]);
-    expect(within(card).getByText("2026-04-05")).toHaveAttribute(
-      "datetime",
-      "2026-04-04T22:30:00Z",
-    );
+    const recentDate = within(card).getByText("5th of April");
+    expect(recentDate).toHaveAttribute("datetime", "2026-04-04T22:30:00Z");
     expect(
       screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
     ).toEqual(["Monstera deliciosa", "Fern"]);
@@ -132,7 +133,7 @@ describe("browsing the journal", () => {
     });
     fireEvent.click(
       within(history).getByRole("button", {
-        name: "Edit historical care operation 1 from 2026-04-05",
+        name: "Edit historical care operation 1 from 05.04.2026",
       }),
     );
     expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
@@ -147,8 +148,8 @@ describe("browsing the journal", () => {
         maybeNickname: nickname("Unknown"),
       },
     };
-    const unknownUnavailableAttention: PlantAttention = {
-      plant: unknownPlant,
+    const unknownUnavailableAttention: AttentionSample = {
+      plantId: unknownPlant.id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     };
     const urgentPlant = {
@@ -159,8 +160,8 @@ describe("browsing the journal", () => {
         maybeNickname: nickname("Urgent"),
       },
     };
-    const urgentRedAlertAttention: PlantAttention = {
-      plant: urgentPlant,
+    const urgentRedAlertAttention: AttentionSample = {
+      plantId: urgentPlant.id,
       watering: {
         kind: "redAlert",
         sampleCount: 5,
@@ -176,8 +177,8 @@ describe("browsing the journal", () => {
         maybeNickname: nickname("Current"),
       },
     };
-    const recentlyWateredCurrentAttention: PlantAttention = {
-      plant: recentlyWateredPlant,
+    const recentlyWateredCurrentAttention: AttentionSample = {
+      plantId: recentlyWateredPlant.id,
       watering: {
         kind: "current",
         sampleCount: 5,
@@ -199,6 +200,9 @@ describe("browsing the journal", () => {
     const operationWindows: { plantId: PlantId; window: OperationWindow }[] = [];
     const journal = JournalFixtures.buildJournal({
       getAttentionResults: [browsingAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [unknownPlant, urgentPlant, recentlyWateredPlant] },
+      ],
       getOperationsByPlantId: Object.fromEntries(
         [unknownPlant, urgentPlant, recentlyWateredPlant].map(({ id }) => [
           id,
@@ -240,6 +244,25 @@ describe("browsing the journal", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
+  });
+
+  it("should fail the journal load when current plants cannot be read or attention is unmatched", async () => {
+    const cases = [
+      { kind: "readFailed" as const, reason: new Error("private plant details") },
+      { kind: "read" as const, plants: [JournalFixtures.monstera()] },
+    ];
+    for (const getPlantsResult of cases) {
+      const journal = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getPlantsResults: [getPlantsResult],
+      });
+      const view = render(() => <App journal={journal} />);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent("The journal could not be loaded.");
+      expect(screen.queryByRole("article")).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it("should report an operation history read failure without showing its reason", async () => {

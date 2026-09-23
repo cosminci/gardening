@@ -34,7 +34,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
   private val repotRequest   =
     """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
-  private val operationsJson =
+  private val loggedCareRequest = s"""{"date":"$date","details":$careRequest}"""
+  private val operationsJson    =
     """{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
   private val repotJson =
     """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
@@ -52,20 +53,19 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
 
   test("should return the requested plant's care history"):
-    val refs   = Refs()
-    val server = buildServer(
-      refs = refs,
+    val refs = Refs(
       getOperationsResult = GetOperationsResult.Read(
         OperationPage(Vector(careOperation, repotOperation), hasNextPage = true)
       )
     )
+    val server = buildServer(refs)
 
     val operationsResponse = getOperations(server)
     assertEquals(operationsResponse.code -> jsonBody(operationsResponse), StatusCode.Ok -> json(operationsJson))
     assertEquals(refs.requestedWindows.get(), Vector(OperationWindow(offset = 3, size = 10)))
 
   test("should reject invalid operation windows"):
-    val server = buildServer()
+    val server = buildServer(Refs())
 
     assertEquals(getOperations(server, offset = -1, pageSize = 3).code, StatusCode.BadRequest)
     assertEquals(getOperations(server, offset = 0, pageSize = 0).code, StatusCode.BadRequest)
@@ -80,42 +80,42 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       measuredAt = date,
       plants = Vector(
         PlantAttention(
-          plant = unknownPlant,
+          plantId = unknownPlant.id,
           watering = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = 12.hours.some)
         ),
         PlantAttention(
-          plant = plant,
+          plantId = plant.id,
           watering = WateringAttention.RedAlert(sampleCount = 5, averageInterval = 24.hours, elapsed = 49.hours)
         ),
         PlantAttention(
-          plant = currentPlant,
+          plantId = currentPlant.id,
           watering = WateringAttention.Current(sampleCount = 5, averageInterval = 24.hours, elapsed = 12.hours)
         ),
         PlantAttention(
-          plant = zeroAveragePlant,
+          plantId = zeroAveragePlant.id,
           watering = WateringAttention.Overdue(sampleCount = 5, averageInterval = 0.millis, elapsed = 1.milli)
         )
       )
     )
-    val response = get("/attention", buildServer(attentionProjection = projection))
+    val response = get("/attention", buildServer(Refs(attentionProjection = projection)))
     val expected =
       s"""{
          |  "measuredAt": "$date",
          |  "plants": [
          |    {
-         |      "plant": {"id":"unknown","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "unknown",
          |      "watering": {"sampleCount":4,"elapsedMillis":"43200000","kind":"unavailable"}
          |    },
          |    {
-         |      "plant": {"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "p1",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"176400000","kind":"redAlert"}
          |    },
          |    {
-         |      "plant": {"id":"current","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "current",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"43200000","kind":"current"}
          |    },
          |    {
-         |      "plant": {"id":"zero-average","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"status":"active"}},
+         |      "plantId": "zero-average",
          |      "watering": {"sampleCount":5,"averageIntervalMillis":"0","elapsedMillis":"1","kind":"overdue"}
          |    }
          |  ]
@@ -125,30 +125,62 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should use the recent-operation window by default"):
     val refs     = Refs()
-    val response = get(s"/plants/${plant.id.value}/operations", buildServer(refs = refs))
+    val response = get(s"/plants/${plant.id.value}/operations", buildServer(refs))
 
     assertEquals(response.code, StatusCode.Ok)
     assertEquals(refs.requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
+  test("should list active plants by default and archived plants on request"):
+    val active         = plant
+    val archived       = plant.copy(id = PlantId("archived"), details = plant.details.copy(status = PlantStatus.Archived))
+    val activeRefs     = Refs(plantsResult = GetPlantsResult.Read(Vector(active)))
+    val archivedRefs   = Refs(plantsResult = GetPlantsResult.Read(Vector(archived)))
+    val activeServer   = buildServer(activeRefs)
+    val archivedServer = buildServer(archivedRefs)
+
+    val activeResponse   = get("/plants", activeServer)
+    val archivedResponse = get("/plants?status=archived", archivedServer)
+    val invalidResponse  = get("/plants?status=unknown", activeServer)
+    val expectedActive   =
+      json(
+        s"""[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}]"""
+      )
+    val expectedArchived =
+      json(
+        s"""[{"id":"archived","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"archived"}}]"""
+      )
+
+    assertEquals(activeResponse.code, StatusCode.Ok)
+    assertEquals(archivedResponse.code, StatusCode.Ok)
+    assertEquals(jsonBody(activeResponse), expectedActive)
+    assertEquals(jsonBody(archivedResponse), expectedArchived)
+    assertEquals(invalidResponse.code, StatusCode.BadRequest)
+    assertEquals(activeRefs.requestedStatuses.get(), Vector(PlantStatus.Active))
+    assertEquals(archivedRefs.requestedStatuses.get(), Vector(PlantStatus.Archived))
+
+  test("should return a read error when plant details cannot be loaded"):
+    val refs   = Refs(plantsResult = GetPlantsResult.ReadFailed(RuntimeException("offline")))
+    val server = buildServer(refs)
+
+    val response = get("/plants", server)
+    assertEquals(response.code, StatusCode.InternalServerError)
+
   test("should log care and replace the details of an existing repot"):
-    val refs   = Refs()
-    val server = buildServer(
-      refs = refs,
+    val refs = Refs(
       logOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult = EditOperationResult.Edited(repotOperation)
     )
+    val server = buildServer(refs)
 
-    val logResponse   = post(s"/plants/${plant.id.value}/operations", careRequest, server)
+    val logResponse   = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, server)
     val editResponse  = put(s"/operations/${repotOperation.id.value}", repotRequest, server)
     assertEquals(logResponse.code  -> jsonBody(logResponse), StatusCode.Created -> json("""{"id":"logged"}"""))
     assertEquals(editResponse.code -> jsonBody(editResponse), StatusCode.Ok     -> json(repotJson))
-    assertEquals(refs.loggedOperations.get(), Vector(plant.id -> care))
+    assertEquals(refs.loggedOperations.get(), Vector((plant.id, date, care)))
     assertEquals(refs.editedOperations.get(), Vector(repotOperation.id -> repot))
 
-  test("should reject invalid operation details without logging an operation"):
-    val refs          = Refs()
-    val server        = buildServer(refs = refs)
-    val invalidBodies = List(
+  test("should reject invalid or missing operation input without logging an operation"):
+    val invalidDetails = List(
       """{"kind":"care","actions":["misted"],"pesticides":[],"moisture":"wet","notes":null}""",
       """{"kind":"care","actions":[],"pesticides":["not-a-uuid"],"moisture":"wet","notes":null}""",
       """{"kind":"repot","substrate":[],"notes":null}""",
@@ -157,50 +189,62 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":60},{"componentId":"00000000-0000-4000-8000-000000000004","share":60}],"notes":null}""",
       """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
-    invalidBodies.foreach(body => assertEquals(post(s"/plants/${plant.id.value}/operations", body, server).code, StatusCode.BadRequest))
+    val invalidDates = List(
+      s"""{"details":$careRequest}""",
+      s"""{"date":"tomorrow","details":$careRequest}""",
+      s"""{"date":"2026-01-01T00:00","details":$careRequest}"""
+    )
+    val invalidBodies = invalidDates ++ invalidDetails.map(details => s"""{"date":"$date","details":$details}""")
+    val refs          = Refs()
+    val server        = buildServer(refs)
+
+    val responses = invalidBodies.map(body => post(s"/plants/${plant.id.value}/operations", body, server).code)
+
+    assertEquals(responses, List.fill(invalidBodies.size)(StatusCode.BadRequest))
     assertEquals(refs.loggedOperations.get(), Vector.empty)
 
   test("should hide storage failures returned by read operations"):
-    val server = buildServer(
-      getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("offline"))
-    )
+    val refs   = Refs(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("offline")))
+    val server = buildServer(refs)
 
     val operationsResponse = getOperations(server)
     val expected           = StatusCode.InternalServerError -> json("""{"message":"journal could not be read"}""")
     assertEquals(operationsResponse.code -> jsonBody(operationsResponse), expected)
 
   test("should hide the cause when logging an operation fails"):
-    val server   = buildServer(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
-    val response = post(s"/plants/${plant.id.value}/operations", careRequest, server)
+    val refs     = Refs(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
+    val server   = buildServer(refs)
+    val response = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, server)
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be logged"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should report when the operation to edit does not exist"):
     val response =
-      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(editOperationResult = EditOperationResult.OperationMissing))
+      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(Refs(editOperationResult = EditOperationResult.OperationMissing)))
     assertEquals(response.code -> jsonBody(response), StatusCode.NotFound -> json("""{"message":"operation not found"}"""))
 
   test("should reject changing an operation to another type"):
     val response =
-      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(editOperationResult = EditOperationResult.OperationTypeMismatch))
+      put(s"/operations/${repotOperation.id.value}", careRequest, buildServer(Refs(editOperationResult = EditOperationResult.OperationTypeMismatch)))
     assertEquals(response.code -> jsonBody(response), StatusCode.Conflict -> json("""{"message":"operation type cannot be changed"}"""))
 
   test("should hide storage failures returned when editing"):
     val response = put(
       s"/operations/${repotOperation.id.value}",
       careRequest,
-      buildServer(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline")))
+      buildServer(Refs(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
     )
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should list and add catalog records"):
-    val server = buildServer(
+    val refs = Refs(
       componentReadResult = CatalogReadResult.Read(Vector(component)),
       componentAddResult = CatalogAddResult.Added(component),
       pesticideReadResult = CatalogReadResult.Read(Vector(pesticide)),
       pesticideAddResult = CatalogAddResult.Added(pesticide)
     )
+    val server = buildServer(refs)
 
     assertResponse(get("/substrate-components", server), StatusCode.Ok, s"[$componentJson]")
     assertResponse(post("/substrate-components", componentDataJson, server), StatusCode.Created, componentJson)
@@ -208,10 +252,11 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertResponse(post("/pesticides", pesticideDataJson, server), StatusCode.Created, pesticideJson)
 
   test("should edit catalog records and reject invalid or missing identifiers"):
-    val server = buildServer(
+    val refs = Refs(
       componentEditResult = CatalogEditResult.Edited(component),
       pesticideEditResult = CatalogEditResult.Edited(pesticide)
     )
+    val server = buildServer(refs)
 
     assertResponse(put(s"/substrate-components/${componentId.value}", componentDataJson, server), StatusCode.Ok, componentJson)
     assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server), StatusCode.Ok, pesticideJson)
@@ -221,7 +266,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"message":"invalid nomenclature id"}"""
     )
     assertResponse(
-      put(s"/substrate-components/${componentId.value}", componentDataJson, buildServer()),
+      put(s"/substrate-components/${componentId.value}", componentDataJson, buildServer(Refs())),
       StatusCode.NotFound,
       """{"message":"nomenclature not found"}"""
     )
@@ -231,14 +276,14 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"message":"invalid nomenclature id"}"""
     )
     assertResponse(
-      put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer()),
+      put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(Refs())),
       StatusCode.NotFound,
       """{"message":"nomenclature not found"}"""
     )
 
   test("should hide catalog storage failures"):
     val failure = RuntimeException("private details")
-    val server  = buildServer(
+    val refs    = Refs(
       componentReadResult = CatalogReadResult.ReadFailed(failure),
       componentAddResult = CatalogAddResult.AddFailed(failure),
       componentEditResult = CatalogEditResult.EditFailed(failure),
@@ -246,6 +291,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       pesticideAddResult = CatalogAddResult.AddFailed(failure),
       pesticideEditResult = CatalogEditResult.EditFailed(failure)
     )
+    val server = buildServer(refs)
 
     assertResponse(get("/substrate-components", server), StatusCode.InternalServerError, catalogReadError)
     assertResponse(post("/substrate-components", componentDataJson, server), StatusCode.InternalServerError, catalogWriteError)
@@ -255,14 +301,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server), StatusCode.InternalServerError, catalogWriteError)
 
   private case class Refs(
-      requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
-      loggedOperations: AtomicReference[Vector[(PlantId, OperationDetails)]] = AtomicReference(Vector.empty),
-      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
-  )
-
-  private def buildServer(
-      refs: Refs = Refs(),
       attentionProjection: AttentionProjection = AttentionProjection(date, Vector.empty),
+      plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
@@ -271,25 +311,34 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
       pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
       pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
-      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
-  ) =
+      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing,
+      requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
+      requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
+      loggedOperations: AtomicReference[Vector[(PlantId, Instant, OperationDetails)]] = AtomicReference(Vector.empty),
+      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
+  )
+
+  private def buildServer(refs: Refs) =
     val journal = new PlantJournal:
+      override def getPlants(status: PlantStatus): GetPlantsResult =
+        refs.requestedStatuses.updateAndGet(_ :+ status)
+        refs.plantsResult
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
-        getOperationsResult
-      override def logOperation(plantId: PlantId, details: OperationDetails): LogOperationResult =
-        refs.loggedOperations.updateAndGet(_ :+ (plantId -> details)).pipe(_ => logOperationResult)
+        refs.getOperationsResult
+      override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
+        refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => refs.logOperationResult)
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
-        refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = componentReadResult
-      override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] = componentAddResult
+        refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => refs.editOperationResult)
+      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = refs.componentReadResult
+      override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] = refs.componentAddResult
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-        componentEditResult
-      override def getPesticides: CatalogReadResult[Pesticide]                                       = pesticideReadResult
-      override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]                    = pesticideAddResult
-      override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] = pesticideEditResult
+        refs.componentEditResult
+      override def getPesticides: CatalogReadResult[Pesticide]                                       = refs.pesticideReadResult
+      override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]                    = refs.pesticideAddResult
+      override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] = refs.pesticideEditResult
     val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = attentionProjection
+      override def current: AttentionProjection       = refs.attentionProjection
       override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal, attention))

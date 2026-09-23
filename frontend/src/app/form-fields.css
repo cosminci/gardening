@@ -23,6 +23,7 @@
 select,
 input[type="text"],
 input[type="number"],
+input[type="datetime-local"],
 textarea {
   width: 100%;
   border: 1px solid #cfd2c8;
@@ -34,7 +35,8 @@ textarea {
 
 select,
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+input[type="datetime-local"] {
   min-height: 2.7rem;
   padding: 0.55rem 0.7rem;
 }

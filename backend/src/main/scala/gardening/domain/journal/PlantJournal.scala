@@ -10,13 +10,15 @@ import monocle.syntax.all.*
 
 import language.experimental.captureChecking
 
+import java.time.Instant
 import java.util.concurrent.locks.ReentrantLock
 import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
+  def getPlants(status: PlantStatus): GetPlantsResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
-  def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
+  def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
   def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent]
@@ -27,11 +29,13 @@ trait PlantJournal:
 
 object PlantJournal:
 
-  def make(using store: PlantJournalStore^, idGen: IdGenerator^, clock: Clock^): PlantJournal^{store, idGen, clock} =
+  def make(using store: PlantJournalStore^, idGen: IdGenerator^): PlantJournal^{store, idGen} =
     new LivePlantJournal
 
-  private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^, clock: Clock^) extends PlantJournal:
+  private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
+
+    override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)
@@ -52,8 +56,8 @@ object PlantJournal:
     override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
       store.editPesticide(id, data)
 
-    override def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
-      val operation = Operation(OperationId(idGen.nextId()), plantId, clock.now(), op)
+    override def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
+      val operation = Operation(OperationId(idGen.nextId()), plantId, date, op)
       validateOperationDetails(op) match
         case Left(reason) => LogOperationResult.LoggingFailed(reason)
         case Right(_)     =>

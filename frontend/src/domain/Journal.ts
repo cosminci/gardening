@@ -116,9 +116,14 @@ export interface PlantAttention {
   readonly watering: WateringAttention;
 }
 
+export interface AttentionSample {
+  readonly plantId: PlantId;
+  readonly watering: WateringAttention;
+}
+
 export interface AttentionProjection {
   readonly measuredAt: Instant;
-  readonly plants: readonly PlantAttention[];
+  readonly plants: readonly AttentionSample[];
 }
 
 export interface CareOperationDetails {
@@ -158,6 +163,10 @@ export type GetAttentionResult =
   | { readonly kind: "read"; readonly projection: AttentionProjection }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
+export type GetPlantsResult =
+  | { readonly kind: "read"; readonly plants: readonly Plant[] }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
 export type GetOperationsResult =
   | { readonly kind: "read"; readonly page: OperationPage }
   | { readonly kind: "readFailed"; readonly reason: Error };
@@ -186,9 +195,14 @@ export type CatalogEditResult<A> =
   | { readonly kind: "editFailed"; readonly reason: Error };
 
 export interface JournalClient {
+  getPlants(status?: PlantStatus): Promise<GetPlantsResult>;
   getAttention(): Promise<GetAttentionResult>;
   getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
-  logOperation(plantId: PlantId, details: OperationDetails): Promise<LogOperationResult>;
+  logOperation(
+    plantId: PlantId,
+    date: Instant,
+    details: OperationDetails,
+  ): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
   getSubstrateComponents(): Promise<CatalogReadResult<SubstrateComponent>>;
   addSubstrateComponent(

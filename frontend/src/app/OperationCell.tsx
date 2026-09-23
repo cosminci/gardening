@@ -13,7 +13,7 @@ interface OperationCellProps {
 }
 
 export const OperationCell: Component<OperationCellProps> = (props) => {
-  const date = () => Labels.formatLocalDate(props.operation.date);
+  const date = () => Labels.formatRecentDate(props.operation.date);
 
   return (
     <li
