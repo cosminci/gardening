@@ -1,14 +1,15 @@
 import type * as Dagger from "@dagger.io/dagger";
-import { argument, func, object } from "@dagger.io/dagger";
-import { GHCR_REPOSITORY, GHCR_USER, WORKSPACE_IGNORE } from "./buildEnv";
+import { argument, dag, func, object } from "@dagger.io/dagger";
+import { GHCR_REPOSITORY, GHCR_USER, TARGET_PLATFORM, WORKSPACE_IGNORE } from "./buildEnv";
 import { backendCheck } from "./hooks/backend";
 import { contractDrift } from "./hooks/contract";
 import * as Git from "./hooks/git";
 import { frontendCheck } from "./hooks/frontend";
 import { runtimeImage } from "./hooks/image";
 import { pipelineCheck } from "./hooks/pipeline";
+import { publishedTags } from "./hooks/registry";
 import * as Selection from "./selection";
-import { deriveVersion } from "./version";
+import { assertReleaseSource, deriveVersion, planLatestRepair, planPublication } from "./version";
 
 /** CI pipeline for the plant-journal app. One composable module over three components — backend,
  * frontend, and the pipeline itself — plus the contract that binds the app halves. Verifying and
@@ -110,29 +111,67 @@ export class Gardening {
     });
   }
 
-  /** Refuses to proceed unless the working tree is clean and HEAD sits exactly on a tag. */
+  /** Refuses to release anything except the explicitly selected annotated tag at HEAD. */
   @func()
   async releaseGuard(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
+    tag: string,
   ): Promise<string> {
-    if (!(await Git.isClean(source))) throw new Error("release refused: working tree is dirty");
-    const tag = (await Git.headExactTag(source)).trim();
-    if (tag === "") throw new Error("release refused: HEAD is not on a tag");
+    planPublication(tag, []);
+    assertReleaseSource({
+      tag,
+      clean: await Git.isClean(source),
+      tagType: (await Git.tagType(source, tag)).trim(),
+      headRevision: (await Git.headSha(source)).trim(),
+      tagRevision: (await Git.tagRevision(source, tag)).trim(),
+      mainAncestor: (await Git.mainAncestor(source)).trim(),
+    });
     return `release ok: ${tag}`;
   }
 
-  /** Builds a guarded release image and pushes it to the private GHCR package. */
+  /** Verifies and publishes a guarded release, without overwriting an existing version. */
   @func()
   async publish(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
+    tag: string,
     token: Dagger.Secret,
   ): Promise<string> {
-    await this.releaseGuard(source);
-    const version = deriveVersion(await Git.gitDescribe(source));
-    const image = (await this.buildImage(source)).withRegistryAuth("ghcr.io", GHCR_USER, token);
-    const versioned = await image.publish(`${GHCR_REPOSITORY}:${version}`);
+    await this.releaseGuard(source, tag);
+    const plan = planPublication(tag, await publishedTags(token));
+    await this.verify(source, "", true);
+    const image = runtimeImage(source, {
+      version: plan.version,
+      revision: (await Git.headSha(source)).trim(),
+      created: new Date().toISOString(),
+    }).withRegistryAuth("ghcr.io", GHCR_USER, token);
+    const versioned = await image.publish(`${GHCR_REPOSITORY}:${plan.version}`);
+    if (!plan.updateLatest) return `published ${versioned}`;
     const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
     return `published ${versioned} and ${latest}`;
+  }
+
+  /** Repairs a partially published stable release without replacing its versioned image. */
+  @func()
+  async repairLatest(
+    @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
+    tag: string,
+    token: Dagger.Secret,
+  ): Promise<string> {
+    await this.releaseGuard(source, tag);
+    const version = planLatestRepair(tag, await publishedTags(token));
+    await this.verify(source, "", true);
+    const image = dag
+      .container({ platform: TARGET_PLATFORM as Dagger.Platform })
+      .withRegistryAuth("ghcr.io", GHCR_USER, token)
+      .from(`${GHCR_REPOSITORY}:${version}`);
+    const revision = (await Git.headSha(source)).trim();
+    if (
+      (await image.label("org.opencontainers.image.revision")) !== revision ||
+      (await image.envVariable("GARDENING_APP_VERSION")) !== version
+    ) {
+      throw new Error("release refused: published image provenance differs from selected tag");
+    }
+    return image.publish(`${GHCR_REPOSITORY}:latest`);
   }
 
   /** Prints how the NAS pulls a given version (WUD auto-update is preferred). */

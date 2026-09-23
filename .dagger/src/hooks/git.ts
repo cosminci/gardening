@@ -22,7 +22,7 @@ export async function gitDescribe(source: Directory): Promise<string> {
 }
 
 export async function headSha(source: Directory): Promise<string> {
-  return gitContainer(source).withExec(["git", "rev-parse", "--short", "HEAD"]).stdout();
+  return gitContainer(source).withExec(["git", "rev-parse", "HEAD"]).stdout();
 }
 
 export async function isClean(source: Directory): Promise<boolean> {
@@ -30,9 +30,18 @@ export async function isClean(source: Directory): Promise<boolean> {
   return status.trim() === "";
 }
 
-/** The tag HEAD sits exactly on, or an empty string when HEAD is not on a tag. */
-export async function headExactTag(source: Directory): Promise<string> {
+export async function tagType(source: Directory, tag: string): Promise<string> {
   return gitContainer(source)
-    .withExec(["sh", "-c", "git describe --exact-match --tags HEAD 2>/dev/null || true"])
+    .withExec(["git", "cat-file", "-t", `refs/tags/${tag}`])
     .stdout();
+}
+
+export async function tagRevision(source: Directory, tag: string): Promise<string> {
+  return gitContainer(source)
+    .withExec(["git", "rev-parse", "--verify", `refs/tags/${tag}^{commit}`])
+    .stdout();
+}
+
+export async function mainAncestor(source: Directory): Promise<string> {
+  return gitContainer(source).withExec(["git", "merge-base", "origin/main", "HEAD"]).stdout();
 }
