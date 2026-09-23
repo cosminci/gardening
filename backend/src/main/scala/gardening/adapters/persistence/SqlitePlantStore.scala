@@ -36,6 +36,23 @@ object SqlitePlantStore:
         case error: SqlException       => GetPlantsResult.ReadFailed(error)
         case error: DatabaseCorruption => GetPlantsResult.ReadFailed(error)
 
+    override def getArchivedCount: ArchivedCountResult =
+      try
+        val count = connect(transactor)(sql"select count(*) from plant where status = 'Archived'".query[Long].run().headOption)
+        ArchivedCountResult.Counted(count.getOrElse(0L))
+      catch case error: SqlException => ArchivedCountResult.ReadFailed(error)
+
+    override def archivePlant(id: PlantId): ArchivePlantResult =
+      try
+        transact(transactor):
+          sql"update plant set status = 'Archived' where id = ${id.value} and status = 'Active'".update.run() match
+            case 1 => ArchivePlantResult.Archived
+            case _ =>
+              sql"select status from plant where id = ${id.value}".query[String].run().headOption match
+                case Some(_) => ArchivePlantResult.AlreadyArchived
+                case None    => ArchivePlantResult.PlantMissing
+      catch case error: SqlException => ArchivePlantResult.ArchiveFailed(error)
+
     override def getPlant(id: PlantId): GetPlantResult =
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
@@ -65,6 +82,26 @@ object SqlitePlantStore:
         val operations = trust(rows.traverse(toOperation))
         GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
+
+    override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
+      try
+        val maybeDates = connect(transactor):
+          sql"""select
+                 (select date from operation where plant_id = plant.id order by date asc, id asc limit 1) as first_date,
+                 (select date from operation where plant_id = plant.id order by date desc, id desc limit 1) as last_date
+               from plant where id = ${plantId.value}""".query[OperationDateRangeRow].run().headOption
+        maybeDates match
+          case None        => GetOperationDateRangeResult.PlantMissing
+          case Some(dates) =>
+            val rangeResult = dates.firstDate.zip(dates.lastDate) match
+              case None                => Right(OperationDateRange.Empty)
+              case Some((first, last)) =>
+                for
+                  start <- parseOperationDate(first)
+                  end   <- parseOperationDate(last)
+                yield OperationDateRange.Recorded(start, end)
+            rangeResult.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
+      catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
       try
@@ -144,13 +181,20 @@ object SqlitePlantStore:
     override def addOperation(operation: Operation): LogOperationResult =
       try
         transact(transactor):
-          insertOperationRow(operation).update.run().pipe(_ => Logged(operation.id))
+          insertOperationRow(operation).update.run() match
+            case 1 => Logged(operation.id)
+            case _ =>
+              sql"select status from plant where id = ${operation.plantId.value}".query[String].run().headOption match
+                case Some(_) => LogOperationResult.PlantArchived
+                case None    => LogOperationResult.PlantMissing
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation) =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
       val storedDate               = operationDateFormatter.format(operation.date)
-      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"
+      sql"""insert into operation (id, plant_id, date, kind, payload)
+           select ${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload
+           where exists (select 1 from plant where id = ${operation.plantId.value} and status = 'Active')"""
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
@@ -274,7 +318,7 @@ object SqlitePlantStore:
                location = ${details.location.value},
                substrate = ${details.substrate.asJson.noSpaces},
                status = ${details.status.toString}
-           where id = ${plant.id.value}"""
+           where id = ${plant.id.value} and status = ${details.status.toString}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails) =
       val (operationKind, payload) = encodeOperationDetails(details)
@@ -370,6 +414,7 @@ object SqlitePlantStore:
       derives DbCodec
 
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
+  private case class OperationDateRangeRow(firstDate: Option[String], lastDate: Option[String]) derives DbCodec
   private case class AttentionSampleRow(
       id: String,
       wateringDates: String

@@ -55,8 +55,24 @@ const emptyCardProps = {
   getOperations: () =>
     Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
   onLog: () => undefined,
+  onArchive: () => undefined,
   onEdit: () => undefined,
   operationChange: undefined,
+};
+const archivedFicus = {
+  ...ficusPlant,
+  details: { ...ficusPlant.details, status: "archived" as const },
+};
+const archivedCardProps = {
+  kind: "cemetery" as const,
+  plant: archivedFicus,
+  dates: { kind: "empty" as const },
+  operationPage: emptyCardProps.operationPage,
+  substrateComponents: emptyCardProps.substrateComponents,
+  pesticides: emptyCardProps.pesticides,
+  getOperations: emptyCardProps.getOperations,
+  onEdit: emptyCardProps.onEdit,
+  operationChange: emptyCardProps.operationChange,
 };
 
 describe("plant operation controls", () => {
@@ -90,6 +106,7 @@ describe("plant operation controls", () => {
         }
         operationChange={undefined}
         onLog={() => undefined}
+        onArchive={() => undefined}
         onEdit={onEdit}
       />
     ));
@@ -139,6 +156,7 @@ describe("plant operation controls", () => {
       getOperations: () =>
         Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
       onLog: () => undefined,
+      onArchive: () => undefined,
       onEdit: () => undefined,
       operationChange: undefined,
     };
@@ -166,6 +184,49 @@ describe("plant operation controls", () => {
       />
     ));
     expect(screen.getByRole("button", { name: "Show operation history" })).toBeInTheDocument();
+  });
+
+  it("should show recorded cemetery dates without an add-operation control", () => {
+    const dates = {
+      kind: "recorded" as const,
+      first: instant("2026-02-01T10:00:00Z"),
+      last: instant("2026-04-03T18:00:00Z"),
+    };
+
+    render(() => <PlantCard {...archivedCardProps} dates={dates} />);
+
+    expect(screen.getByText("RIP")).toBeInTheDocument();
+    expect(screen.getByText("01.02.2026")).toBeInTheDocument();
+    expect(screen.getByText("03.04.2026")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Log operation for Fern" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive Fern" })).toBeNull();
+  });
+
+  it("should show unknown dates for a cemetery plant without operations", () => {
+    render(() => <PlantCard {...archivedCardProps} />);
+
+    expect(screen.getByText("Dates unknown")).toBeInTheDocument();
+  });
+
+  it("should show the same recorded start and end date for a single operation", () => {
+    const recordedDate = instant("2026-02-01T10:00:00Z");
+    const dates = { kind: "recorded" as const, first: recordedDate, last: recordedDate };
+
+    render(() => <PlantCard {...archivedCardProps} dates={dates} />);
+
+    expect(screen.getAllByText("01.02.2026")).toHaveLength(2);
+  });
+
+  it("should offer archiving from an active plant summary", () => {
+    const onArchive = vi.fn();
+
+    render(() => (
+      <PlantCard {...emptyCardProps} attention={currentFicusAttention} onArchive={onArchive} />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
+
+    expect(onArchive).toHaveBeenCalledOnce();
   });
 
   it(`should render ${unknownFicusAttention.watering.kind} watering with an unavailable cadence`, () => {

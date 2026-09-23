@@ -68,6 +68,106 @@ describe("HttpJournalClient", () => {
     await expect(networkJournal.getPlants()).resolves.toEqual({ kind: "readFailed", reason });
   });
 
+  it("should read the archived count without fetching the archived plant list", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(respondingWith([jsonResponse({ count: 7 })], requests));
+
+    const result = await journal.getArchivedCount();
+
+    expect(result).toEqual({ kind: "read", count: 7 });
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0]?.url ?? "").pathname).not.toBe("/plants");
+  });
+
+  it("should read the first and last operation dates without paging through history", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          jsonResponse({
+            kind: "recorded",
+            first: "2026-02-01T10:00:00Z",
+            last: "2026-04-03T18:00:00Z",
+          }),
+          jsonResponse({ kind: "empty" }),
+        ],
+        requests,
+      ),
+    );
+    const plantId = Journal.plantId("p1");
+
+    const recordedResult = await journal.getOperationDates(plantId);
+    const emptyResult = await journal.getOperationDates(plantId);
+    const expectedDates = {
+      kind: "recorded",
+      first: Journal.instant("2026-02-01T10:00:00Z"),
+      last: Journal.instant("2026-04-03T18:00:00Z"),
+    };
+
+    expect(recordedResult).toEqual({ kind: "read", dates: expectedDates });
+    expect(emptyResult).toEqual({ kind: "read", dates: { kind: "empty" } });
+    expect(requests).toHaveLength(2);
+  });
+
+  it("should reject malformed archived counts and incomplete recorded dates", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({ count: -1 }),
+        jsonResponse({ kind: "recorded", first: "2026-02-01T10:00:00Z", last: null }),
+        jsonResponse({ message: "count unavailable" }, 503),
+        jsonResponse({ message: "missing plant" }, 404),
+      ]),
+    );
+    const plantId = Journal.plantId("p1");
+
+    await expect(journal.getArchivedCount()).resolves.toMatchObject({ kind: "readFailed" });
+    await expect(journal.getOperationDates(plantId)).resolves.toMatchObject({
+      kind: "readFailed",
+    });
+    await expect(journal.getArchivedCount()).resolves.toMatchObject({ kind: "readFailed" });
+    await expect(journal.getOperationDates(plantId)).resolves.toMatchObject({ kind: "readFailed" });
+    const offline = makeHttpJournalClient(
+      respondingWith([new Error("offline"), new Error("offline")]),
+    );
+    await expect(offline.getArchivedCount()).resolves.toMatchObject({ kind: "readFailed" });
+    await expect(offline.getOperationDates(plantId)).resolves.toMatchObject({ kind: "readFailed" });
+  });
+
+  it("should translate irreversible archive outcomes and reject archived operation logging", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          new Response(null, { status: 204 }),
+          jsonResponse({ message: "missing" }, 404),
+          jsonResponse({ message: "already archived" }, 409),
+          jsonResponse({ message: "archived plant" }, 409),
+          jsonResponse({ message: "archive unavailable" }, 500),
+        ],
+        requests,
+      ),
+    );
+    const plantId = Journal.plantId("p1");
+    const operation: Journal.OperationDetails = {
+      kind: "care",
+      actions: new Set(["watered"]),
+      pesticides: new Set(),
+      moisture: "wet",
+      maybeNote: null,
+    };
+
+    await expect(journal.archivePlant(plantId)).resolves.toEqual({ kind: "archived" });
+    await expect(journal.archivePlant(plantId)).resolves.toEqual({ kind: "plantMissing" });
+    await expect(journal.archivePlant(plantId)).resolves.toEqual({ kind: "alreadyArchived" });
+    await expect(
+      journal.logOperation(plantId, Journal.instant("2026-04-03T18:00:00Z"), operation),
+    ).resolves.toEqual({ kind: "plantArchived" });
+    await expect(journal.archivePlant(plantId)).resolves.toMatchObject({ kind: "archiveFailed" });
+    expect(requests).toHaveLength(5);
+    const offline = makeHttpJournalClient(respondingWith([new Error("offline")]));
+    await expect(offline.archivePlant(plantId)).resolves.toMatchObject({ kind: "archiveFailed" });
+  });
+
   it("should translate the attention projection into domain values", async () => {
     const noSamples = plant("no-samples");
     const unknown = plant("unknown");

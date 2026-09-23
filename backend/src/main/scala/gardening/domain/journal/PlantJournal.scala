@@ -1,6 +1,7 @@
 package gardening.domain.journal
 
 import cats.syntax.either.*
+import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
 import io.github.iltotore.iron.*
@@ -17,7 +18,10 @@ import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
   def getPlants(status: PlantStatus): GetPlantsResult
+  def getArchivedCount: ArchivedCountResult
+  def archivePlant(id: PlantId): ArchivePlantResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
+  def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
@@ -37,8 +41,16 @@ object PlantJournal:
 
     override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
 
+    override def getArchivedCount: ArchivedCountResult = store.getArchivedCount
+
+    override def archivePlant(id: PlantId): ArchivePlantResult = operationMutex.exclusively:
+      store.archivePlant(id)
+
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)
+
+    override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
+      store.getOperationDateRange(plantId)
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] = store.getSubstrateComponents
 
@@ -57,17 +69,22 @@ object PlantJournal:
       store.editPesticide(id, data)
 
     override def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
-      val operation = Operation(OperationId(idGen.nextId()), plantId, date, op)
-      validateOperationDetails(op) match
-        case Left(reason) => LogOperationResult.LoggingFailed(reason)
-        case Right(_)     =>
-          store.addOperation(operation) match
-            case res: LogOperationResult.Logged =>
-              updatePlantIfOperationIsLatestRepot(operation)
-                .compensateWith(store.removeOperation(operation.id))
-                .leftMap(LogOperationResult.LoggingFailed.apply)
-                .fold(identity, _ => res)
-            case failure => failure
+      store.getPlant(plantId) match
+        case GetPlantResult.RecordMissing                                                => LogOperationResult.PlantMissing
+        case GetPlantResult.ReadFailed(reason)                                           => LogOperationResult.LoggingFailed(reason)
+        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => LogOperationResult.PlantArchived
+        case GetPlantResult.Read(_)                                                      =>
+          val operation = Operation(OperationId(idGen.nextId()), plantId, date, op)
+          validateOperationDetails(op) match
+            case Left(reason) => LogOperationResult.LoggingFailed(reason)
+            case Right(_)     =>
+              store.addOperation(operation) match
+                case res: LogOperationResult.Logged =>
+                  updatePlantIfOperationIsLatestRepot(operation)
+                    .compensateWith(store.removeOperation(operation.id))
+                    .leftMap(LogOperationResult.LoggingFailed.apply)
+                    .fold(identity, _ => res)
+                case failure => failure
 
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = operationMutex.exclusively:
       store.getOperation(id) match

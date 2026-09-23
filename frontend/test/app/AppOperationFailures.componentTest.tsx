@@ -2,6 +2,13 @@ import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import { instant, operationId } from "../../src/domain/Journal";
+import type {
+  GetPlantsResult,
+  GetOperationsResult,
+  OperationWindow,
+  PlantId,
+  PlantStatus,
+} from "../../src/domain/Journal";
 import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
 
 const unavailableFicusAttentionResult = {
@@ -47,6 +54,31 @@ Vitest.describe("operation failures", () => {
     });
   });
 
+  Vitest.it(
+    "should reject a new operation when its plant was archived while the form was open",
+    async () => {
+      const journal = buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [operationsPage()] },
+        logOperationResult: { kind: "plantArchived" },
+      });
+      Testing.render(() => <App journal={journal} />);
+      await Testing.screen.findByRole("button", { name: "Log operation for Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "This plant is archived; new operations cannot be added.",
+      );
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+      ).toBeInTheDocument();
+    },
+  );
+
   Vitest.it("should report an unexpectedly rejected write", async () => {
     const journal = {
       ...buildJournal({
@@ -91,6 +123,66 @@ Vitest.describe("operation failures", () => {
     Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
     Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  Vitest.it(
+    "should ignore obsolete garden list and operation responses during cemetery browsing",
+    async () => {
+      let finishPlants: (result: GetPlantsResult) => void = () => undefined;
+      const pendingPlants = new Promise<GetPlantsResult>((resolve) => {
+        finishPlants = resolve;
+      });
+      let finishOperations: (result: GetOperationsResult) => void = () => undefined;
+      const pendingOperations = new Promise<GetOperationsResult>((resolve) => {
+        finishOperations = resolve;
+      });
+      const base = buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [operationsPage()] },
+      });
+      let gardenReads = 0;
+      let operationReads = 0;
+      const journal = {
+        ...base,
+        getPlants: (status?: PlantStatus) =>
+          status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [] })
+            : gardenReads++ === 1
+              ? pendingPlants
+              : base.getPlants(),
+        getOperations: (id: PlantId, window: OperationWindow) =>
+          operationReads++ === 1 ? pendingOperations : base.getOperations(id, window),
+        logOperation: () => Promise.resolve({ kind: "logged" as const, id: operationId("new") }),
+      };
+      Testing.render(() => <App journal={journal} />);
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(gardenReads).toBe(2);
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      finishPlants({ kind: "read", plants: [ficus()] });
+      await pendingPlants;
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Garden.*1 plant/ }));
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(operationReads).toBe(2);
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      finishOperations(operationsPage());
+      await pendingOperations;
+      await Promise.resolve();
+
+      Vitest.expect(Testing.screen.getByRole("region", { name: "Cemetery" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
 
   Vitest.it("should not close a new form when an earlier save completes", async () => {
     const startViewTransition = Vitest.vi.fn();

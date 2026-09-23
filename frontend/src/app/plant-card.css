@@ -5,6 +5,10 @@
   grid-template-columns: var(--plant-card-columns);
 }
 
+.plant-card--archived {
+  --plant-card-columns: 5.25rem minmax(13rem, 1.3fr) minmax(0, 3fr);
+}
+
 .plant-card__row {
   display: grid;
   grid-column: 1 / -1;
@@ -35,6 +39,39 @@
   padding: 0.6rem 0.35rem;
   border-right: 1px solid var(--line);
   color: var(--muted);
+}
+
+.recorded-life {
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.2rem;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.recorded-life__stone {
+  display: grid;
+  width: 2.5rem;
+  height: 2.7rem;
+  place-items: center;
+  border-radius: 1.2rem 1.2rem 0.2rem 0.2rem;
+  background: #d7d7d0;
+  color: var(--ink);
+  font-family: Georgia, serif;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.recorded-life__dates {
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  font-size: 0.63rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .watering-attention__icon {
@@ -111,6 +148,28 @@
   overflow-wrap: anywhere;
 }
 
+.plant-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.3rem;
+}
+
+.archive-plant {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.archive-plant:hover {
+  background: #fae9e5;
+}
+
 .plant-card h2 {
   margin-bottom: 0.05rem;
   font-size: 1.45rem;
@@ -166,6 +225,10 @@
 @media (max-width: 46rem) {
   .plant-card {
     --plant-card-columns: 4.5rem minmax(0, 1fr) 3rem;
+  }
+
+  .plant-card--archived {
+    --plant-card-columns: 4.5rem minmax(0, 1fr);
   }
 
   .plant-summary {

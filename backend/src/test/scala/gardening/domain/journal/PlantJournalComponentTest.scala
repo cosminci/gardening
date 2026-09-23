@@ -72,6 +72,21 @@ class PlantJournalComponentTest extends munit.FunSuite:
       GetOperationsResult.ReadFailed(readFailure)
     )
 
+  test("should read the recorded date range independently of operation pages"):
+    val recorded = OperationDateRange.Recorded(date, date.plusSeconds(60))
+    val failure  = RuntimeException("date read failed")
+    val refs     = Refs(operationDateRangeResult = GetOperationDateRangeResult.Read(recorded))
+    val empty    = Refs(operationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty))
+    val missing  = Refs(operationDateRangeResult = GetOperationDateRangeResult.PlantMissing)
+    val failed   = Refs(operationDateRangeResult = GetOperationDateRangeResult.ReadFailed(failure))
+
+    assertEquals(buildJournal(refs).getOperationDateRange(plant.id), GetOperationDateRangeResult.Read(recorded))
+    assertEquals(refs.requestedDateRanges.get(), Vector(plant.id))
+    assertEquals(refs.requestedOperationWindows.get(), Vector.empty)
+    assertEquals(buildJournal(empty).getOperationDateRange(plant.id), GetOperationDateRangeResult.Read(OperationDateRange.Empty))
+    assertEquals(buildJournal(missing).getOperationDateRange(plant.id), GetOperationDateRangeResult.PlantMissing)
+    assertEquals(buildJournal(failed).getOperationDateRange(plant.id), GetOperationDateRangeResult.ReadFailed(failure))
+
   test("should return current plants by status and surface read failures"):
     val failure       = RuntimeException("plant read failed")
     val refs          = Refs(getPlantsResult = GetPlantsResult.Read(Vector(plant)))
@@ -85,6 +100,28 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(activeResult, GetPlantsResult.Read(Vector(plant)))
     assertEquals(refs.requestedStatuses.get(), Vector(PlantStatus.Active))
     assertEquals(archivedResult, GetPlantsResult.ReadFailed(failure))
+
+  test("should read the archived count independently of plant lists"):
+    val failure    = RuntimeException("count unavailable")
+    val refs       = Refs(archivedCountResult = ArchivedCountResult.Counted(4))
+    val failedRefs = Refs(archivedCountResult = ArchivedCountResult.ReadFailed(failure))
+
+    assertEquals(buildJournal(refs).getArchivedCount, ArchivedCountResult.Counted(4))
+    assertEquals(refs.requestedStatuses.get(), Vector.empty)
+    assertEquals(buildJournal(failedRefs).getArchivedCount, ArchivedCountResult.ReadFailed(failure))
+
+  test("should archive an active plant exactly once and preserve distinct failure results"):
+    val failure  = RuntimeException("write unavailable")
+    val active   = Refs()
+    val missing  = Refs(archivePlantResult = ArchivePlantResult.PlantMissing)
+    val archived = Refs(archivePlantResult = ArchivePlantResult.AlreadyArchived)
+    val failed   = Refs(archivePlantResult = ArchivePlantResult.ArchiveFailed(failure))
+
+    assertEquals(buildJournal(active).archivePlant(plant.id), ArchivePlantResult.Archived)
+    assertEquals(active.archivedPlants.get(), Vector(plant.id))
+    assertEquals(buildJournal(missing).archivePlant(plant.id), ArchivePlantResult.PlantMissing)
+    assertEquals(buildJournal(archived).archivePlant(plant.id), ArchivePlantResult.AlreadyArchived)
+    assertEquals(buildJournal(failed).archivePlant(plant.id), ArchivePlantResult.ArchiveFailed(failure))
 
   test("should assign catalog identifiers and delegate nomenclature operations"):
     val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
@@ -162,6 +199,49 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(refs.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), selectedDate, care)))
     assertEquals(refs.updatedPlants.get(), Vector.empty)
 
+  test("should reject new care and repot for an archived plant without recording history"):
+    val archivedPlant = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
+    val refs          = Refs(getPlantResult = GetPlantResult.Read(archivedPlant))
+    val journal       = buildJournal(refs)
+
+    assertEquals(journal.logOperation(plant.id, date, care), LogOperationResult.PlantArchived)
+    assertEquals(journal.logOperation(plant.id, date, repot), LogOperationResult.PlantArchived)
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
+    assertEquals(refs.updatedPlants.get(), Vector.empty)
+
+  test("should preserve missing and unreadable plant failures when logging"):
+    val readFailure = RuntimeException("plant unavailable")
+    val missing     = Refs(getPlantResult = GetPlantResult.RecordMissing)
+    val unreadable  = Refs(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+
+    assertEquals(buildJournal(missing).logOperation(plant.id, date, care), LogOperationResult.PlantMissing)
+    assertEquals(buildJournal(unreadable).logOperation(plant.id, date, care), LogOperationResult.LoggingFailed(readFailure))
+    assertEquals(missing.recordedOperations.get(), Vector.empty)
+    assertEquals(unreadable.recordedOperations.get(), Vector.empty)
+
+  test("should serialize an archive after an in-flight operation log"):
+    val entered = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val refs    = Refs(nextId = () =>
+      entered.countDown()
+      release.await()
+      "id-1")
+    val journal       = buildJournal(refs)
+    val logResult     = AtomicReference[LogOperationResult]()
+    val archiveResult = AtomicReference[ArchivePlantResult]()
+
+    val logging = Thread.ofVirtual().start: () =>
+      logResult.set(journal.logOperation(plant.id, date, care))
+    assert(entered.await(1000, MILLISECONDS))
+    val archiving = Thread.ofVirtual().start: () =>
+      archiveResult.set(journal.archivePlant(plant.id))
+    release.countDown()
+    logging.join()
+    archiving.join()
+
+    assertEquals(logResult.get(), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(archiveResult.get(), ArchivePlantResult.Archived)
+
   test("should update a plant after recording the latest repot"):
     val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
     val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
@@ -236,8 +316,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val readFailure       = RuntimeException("read failed")
     val updateFailure     = RuntimeException("update failed")
     val unreadableHistory = Refs(getOperationsResult = GetOperationsResult.ReadFailed(historyFailure))
-    val missingPlant      = Refs(getPlantResult = GetPlantResult.RecordMissing)
-    val unreadable        = Refs(getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val missingPlant      = Refs(getPlantResultAfterLog = GetPlantResult.RecordMissing.some)
+    val unreadable        = Refs(getPlantResultAfterLog = GetPlantResult.ReadFailed(readFailure).some)
     val notUpdated        = Refs(updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure))
 
     assertEquals(
@@ -296,6 +376,22 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
     assertEquals(buildJournal(refs).editOperation(existingRepot.id, amended), editResult)
     assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
+
+  test("should allow editing an archived repot without changing its archived status"):
+    val archivedPlant    = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
+    val existing         = Operation(OperationId("o2"), plant.id, date, repot)
+    val amendedSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amended          = OperationDetails.Repot(amendedSubstrate, maybeNote = none)
+    val updated          = existing.copy(details = amended)
+    val refs             = Refs(
+      getPlantResult = GetPlantResult.Read(archivedPlant),
+      getOperationResult = GetOperationResult.Read(existing),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existing), hasNextPage = false)),
+      updateOperationResult = EditOperationResult.Edited(updated)
+    )
+
+    assertEquals(buildJournal(refs).editOperation(existing.id, amended), EditOperationResult.Edited(updated))
+    assertEquals(refs.updatedPlants.get(), Vector(archivedPlant.copy(details = archivedPlant.details.copy(substrate = amendedSubstrate))))
 
   test("should update the plant after amending its latest repot despite newer care operations"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
@@ -426,8 +522,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   final private case class Refs(
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
+      archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
+      archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
+      getPlantResultAfterLog: Option[GetPlantResult] = none,
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
+      operationDateRangeResult: GetOperationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty),
       nextOperationsResult: Option[GetOperationsResult] = none,
       getOperationResult: GetOperationResult = GetOperationResult.Read(operation),
       addOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("id-1")),
@@ -444,8 +544,11 @@ class PlantJournalComponentTest extends munit.FunSuite:
       nextId: () => String = () => "id-1"
   ):
     val operationReads: AtomicInteger                                                             = AtomicInteger(0)
+    val plantReads: AtomicInteger                                                                 = AtomicInteger(0)
     val requestedStatuses: AtomicReference[Vector[PlantStatus]]                                   = AtomicReference(Vector.empty)
+    val archivedPlants: AtomicReference[Vector[PlantId]]                                          = AtomicReference(Vector.empty)
     val requestedOperationWindows: AtomicReference[Vector[(PlantId, OperationWindow)]]            = AtomicReference(Vector.empty)
+    val requestedDateRanges: AtomicReference[Vector[PlantId]]                                     = AtomicReference(Vector.empty)
     val recordedOperations: AtomicReference[Vector[Operation]]                                    = new AtomicReference(Vector.empty)
     val updatedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]]               = new AtomicReference(Vector.empty)
     val removedOperations: AtomicReference[Vector[OperationId]]                                   = new AtomicReference(Vector.empty)
@@ -461,11 +564,18 @@ class PlantJournalComponentTest extends munit.FunSuite:
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         refs.getPlantsResult
-      override def getPlant(id: PlantId): GetPlantResult                                         = refs.getPlantResult
+      override def getArchivedCount: ArchivedCountResult         = refs.archivedCountResult
+      override def archivePlant(id: PlantId): ArchivePlantResult =
+        refs.archivedPlants.updateAndGet(_ :+ id).pipe(_ => refs.archivePlantResult)
+      override def getPlant(id: PlantId): GetPlantResult =
+        if refs.plantReads.getAndIncrement().equals(0) then refs.getPlantResult
+        else refs.getPlantResultAfterLog.getOrElse(refs.getPlantResult)
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedOperationWindows.updateAndGet(_ :+ (plantId -> window))
         if refs.operationReads.getAndIncrement().equals(0) then refs.getOperationsResult
         else refs.nextOperationsResult.getOrElse(refs.getOperationsResult)
+      override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
+        refs.requestedDateRanges.updateAndGet(_ :+ plantId).pipe(_ => refs.operationDateRangeResult)
       override def getOperation(id: OperationId): GetOperationResult      = refs.getOperationResult
       override def addOperation(operation: Operation): LogOperationResult =
         refs.recordedOperations.updateAndGet(_ :+ operation).pipe(_ => refs.addOperationResult)

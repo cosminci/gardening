@@ -22,6 +22,276 @@ const unavailableFicusAttentionResult: Journal.GetAttentionResult = {
 };
 
 Vitest.describe("changing the journal", () => {
+  Vitest.it(
+    "should confirm permanent archive before moving a plant without guessing counts",
+    async () => {
+      const activePlant = JournalFixtures.ficus();
+      const archivedPlant = {
+        ...activePlant,
+        details: { ...activePlant.details, status: "archived" as const },
+      };
+      const recordedOperation = JournalFixtures.care({
+        id: "recorded",
+        date: "2026-03-03T08:00:00Z",
+        moisture: "dry",
+      });
+      const base = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getPlantsResults: [
+          { kind: "read", plants: [activePlant] },
+          { kind: "read", plants: [] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage([recordedOperation])],
+        },
+      });
+      const statuses: (Journal.PlantStatus | undefined)[] = [];
+      let countReads = 0;
+      const archivePlant = Vitest.vi.fn(() => Promise.resolve({ kind: "archived" as const }));
+      const journal = {
+        ...base,
+        getPlants: (status?: Journal.PlantStatus) => {
+          statuses.push(status);
+          return status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [archivedPlant] })
+            : base.getPlants(status);
+        },
+        getOperationDates: () =>
+          Promise.resolve({
+            kind: "read" as const,
+            dates: {
+              kind: "recorded" as const,
+              first: recordedOperation.date,
+              last: recordedOperation.date,
+            },
+          }),
+        getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: countReads++ }),
+        archivePlant,
+      };
+      Testing.render(() => <App journal={journal} />);
+      const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
+      archiveControl.focus();
+
+      Testing.fireEvent.click(archiveControl);
+      const warning = Testing.screen.getByRole("alertdialog");
+      Vitest.expect(warning).toHaveTextContent("cannot be undone");
+      Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
+      Vitest.expect(archivePlant).not.toHaveBeenCalled();
+      Vitest.expect(archiveControl).toHaveFocus();
+      Testing.fireEvent.click(archiveControl);
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("button", { name: /Garden.*0 plants/ }),
+        ).toHaveFocus();
+      });
+      Vitest.expect(
+        Testing.screen.getByRole("button", { name: /Cemetery.*1 plant/ }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("article", { name: "Fern" })).toBeNull();
+      Vitest.expect(statuses).toEqual([undefined, undefined]);
+      Vitest.expect(countReads).toBe(2);
+      Vitest.expect(archivePlant).toHaveBeenCalledWith(JournalFixtures.ficus().id);
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
+      const cemeteryCard = await Testing.screen.findByRole("article", { name: "Fern" });
+      Vitest.expect(Testing.within(cemeteryCard).getAllByText("03.03.2026")).toHaveLength(2);
+      Vitest.expect(
+        Testing.within(cemeteryCard).getByRole("button", { name: /Edit recent care operation/ }),
+      ).toBeInTheDocument();
+      Vitest.expect(statuses).toEqual([undefined, undefined, "archived"]);
+    },
+  );
+
+  Vitest.it(
+    "should focus the garden toggle when archiving the first of several plants",
+    async () => {
+      const ficusPlant = JournalFixtures.ficus();
+      const monsteraPlant = JournalFixtures.monstera();
+      const attention = {
+        kind: "read" as const,
+        projection: {
+          measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+          plants: [ficusPlant, monsteraPlant].map((plant) => ({
+            plantId: plant.id,
+            watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+          })),
+        },
+      };
+      const base = JournalFixtures.buildJournal({
+        getAttentionResults: [
+          attention,
+          attention,
+          {
+            ...attention,
+            projection: {
+              ...attention.projection,
+              plants: attention.projection.plants.filter(
+                (sample) => sample.plantId === monsteraPlant.id,
+              ),
+            },
+          },
+        ],
+        getPlantsResults: [
+          { kind: "read", plants: [ficusPlant, monsteraPlant] },
+          { kind: "read", plants: [monsteraPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage()],
+          p2: [JournalFixtures.operationsPage()],
+        },
+      });
+      const journal = {
+        ...base,
+        getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+        archivePlant: () => Promise.resolve({ kind: "archived" as const }),
+        logOperation: () =>
+          Promise.resolve({ kind: "logged" as const, id: Journal.operationId("recorded") }),
+      };
+      Testing.render(() => <App journal={journal} />);
+      const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
+      archiveControl.focus();
+
+      Testing.fireEvent.click(archiveControl);
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("button", { name: /Garden.*1 plant/ }),
+        ).toHaveFocus();
+      });
+      Vitest.expect(
+        Testing.screen.getByRole("button", { name: "Archive Monstera deliciosa" }),
+      ).not.toHaveFocus();
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Monstera deliciosa" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("article", { name: "Monstera deliciosa" }),
+        ).toBeInTheDocument();
+        Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+      });
+    },
+  );
+
+  Vitest.it("should keep the archive warning open when the plant cannot be archived", async () => {
+    const outcomes = [
+      { kind: "plantMissing" as const },
+      { kind: "alreadyArchived" as const },
+      { kind: "archiveFailed" as const, reason: new Error("private details") },
+      new Error("connection interrupted"),
+    ];
+    for (const outcome of outcomes) {
+      const base = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      });
+      const journal = {
+        ...base,
+        archivePlant: () =>
+          outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome),
+      };
+      const view = Testing.render(() => <App journal={journal} />);
+      await Testing.screen.findByRole("button", { name: "Archive Fern" });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+
+      Vitest.expect(await Testing.screen.findByRole("alert")).toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("article", { name: "Fern" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("alertdialog")).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByText("private details")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  Vitest.it(
+    "should show a failed journal read after a successful archive cannot be refreshed",
+    async () => {
+      const base = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      });
+      let plantReads = 0;
+      const journal = {
+        ...base,
+        getPlants: () =>
+          plantReads++ === 0 ? base.getPlants() : Promise.reject(new Error("offline")),
+        archivePlant: () => Promise.resolve({ kind: "archived" as const }),
+      };
+      Testing.render(() => <App journal={journal} />);
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "The journal could not be loaded.",
+      );
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    },
+  );
+
+  Vitest.it("should edit existing cemetery history without offering new operations", async () => {
+    const archivedPlant = {
+      ...JournalFixtures.ficus(),
+      details: { ...JournalFixtures.ficus().details, status: "archived" as const },
+    };
+    const recordedOperation = JournalFixtures.care({
+      id: "recorded",
+      date: "2026-03-03T08:00:00Z",
+      moisture: "dry",
+    });
+    const editedOperation = {
+      ...recordedOperation,
+      details: { ...recordedOperation.details, maybeNote: Journal.note("Recovered") },
+    };
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        getPlantsResults: [
+          { kind: "read", plants: [] },
+          { kind: "read", plants: [archivedPlant] },
+          { kind: "read", plants: [archivedPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [
+            JournalFixtures.operationsPage([recordedOperation]),
+            JournalFixtures.operationsPage([editedOperation]),
+          ],
+        },
+        editOperationResult: { kind: "edited", operation: editedOperation },
+      }),
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+      getOperationDates: () =>
+        Promise.resolve({
+          kind: "read" as const,
+          dates: {
+            kind: "recorded" as const,
+            first: recordedOperation.date,
+            last: recordedOperation.date,
+          },
+        }),
+    };
+    Testing.render(() => <App journal={journal} />);
+    Testing.fireEvent.click(
+      await Testing.screen.findByRole("button", { name: /Cemetery.*1 plant/ }),
+    );
+    const card = await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(
+      Testing.within(card).getByRole("button", { name: /Edit recent care operation/ }),
+    );
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Notes" }), {
+      target: { value: "Recovered" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+    Vitest.expect(await Testing.within(card).findByText("Recovered")).toBeInTheDocument();
+    Vitest.expect(Testing.within(card).queryByRole("button", { name: /Log operation/ })).toBeNull();
+  });
+
   Vitest.it("should log care and refresh the plant's operation history", async () => {
     const startViewTransition = Vitest.vi.fn((update: () => void) => {
       update();
@@ -240,8 +510,8 @@ Vitest.describe("changing the journal", () => {
     const { container } = Testing.render(() => <App journal={journal} />);
     const current = Testing.within(container);
     await current.findByRole("article", { name: "Fern" });
-    const header = current.getByRole("heading", { name: "Plant journal" }).closest("header");
-    const journalRows = current.getByRole("region", { name: "Plant journal" });
+    const header = current.getByRole("heading", { name: "Plant Journal" }).closest("header");
+    const journalRows = current.getByRole("region", { name: "Garden" });
 
     const trigger = current.getByRole("button", { name: "Log operation for Fern" });
     trigger.focus();

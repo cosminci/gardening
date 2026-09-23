@@ -2,24 +2,37 @@ import { For, Show } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
-import { formatSubstrate, plantDisplayName } from "./JournalLabels";
+import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLabels";
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
 import "./plant-card.css";
 import "./plant-history.css";
 
-interface PlantCardProps {
-  readonly attention: Journal.PlantAttention;
-  readonly measuredAt: Journal.Instant;
+interface PlantCardBaseProps {
   readonly operationPage: Journal.OperationPage;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
   readonly operationChange: OperationHistoryChange | undefined;
-  readonly onLog: () => void;
   readonly onEdit: (operation: Journal.Operation) => void;
 }
+
+type PlantCardProps = PlantCardBaseProps &
+  (
+    | {
+        readonly kind?: "garden";
+        readonly attention: Journal.PlantAttention;
+        readonly measuredAt: Journal.Instant;
+        readonly onLog: () => void;
+        readonly onArchive: () => void;
+      }
+    | {
+        readonly kind: "cemetery";
+        readonly plant: Journal.Plant;
+        readonly dates: Journal.OperationDates;
+      }
+  );
 
 interface WateringPresentation {
   readonly label: string;
@@ -142,19 +155,40 @@ const WateringStatus: Component<{
 };
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
-  const plant = () => props.attention.plant;
+  const plant = () => (props.kind === "cemetery" ? props.plant : props.attention.plant);
   const name = () => plantDisplayName(plant());
   const recentOperations = () => [...props.operationPage.operations].reverse();
 
   return (
-    <article class="plant-card" aria-label={name()}>
+    <article
+      class="plant-card"
+      classList={{ "plant-card--archived": props.kind === "cemetery" }}
+      aria-label={name()}
+    >
       <div class="plant-card__row">
-        <WateringStatus
-          watering={props.attention.watering}
-          measuredAt={props.measuredAt}
-          plantName={name()}
-          plantId={plant().id}
-        />
+        {props.kind === "cemetery" ? (
+          <aside class="recorded-life" aria-label={`Recorded care dates for ${name()}`}>
+            <span class="recorded-life__stone" aria-hidden="true">
+              RIP
+            </span>
+            {props.dates.kind === "recorded" ? (
+              <span class="recorded-life__dates">
+                <time dateTime={props.dates.first}>{formatLocalDate(props.dates.first)}</time>
+                <span aria-hidden="true">–</span>
+                <time dateTime={props.dates.last}>{formatLocalDate(props.dates.last)}</time>
+              </span>
+            ) : (
+              <span class="recorded-life__dates">Dates unknown</span>
+            )}
+          </aside>
+        ) : (
+          <WateringStatus
+            watering={props.attention.watering}
+            measuredAt={props.measuredAt}
+            plantName={name()}
+            plantId={plant().id}
+          />
+        )}
         <div class="plant-summary">
           <header class="plant-card__header">
             <div>
@@ -162,6 +196,20 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{plant().details.species}</p>
             </div>
+            {props.kind !== "cemetery" && (
+              <button
+                id={`archive-plant-${plant().id}`}
+                class="archive-plant"
+                type="button"
+                aria-label={`Archive ${name()}`}
+                title={`Archive ${name()}`}
+                onClick={() => {
+                  props.onArchive();
+                }}
+              >
+                Archive
+              </button>
+            )}
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>
@@ -192,18 +240,20 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
             </For>
           </ol>
         </Show>
-        <button
-          id={logOperationControlId(plant().id)}
-          class="add-operation"
-          type="button"
-          aria-label={`Log operation for ${name()}`}
-          title={`Add operation for ${name()}`}
-          onClick={() => {
-            props.onLog();
-          }}
-        >
-          <span aria-hidden="true">+</span>
-        </button>
+        {props.kind !== "cemetery" && (
+          <button
+            id={logOperationControlId(plant().id)}
+            class="add-operation"
+            type="button"
+            aria-label={`Log operation for ${name()}`}
+            title={`Add operation for ${name()}`}
+            onClick={() => {
+              props.onLog();
+            }}
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+        )}
       </div>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory

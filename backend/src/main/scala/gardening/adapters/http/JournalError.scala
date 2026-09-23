@@ -14,6 +14,8 @@ private[http] object JournalError:
   val operationMissing      = ApiError("operation not found")
   val operationTypeMismatch = ApiError("operation type cannot be changed")
   val editFailed            = ApiError("operation could not be edited")
+  val plantMissing          = ApiError("plant not found")
+  val plantArchived         = ApiError("plant already archived")
   val catalogRecordMissing  = ApiError("nomenclature not found")
   val catalogInvalidId      = ApiError("invalid nomenclature id")
   val catalogReadFailed     = ApiError("nomenclatures could not be read")
@@ -23,6 +25,19 @@ private[http] object JournalError:
     oneOf[ApiError](
       oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(operationMissing),
       oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(operationTypeMismatch),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
+
+  val plantRequest =
+    oneOf[ApiError](
+      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
+      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
+
+  val plantRead =
+    oneOf[ApiError](
+      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
       oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
     )
 

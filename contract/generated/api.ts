@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plants/archived/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count archived plants */
+        get: operations["getPlantsArchivedCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plants/{plantId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Permanently archive an active plant */
+        post: operations["postPlantsPlantidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/attention": {
         parameters: {
             query?: never;
@@ -67,6 +101,23 @@ export interface paths {
         put?: never;
         /** Log a plant operation */
         post: operations["postPlantsPlantidOperations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plants/{plantId}/operation-date-range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the first and last recorded operation dates */
+        get: operations["getPlantsPlantidOperation-date-range"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -173,6 +224,11 @@ export interface components {
         ApiError: {
             message: string;
         };
+        /** ArchivedPlantCount */
+        ArchivedPlantCount: {
+            /** Format: int64 */
+            count: number;
+        };
         /** AttentionProjection */
         AttentionProjection: {
             /** Format: date-time */
@@ -190,6 +246,14 @@ export interface components {
              * @enum {string}
              */
             kind: "care";
+        };
+        /** Empty */
+        Empty: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "empty";
         };
         /** HealthResponse */
         HealthResponse: {
@@ -219,6 +283,8 @@ export interface components {
             date: string;
             details: components["schemas"]["OperationDetails"];
         };
+        /** OperationDateRange */
+        OperationDateRange: components["schemas"]["Empty"] | components["schemas"]["Recorded"];
         /** OperationDetails */
         OperationDetails: components["schemas"]["Care"] | components["schemas"]["Repot"];
         /** OperationPage */
@@ -266,6 +332,18 @@ export interface components {
          * @enum {string}
          */
         PlantStatus: "active" | "archived";
+        /** Recorded */
+        Recorded: {
+            /** Format: date-time */
+            first: string;
+            /** Format: date-time */
+            last: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "recorded";
+        };
         /** Repot */
         Repot: {
             substrate: components["schemas"]["SubstratePart"][];
@@ -409,6 +487,76 @@ export interface operations {
             };
         };
     };
+    getPlantsArchivedCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedPlantCount"];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPlantsPlantidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getAttention: {
         parameters: {
             query?: never;
@@ -501,7 +649,60 @@ export interface operations {
                     "text/plain": string;
                 };
             };
-            default: {
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    "getPlantsPlantidOperation-date-range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDateRange"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

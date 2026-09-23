@@ -3,11 +3,21 @@ package gardening.domain.journal
 import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
+import java.time.Instant
 
 type OperationOffset   = Int :| GreaterEqual[0]
 type OperationPageSize = Int :| Interval.Closed[1, 10]
 final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
 final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
+
+enum OperationDateRange:
+  case Empty
+  case Recorded(first: Instant, last: Instant)
+
+enum GetOperationDateRangeResult:
+  case Read(range: OperationDateRange)
+  case PlantMissing
+  case ReadFailed(reason: Throwable)
 
 enum CatalogReadResult[+A]:
   case Read(entries: Vector[A])
@@ -31,6 +41,16 @@ enum GetPlantsResult:
   case Read(plants: Vector[Plant])
   case ReadFailed(reason: Throwable)
 
+enum ArchivedCountResult:
+  case Counted(count: Long)
+  case ReadFailed(reason: Throwable)
+
+enum ArchivePlantResult:
+  case Archived
+  case PlantMissing
+  case AlreadyArchived
+  case ArchiveFailed(reason: Throwable)
+
 enum GetOperationResult:
   case Read(operation: Operation)
   case RecordMissing
@@ -42,6 +62,8 @@ enum GetOperationsResult:
 
 enum LogOperationResult:
   case Logged(id: OperationId)
+  case PlantMissing
+  case PlantArchived
   case LoggingFailed(reason: Throwable)
 
 enum EditOperationResult:
