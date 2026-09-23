@@ -21,15 +21,21 @@ final class SqliteConnection(
   override def close(): Unit =
     maybeKeepAlive.foreach(_.close())
 
+trait Sqlite:
+  def connect(location: SqliteLocation): SqliteConnection
+
 object Sqlite:
 
-  def connect(location: SqliteLocation): SqliteConnection =
-    val dataSource     = new SQLiteDataSource().tap(_.setUrl(urlFor(location)))
-    val transactor     = Transactor(dataSource, connectionConfig = configureConnection)
-    val maybeKeepAlive = location match
-      case _: SqliteLocation.InMemory => dataSource.getConnection().tap(configureConnection).some
-      case _: SqliteLocation.File     => none
-    SqliteConnection(dataSource, transactor, maybeKeepAlive)
+  def make: Sqlite = LiveSqlite()
+
+  final private class LiveSqlite extends Sqlite:
+    override def connect(location: SqliteLocation): SqliteConnection =
+      val dataSource     = new SQLiteDataSource().tap(_.setUrl(urlFor(location)))
+      val transactor     = Transactor(dataSource, connectionConfig = configureConnection)
+      val maybeKeepAlive = location match
+        case _: SqliteLocation.InMemory => dataSource.getConnection().tap(configureConnection).some
+        case _: SqliteLocation.File     => none
+      SqliteConnection(dataSource, transactor, maybeKeepAlive)
 
   private def urlFor(location: SqliteLocation): String =
     location match

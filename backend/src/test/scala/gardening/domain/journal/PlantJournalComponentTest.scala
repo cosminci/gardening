@@ -1,6 +1,7 @@
-package gardening.domain
+package gardening.domain.journal
 
 import cats.syntax.option.*
+import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 
@@ -47,34 +48,23 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   private val repot = OperationDetails.Repot(substrate, maybeNote = Note("repotted").some)
 
-  private val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
-  private val firstPage = OperationWindow(offset = 0, size = 3)
+  private val operation        = Operation(OperationId("o1"), PlantId("p1"), date, care)
+  private val firstPage        = OperationWindow(offset = 0, size = 3)
+  private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
+    .map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
+  private val addedComponent = SubstrateComponent(perliteId, SubstrateComponentData(NomenclatureName("Perlite"), none))
+  private val addedPesticide = Pesticide(
+    PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
+    PesticideData(NomenclatureName("Neem"), PesticideType.Treatment, none)
+  )
 
-  private def operationPage(operations: Operation*) =
-    GetOperationsResult.Read(OperationPage(operations.toVector, hasNextPage = false))
-
-  private def buildJournal(
-      store: PlantJournalStore^,
-      idGen: IdGenerator^ = () => "id-1",
-      clock: Clock^ = () => date
-  ): PlantJournal^ =
-    PlantJournal.make(using store, idGen, clock)
-
-  test("should return plants and operation history while preserving read failures"):
+  test("should return operation history while preserving read failures"):
     val readFailure = RuntimeException("store down")
-    val store       = StoreStub(getOperationsResult = operationPage(operation))
+    val store       = StoreStub(getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false)))
 
-    assertEquals(
-      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.Read(Vector(plant)))).getPlants,
-      GetPlantsResult.Read(Vector(plant))
-    )
-    assertEquals(
-      buildJournal(StoreStub(getPlantsResult = GetPlantsResult.ReadFailed(readFailure))).getPlants,
-      GetPlantsResult.ReadFailed(readFailure)
-    )
     assertEquals(
       buildJournal(store).getOperations(PlantId("p1"), firstPage),
-      operationPage(operation)
+      GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false))
     )
     assertEquals(store.requestedOperationWindows.get(), Vector(PlantId("p1") -> firstPage))
     assertEquals(
@@ -170,7 +160,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
     val logged     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
     val store      = StoreStub(
-      getOperationsResult = operationPage(newerRepot, logged),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, logged), hasNextPage = false)),
       addOperationResult = LogOperationResult.Logged(logged.id)
     )
 
@@ -272,7 +262,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val store         = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = operationPage(existingRepot, tiedRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot, tiedRepot), hasNextPage = false)),
       updateOperationResult = editResult
     )
 
@@ -304,7 +294,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val editResult = EditOperationResult.Edited(olderRepot.copy(details = amended))
     val store      = StoreStub(
       getOperationResult = GetOperationResult.Read(olderRepot),
-      getOperationsResult = operationPage(olderRepot, newerRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(olderRepot, newerRepot), hasNextPage = false)),
       updateOperationResult = editResult
     )
 
@@ -324,13 +314,13 @@ class PlantJournalComponentTest extends munit.FunSuite:
     )
     val unreadablePlant = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = operationPage(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
       getPlantResult = GetPlantResult.ReadFailed(plantFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
     )
     val plantNotUpdated = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = operationPage(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
     )
@@ -356,12 +346,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val cause         = RuntimeException("store down")
     val store         = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = operationPage(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
       updateOperationResult = EditOperationResult.EditFailed(cause)
     )
 
     assertEquals(buildJournal(store).editOperation(existingRepot.id, repot), EditOperationResult.EditFailed(cause))
-    assertEquals(store.updatedPlants.get(), Vector.empty)
+    assertEquals(store.updatedPlants.get(), Vector.empty[Plant])
 
   test("should report both failures when restoring an amended repot also fails"):
     val existingRepot  = Operation(OperationId("o1"), PlantId("p1"), date, repot)
@@ -369,7 +359,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val restoreFailure = RuntimeException("restore failed")
     val store          = StoreStub(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = operationPage(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
       restoreOperationResult = OperationCompensationResult.CompensationFailed(restoreFailure)
@@ -408,8 +398,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   final private case class StoreStub(
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
-      getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
-      getOperationsResult: GetOperationsResult = operationPage(),
+      getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       nextOperationsResult: Option[GetOperationsResult] = none,
       getOperationResult: GetOperationResult = GetOperationResult.Read(operation),
       addOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("id-1")),
@@ -417,25 +406,11 @@ class PlantJournalComponentTest extends munit.FunSuite:
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
-      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(
-        Vector(
-          perliteId,
-          pineBarkId,
-          sand3to5Id,
-          lecaId
-        ).map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
-      ),
-      componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(
-        SubstrateComponent(perliteId, SubstrateComponentData(NomenclatureName("Perlite"), none))
-      ),
+      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(seededComponents),
+      componentAddResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(addedComponent),
       componentEditResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
       pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
-      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(
-        Pesticide(
-          PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
-          PesticideData(NomenclatureName("Neem"), PesticideType.Treatment, none)
-        )
-      ),
+      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(addedPesticide),
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
   ) extends PlantJournalStore:
     private val operationReads                                                                    = AtomicInteger(0)
@@ -451,7 +426,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]                   = new AtomicReference(Vector.empty)
 
     override def getPlant(id: PlantId): GetPlantResult                                         = getPlantResult
-    override def getPlants: GetPlantsResult                                                    = getPlantsResult
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       requestedOperationWindows.updateAndGet(_ :+ (plantId -> window))
       if operationReads.getAndIncrement().equals(0) then getOperationsResult
@@ -477,3 +451,10 @@ class PlantJournalComponentTest extends munit.FunSuite:
       addedPesticides.updateAndGet(_ :+ pesticide).pipe(_ => pesticideAddResult)
     override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
       editedPesticides.updateAndGet(_ :+ (id -> data)).pipe(_ => pesticideEditResult)
+
+  private def buildJournal(
+      store: PlantJournalStore^,
+      idGen: IdGenerator^ = () => "id-1",
+      clock: Clock^ = () => date
+  ) =
+    PlantJournal.make(using store, idGen, clock)

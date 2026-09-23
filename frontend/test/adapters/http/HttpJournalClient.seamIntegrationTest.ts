@@ -4,50 +4,222 @@ import * as Journal from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
-const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
+const plant = (id: string, nickname: string | null = null): Journal.Plant => ({
+  id: Journal.plantId(id),
+  details: {
+    species: Journal.species("Ficus lyrata"),
+    maybeNickname: nickname === null ? null : Journal.nickname(nickname),
+    location: Journal.location("Balcony"),
+    substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    status: "active",
+  },
+});
+const wirePlant = (value: Journal.Plant) => ({
+  id: value.id,
+  details: {
+    species: value.details.species,
+    nickname: value.details.maybeNickname,
+    location: value.details.location,
+    substrate: value.details.substrate.map((part) => ({
+      componentId: part.component,
+      share: part.share,
+    })),
+    status: value.details.status,
+  },
+});
 const expectKind = (result: Promise<unknown>, kind: string) =>
   expect(result).resolves.toMatchObject({ kind });
 const expectResult = (result: Promise<unknown>, expected: object) =>
   expect(result).resolves.toEqual(expected);
 
 describe("HttpJournalClient", () => {
+  it("should translate the attention projection into domain values", async () => {
+    const noSamples = plant("no-samples");
+    const unknown = plant("unknown");
+    const finite = plant("finite", "Fern");
+    const unbounded = plant("unbounded");
+    const current = plant("current");
+    const redAlert = plant("red-alert");
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          jsonResponse({
+            measuredAt: "2026-01-10T00:00:00Z",
+            plants: [
+              {
+                plant: wirePlant(noSamples),
+                watering: { kind: "unavailable", sampleCount: 0, elapsedMillis: null },
+              },
+              {
+                plant: wirePlant(unknown),
+                watering: { kind: "unavailable", sampleCount: 4, elapsedMillis: "86400000" },
+              },
+              {
+                plant: wirePlant(finite),
+                watering: {
+                  kind: "overdue",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "90000000",
+                },
+              },
+              {
+                plant: wirePlant(unbounded),
+                watering: {
+                  kind: "overdue",
+                  sampleCount: 5,
+                  averageIntervalMillis: "0",
+                  elapsedMillis: "1000",
+                },
+              },
+              {
+                plant: wirePlant(current),
+                watering: {
+                  kind: "current",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "43200000",
+                },
+              },
+              {
+                plant: wirePlant(redAlert),
+                watering: {
+                  kind: "redAlert",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "176400000",
+                },
+              },
+            ],
+          }),
+        ],
+        requests,
+      ),
+    );
+
+    await expect(journal.getAttention()).resolves.toEqual({
+      kind: "read",
+      projection: {
+        measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
+        plants: [
+          {
+            plant: noSamples,
+            watering: {
+              kind: "unavailable",
+              sampleCount: 0,
+              maybeElapsed: null,
+            },
+          },
+          {
+            plant: unknown,
+            watering: {
+              kind: "unavailable",
+              sampleCount: 4,
+              maybeElapsed: Journal.milliseconds("86400000"),
+            },
+          },
+          {
+            plant: finite,
+            watering: {
+              kind: "overdue",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("90000000"),
+            },
+          },
+          {
+            plant: unbounded,
+            watering: {
+              kind: "overdue",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("0"),
+              elapsed: Journal.milliseconds("1000"),
+            },
+          },
+          {
+            plant: current,
+            watering: {
+              kind: "current",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("43200000"),
+            },
+          },
+          {
+            plant: redAlert,
+            watering: {
+              kind: "redAlert",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("176400000"),
+            },
+          },
+        ],
+      },
+    });
+    expect(new URL(requests.at(0)?.url ?? "").pathname).toBe("/attention");
+  });
+
+  it("should reject malformed watering-attention measurements", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({
+          measuredAt: "2026-01-10T00:00:00Z",
+          plants: [
+            {
+              plant: wirePlant(plant("p1")),
+              watering: {
+                kind: "overdue",
+                sampleCount: 5,
+                averageIntervalMillis: "86400000",
+                elapsedMillis: "soon",
+              },
+            },
+          ],
+        }),
+      ]),
+    );
+
+    await expect(journal.getAttention()).resolves.toEqual({
+      kind: "readFailed",
+      reason: new RangeError("invalid milliseconds: soon"),
+    });
+  });
+
+  it("should reject an unknown watering-attention classification", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({
+          measuredAt: "2026-01-10T00:00:00Z",
+          plants: [
+            {
+              plant: wirePlant(plant("p1")),
+              watering: {
+                kind: "futureState",
+                sampleCount: 5,
+                averageIntervalMillis: "86400000",
+                elapsedMillis: "90000000",
+              },
+            },
+          ],
+        }),
+      ]),
+    );
+
+    await expect(journal.getAttention()).resolves.toEqual({
+      kind: "readFailed",
+      reason: new Error(
+        'invalid watering attention: {"kind":"futureState","sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"90000000"}',
+      ),
+    });
+  });
+
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const requests: Request[] = [];
     const fetch = respondingWith(
       [
-        jsonResponse([
-          {
-            id: "p1",
-            details: {
-              species: "Ficus lyrata",
-              nickname: "Fern",
-              location: "Balcony",
-              substrate: [
-                {
-                  componentId: perliteId,
-                  share: 100,
-                },
-              ],
-              status: "active",
-            },
-          },
-          {
-            id: "p2",
-            details: {
-              species: "Monstera deliciosa",
-              nickname: null,
-              location: "Kitchen",
-              substrate: [
-                {
-                  componentId: pineBarkId,
-                  share: 40,
-                },
-              ],
-              status: "active",
-            },
-          },
-        ]),
         jsonResponse({
           operations: [
             {
@@ -81,28 +253,6 @@ describe("HttpJournalClient", () => {
       requests,
     );
     const journal = makeHttpJournalClient(fetch);
-    const expectedPlants = [
-      {
-        id: Journal.plantId("p1"),
-        details: {
-          species: "Ficus lyrata",
-          maybeNickname: "Fern",
-          location: "Balcony",
-          substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
-          status: "active",
-        },
-      },
-      {
-        id: Journal.plantId("p2"),
-        details: {
-          species: "Monstera deliciosa",
-          maybeNickname: null,
-          location: "Kitchen",
-          substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(40) }]),
-          status: "active",
-        },
-      },
-    ];
     const expectedPesticides = new Set([pesticide]);
     const expectedOperations = [
       {
@@ -131,14 +281,13 @@ describe("HttpJournalClient", () => {
       },
     ];
 
-    await expect(journal.getPlants()).resolves.toEqual({ kind: "read", plants: expectedPlants });
     await expect(
       journal.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
     ).resolves.toEqual({
       kind: "read",
       page: { operations: expectedOperations, hasNextPage: true },
     });
-    expect(requests[1]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
+    expect(requests[0]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
   it("should translate substrate component and pesticide catalogs", async () => {
@@ -259,18 +408,30 @@ describe("HttpJournalClient", () => {
         "PUT /operations/o1",
       ],
     );
-    await expect(requests[0]!.json()).resolves.toEqual({
-      kind: "care",
-      actions: ["watered"],
-      pesticides: ["00000000-0000-4000-8001-000000000003"],
-      moisture: "wet",
-      notes: null,
-    });
-    await expect(requests[1]!.json()).resolves.toEqual({
-      kind: "repot",
-      substrate: [{ componentId: perliteId, share: 80 }],
-      notes: "Fresh",
-    });
+    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+      {
+        kind: "care",
+        actions: ["watered"],
+        pesticides: ["00000000-0000-4000-8001-000000000003"],
+        moisture: "wet",
+        notes: null,
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+    ]);
   });
 
   it("should send substrate component and pesticide catalog changes", async () => {
@@ -337,18 +498,20 @@ describe("HttpJournalClient", () => {
         `PUT /pesticides/${pesticide}`,
       ],
     );
-    await expect(requests[0]!.json()).resolves.toEqual({ name: "Perlite", info: "Adds drainage" });
-    await expect(requests[1]!.json()).resolves.toEqual({ name: "Perlite fine", info: null });
-    await expect(requests[2]!.json()).resolves.toEqual({
-      name: "Neem oil",
-      type: "insecticide",
-      info: "Dilute first",
-    });
-    await expect(requests[3]!.json()).resolves.toEqual({
-      name: "Neem",
-      type: "insecticide",
-      info: null,
-    });
+    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+      { name: "Perlite", info: "Adds drainage" },
+      { name: "Perlite fine", info: null },
+      {
+        name: "Neem oil",
+        type: "insecticide",
+        info: "Dilute first",
+      },
+      {
+        name: "Neem",
+        type: "insecticide",
+        info: null,
+      },
+    ]);
   });
 
   it("should translate HTTP and network failures into explicit domain failures", async () => {
@@ -361,7 +524,7 @@ describe("HttpJournalClient", () => {
     };
     const httpFailures = makeHttpJournalClient(
       respondingWith([
-        jsonResponse({ message: "journal could not be read" }, 500),
+        jsonResponse({ message: "attention unavailable" }, 503),
         jsonResponse({ message: "journal could not be read" }, 500),
         jsonResponse("invalid body", 400),
         jsonResponse({ message: "operation not found" }, 404),
@@ -384,8 +547,7 @@ describe("HttpJournalClient", () => {
       pesticideType: "insecticide" as const,
       maybeInfo: null,
     };
-
-    await expectKind(httpFailures.getPlants(), "readFailed");
+    await expectKind(httpFailures.getAttention(), "readFailed");
     await expectKind(
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",
@@ -414,8 +576,7 @@ describe("HttpJournalClient", () => {
     );
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
-
-    await expectNetworkFailure(networkFailures.getPlants(), "readFailed");
+    await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
     await expectNetworkFailure(
       networkFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",

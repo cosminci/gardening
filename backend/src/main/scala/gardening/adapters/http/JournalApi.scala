@@ -2,6 +2,8 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
+import gardening.domain.attention.*
+import gardening.domain.journal.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -15,6 +17,7 @@ import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
 import sttp.tapir.server.ServerEndpoint
 import java.time.Instant
+import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
 import scala.deriving.Mirror
 import scala.util.Try
 
@@ -22,9 +25,19 @@ final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object JournalApi:
 
-  private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
-  private val getPlantsEndpoint =
-    journalEndpoint.get.in("plants").out(jsonBody[Vector[Plant]]).summary("List active plants")
+  extension (attention: WateringAttention)
+    // $COVERAGE-OFF$
+    private def kind =
+      attention match
+        case _: WateringAttention.Unavailable => "unavailable"
+        case _: WateringAttention.Current     => "current"
+        case _: WateringAttention.Overdue     => "overdue"
+        case _: WateringAttention.RedAlert    => "redAlert"
+    // $COVERAGE-ON$
+
+  private val journalEndpoint      = endpoint.errorOut(JournalError.generic)
+  private val getAttentionEndpoint =
+    endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
   private val getOperationsEndpoint =
     journalEndpoint.get
@@ -63,7 +76,7 @@ object JournalApi:
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(
-      getPlantsEndpoint,
+      getAttentionEndpoint,
       getOperationsEndpoint,
       logOperationEndpoint,
       editOperationEndpoint,
@@ -75,13 +88,9 @@ object JournalApi:
       editPesticideEndpoint
     )
 
-  def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
-      getPlantsEndpoint.handle: _ =>
-        journal.getPlants match
-          case GetPlantsResult.Read(plants)  => plants.asRight
-          case GetPlantsResult.ReadFailed(_) =>
-            (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
+      getAttentionEndpoint.handleSuccess(_ => attention.current),
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
@@ -204,6 +213,14 @@ object JournalApi:
     Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value")),
     Encoder.encodeInt.contramap(value => value)
   )
+  private given Codec[WateringSampleCount] = Codec.from(
+    Decoder.failedWithMessage("watering attention is output-only"),
+    Encoder.encodeInt.contramap(value => value)
+  )
+  private given Codec[FiniteDuration] = Codec.from(
+    Decoder.failedWithMessage("watering duration is output-only"),
+    Encoder.encodeString.contramap(_.toMillis.toString)
+  )
   private type JournalEnum = ActionType | MoistureLevel | PesticideType | PlantStatus
   private inline given [A <: JournalEnum](using Mirror.SumOf[A]): Codec[A] = ConfiguredEnumCodec.derived
   private given Encoder[Set[ActionType]]                                   = Encoder.encodeList[ActionType].contramap(_.toList.sortBy(_.toString))
@@ -212,7 +229,12 @@ object JournalApi:
     Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).left.map(_.toString)),
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
-  private given Codec.AsObject[OperationDetails] = ConfiguredCodec.derived
+  private given Codec.AsObject[OperationDetails]    = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantDetails]        = ConfiguredCodec.derived
+  private given Codec.AsObject[Plant]               = ConfiguredCodec.derived
+  private given Codec.AsObject[WateringAttention]   = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
+  private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
 
   private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo
   private given [A <: WireText]: Schema[A] = Schema.string
@@ -227,7 +249,29 @@ object JournalApi:
   private given Schema[Percentage] = Schema.schemaForInt
     .validate(Validator.min(1).and(Validator.max(100)))
     .map(_.refineOption[Interval.Closed[1, 100]])(value => value)
-  private given Schema[Substrate] = summon[Schema[List[SubstratePart]]]
+  private given Schema[WateringSampleCount] = Schema.schemaForInt
+    .validate(Validator.min(0).and(Validator.max(20)))
+    .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
+  private given Schema[FiniteDuration] = Schema.schemaForString
+    .map(value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption)(_.toMillis.toString)
+  private given Schema[WateringAttention.Current]     = Schema.derived[WateringAttention.Current].name(Schema.SName("WateringCurrent"))
+  private given Schema[WateringAttention.Overdue]     = Schema.derived[WateringAttention.Overdue].name(Schema.SName("WateringOverdue"))
+  private given Schema[WateringAttention.RedAlert]    = Schema.derived[WateringAttention.RedAlert].name(Schema.SName("WateringRedAlert"))
+  private given Schema[WateringAttention.Unavailable] = Schema
+    .derived[WateringAttention.Unavailable]
+    .name(Schema.SName("WateringUnavailable"))
+    .modify(_.maybeElapsed)(_.copy(isOptional = false).nullable)
+  private given Schema[WateringAttention] = Schema
+    .oneOfUsingField[WateringAttention, String](_.kind, identity)(
+      "unavailable" -> summon[Schema[WateringAttention.Unavailable]],
+      "current"     -> summon[Schema[WateringAttention.Current]],
+      "overdue"     -> summon[Schema[WateringAttention.Overdue]],
+      "redAlert"    -> summon[Schema[WateringAttention.RedAlert]]
+    )
+    .name(Schema.SName("WateringAttention"))
+  private given Schema[PlantAttention]      = Schema.derived
+  private given Schema[AttentionProjection] = Schema.derived[AttentionProjection].modify(_.plants)(_.copy(isOptional = false))
+  private given Schema[Substrate]           = summon[Schema[List[SubstratePart]]]
     .validate(Validator.minSize(1))
     .map(parts => Substrate.of(parts).toOption)(_.parts)
   // $COVERAGE-ON$
@@ -261,11 +305,14 @@ object JournalApi:
 
   private def encodedFieldName(name: String) =
     name match
-      case "maybeNickname" => "nickname"
-      case "maybeNote"     => "notes"
-      case "maybeInfo"     => "info"
-      case "pesticideType" => "type"
-      case _               => name
+      case "maybeNickname"   => "nickname"
+      case "maybeNote"       => "notes"
+      case "maybeInfo"       => "info"
+      case "maybeElapsed"    => "elapsedMillis"
+      case "averageInterval" => "averageIntervalMillis"
+      case "elapsed"         => "elapsedMillis"
+      case "pesticideType"   => "type"
+      case _                 => name
 
   private def lowerCamel(name: String) =
     name.substring(0, 1).toLowerCase + name.substring(1)

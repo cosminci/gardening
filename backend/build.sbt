@@ -14,6 +14,7 @@ val catsV     = "2.13.0"
 val circeV    = "0.14.16"
 val monocleV  = "3.3.0"
 val slf4jV    = "2.0.18"
+val oxV       = "1.0.2"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
@@ -47,13 +48,16 @@ lazy val root = (project in file("."))
       Wart.IsInstanceOf,
       Wart.OptionPartial,
       Wart.TryPartial,
-      Wart.EitherProjectionPartial
+      Wart.EitherProjectionPartial,
+      Wart.IterableOps,
+      Wart.SeqApply
     ),
     coverageFailOnMinimum      := true,
     coverageMinimumStmtTotal   := 100,
     coverageMinimumBranchTotal := 100,
     coverageExcludedPackages := List(
-      "gardening\\.app\\..*" // composition root and build-time OpenAPI writer; exercised by the packaged runtime, not unit tests
+      "gardening\\.app\\..*", // composition root; exercised by the packaged runtime, not unit tests
+      "gardening\\.adapters\\.http\\.OpenApiDocs" // build-time OpenAPI projection
     ).mkString(";"),
     Test / fork := true,
     // tapir pulls Netty's `netty-all` aggregate, which drags in codecs this app never uses (and
@@ -90,6 +94,7 @@ lazy val root = (project in file("."))
       "io.circe"                      %% "circe-core"                % circeV,
       "io.circe"                      %% "circe-parser"              % circeV,
       "dev.optics"                    %% "monocle-macro"             % monocleV,
+      "com.softwaremill.ox"           %% "core"                      % oxV,
       "org.slf4j"                      % "slf4j-simple"               % slf4jV % Runtime,
       "com.tngtech.archunit"           % "archunit"                 % archUnitV % Test,
       "org.scalameta"                 %% "munit"                   % munitV % Test,

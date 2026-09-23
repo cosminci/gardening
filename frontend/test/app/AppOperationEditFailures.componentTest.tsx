@@ -1,13 +1,27 @@
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
+import { instant } from "../../src/domain/Journal";
 import { buildJournal, ficus, operationsPage, repot } from "./JournalTestSupport";
+
+const unavailableFicusAttentionResult = {
+  kind: "read" as const,
+  projection: {
+    measuredAt: instant("2026-01-01T00:00:00Z"),
+    plants: [
+      {
+        plant: ficus(),
+        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+      },
+    ],
+  },
+};
 
 describe("operation edit failures", () => {
   it("should report when an operation no longer exists", async () => {
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationMissing" },
     });
@@ -25,7 +39,7 @@ describe("operation edit failures", () => {
   it("should report an attempt to change an operation type", async () => {
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationTypeMismatch" },
     });
@@ -46,7 +60,7 @@ describe("operation edit failures", () => {
     const reason = new Error("private details");
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "editFailed", reason },
     });

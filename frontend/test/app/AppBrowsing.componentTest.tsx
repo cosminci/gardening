@@ -1,9 +1,34 @@
 import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
-import { nomenclatureName, pesticideId } from "../../src/domain/Journal";
-import type { OperationWindow, PlantId } from "../../src/domain/Journal";
+import {
+  instant,
+  milliseconds,
+  nickname,
+  nomenclatureName,
+  pesticideId,
+  plantId,
+} from "../../src/domain/Journal";
+import type {
+  GetAttentionResult,
+  OperationWindow,
+  PlantAttention,
+  PlantId,
+} from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
+
+const unavailableFicusAttentionResult: GetAttentionResult = {
+  kind: "read",
+  projection: {
+    measuredAt: instant("2026-01-01T00:00:00Z"),
+    plants: [
+      {
+        plant: JournalFixtures.ficus(),
+        watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+      },
+    ],
+  },
+};
 
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
@@ -18,17 +43,13 @@ describe("browsing the journal", () => {
       actions,
       pesticides,
     });
-    const operations = [
-      treated,
-      JournalFixtures.care({
-        id: "o2",
-        date: "2026-02-02T00:00:00Z",
-        moisture: "moderatePlus",
-        actions: new Set(),
-      }),
-      JournalFixtures.repot("o3", "2026-03-03T00:00:00Z"),
-      JournalFixtures.care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "dry" }),
-    ];
+    const moderateCare = JournalFixtures.care({
+      id: "o2",
+      date: "2026-02-02T00:00:00Z",
+      moisture: "moderatePlus",
+      actions: new Set(),
+    });
+    const repot = JournalFixtures.repot("o3", "2026-03-03T00:00:00Z");
     const pesticideCatalog = [
       {
         id: neemId,
@@ -43,15 +64,30 @@ describe("browsing the journal", () => {
       plantId: PlantId;
       window: OperationWindow;
     }[] = [];
-    const journal = JournalFixtures.buildJournal({
-      getPlantsResult: {
-        kind: "read",
-        plants: [JournalFixtures.monstera(), JournalFixtures.ficus()],
+    const monsteraUnavailableAttention: PlantAttention = {
+      plant: JournalFixtures.monstera(),
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const ficusRedAlertAttention: PlantAttention = {
+      plant: JournalFixtures.ficus(),
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: milliseconds("86400000"),
+        elapsed: milliseconds("176400000"),
       },
+    };
+    const browsingAttentionResult: GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: instant("2026-01-01T00:00:00Z"),
+        plants: [monsteraUnavailableAttention, ficusRedAlertAttention],
+      },
+    };
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [browsingAttentionResult],
       getOperationsByPlantId: {
-        p1: [
-          JournalFixtures.operationsPage([operations[0]!, operations[2]!, operations[1]!], true),
-        ],
+        p1: [JournalFixtures.operationsPage([treated, repot, moderateCare], true)],
         p2: [JournalFixtures.operationsPage()],
       },
       getPesticidesResult: { kind: "read", entries: pesticideCatalog },
@@ -66,20 +102,18 @@ describe("browsing the journal", () => {
     expect(within(card).getAllByText("Perlite 100%")).toHaveLength(2);
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
-    expect(renderedOperations[0]).toHaveTextContent(
+    expect(renderedOperations.map((operation) => operation.textContent)).toEqual([
       "2026-02-02EditCareMoistureModerate +ActionsNone recorded",
-    );
-    expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
-    expect(renderedOperations[2]).toHaveTextContent(
+      "2026-03-03EditRepotSubstratePerlite 100%",
       "2026-04-05EditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
-    );
-    expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
+    ]);
+    expect(within(card).getByText("2026-04-05")).toHaveAttribute(
       "datetime",
       "2026-04-04T22:30:00Z",
     );
     expect(
       screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
-    ).toEqual(["Fern", "Monstera deliciosa"]);
+    ).toEqual(["Monstera deliciosa", "Fern"]);
     expect(operationWindows).toEqual([
       { plantId: "p2", window: { offset: 0, size: 3 } },
       { plantId: "p1", window: { offset: 0, size: 3 } },
@@ -104,9 +138,90 @@ describe("browsing the journal", () => {
     expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
   });
 
+  it("should render backend attention in presentation order", async () => {
+    const unknownPlant = {
+      ...JournalFixtures.ficus(),
+      id: plantId("unknown"),
+      details: {
+        ...JournalFixtures.ficus().details,
+        maybeNickname: nickname("Unknown"),
+      },
+    };
+    const unknownUnavailableAttention: PlantAttention = {
+      plant: unknownPlant,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const urgentPlant = {
+      ...JournalFixtures.ficus(),
+      id: plantId("urgent"),
+      details: {
+        ...JournalFixtures.ficus().details,
+        maybeNickname: nickname("Urgent"),
+      },
+    };
+    const urgentRedAlertAttention: PlantAttention = {
+      plant: urgentPlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: milliseconds("0"),
+        elapsed: milliseconds("1"),
+      },
+    };
+    const recentlyWateredPlant = {
+      ...JournalFixtures.ficus(),
+      id: plantId("current"),
+      details: {
+        ...JournalFixtures.ficus().details,
+        maybeNickname: nickname("Current"),
+      },
+    };
+    const recentlyWateredCurrentAttention: PlantAttention = {
+      plant: recentlyWateredPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: milliseconds("10"),
+        elapsed: milliseconds("1"),
+      },
+    };
+    const browsingAttentionResult: GetAttentionResult = {
+      kind: "read",
+      projection: {
+        measuredAt: instant("2026-01-01T00:00:00Z"),
+        plants: [
+          recentlyWateredCurrentAttention,
+          urgentRedAlertAttention,
+          unknownUnavailableAttention,
+        ],
+      },
+    };
+    const operationWindows: { plantId: PlantId; window: OperationWindow }[] = [];
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [browsingAttentionResult],
+      getOperationsByPlantId: Object.fromEntries(
+        [unknownPlant, urgentPlant, recentlyWateredPlant].map(({ id }) => [
+          id,
+          [JournalFixtures.operationsPage()],
+        ]),
+      ),
+      operationWindows,
+    });
+
+    render(() => <App journal={journal} />);
+
+    const articles = await screen.findAllByRole("article");
+    expect(articles.map((article) => article.getAttribute("aria-label"))).toEqual([
+      "Unknown",
+      "Urgent",
+      "Current",
+    ]);
+    expect(operationWindows.map(({ plantId: id }) => id)).toEqual(["unknown", "urgent", "current"]);
+  });
+
   it("should identify a journal containing one active plant", async () => {
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
@@ -115,10 +230,10 @@ describe("browsing the journal", () => {
     expect(await screen.findByText("active plant")).toBeInTheDocument();
   });
 
-  it("should report a plant read failure without showing its reason", async () => {
+  it("should report an attention read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "readFailed", reason },
+      getAttentionResults: [{ kind: "readFailed", reason }],
     });
 
     render(() => <App journal={journal} />);
@@ -130,7 +245,7 @@ describe("browsing the journal", () => {
   it("should report an operation history read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
@@ -143,7 +258,7 @@ describe("browsing the journal", () => {
   it("should report an unexpected rejected request", async () => {
     const journal = {
       ...JournalFixtures.buildJournal(),
-      getPlants: () => Promise.reject(new Error("private details")),
+      getAttention: () => Promise.reject(new Error("private details")),
     };
 
     render(() => <App journal={journal} />);

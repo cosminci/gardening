@@ -21,15 +21,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants": {
+    "/attention": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List active plants */
-        get: operations["getPlants"];
+        /** Read plant attention */
+        get: operations["getAttention"];
         put?: never;
         post?: never;
         delete?: never;
@@ -156,6 +156,12 @@ export interface components {
         ApiError: {
             message: string;
         };
+        /** AttentionProjection */
+        AttentionProjection: {
+            /** Format: date-time */
+            measuredAt: string;
+            plants: components["schemas"]["PlantAttention"][];
+        };
         /** Care */
         Care: {
             actions: components["schemas"]["ActionType"][];
@@ -219,6 +225,11 @@ export interface components {
             id: string;
             details: components["schemas"]["PlantDetails"];
         };
+        /** PlantAttention */
+        PlantAttention: {
+            plant: components["schemas"]["Plant"];
+            watering: components["schemas"]["WateringAttention"];
+        };
         /** PlantDetails */
         PlantDetails: {
             species: string;
@@ -260,6 +271,55 @@ export interface components {
             /** Format: int32 */
             share: number;
         };
+        /** WateringAttention */
+        WateringAttention: components["schemas"]["WateringCurrent"] | components["schemas"]["WateringOverdue"] | components["schemas"]["WateringRedAlert"] | components["schemas"]["WateringUnavailable"];
+        /** WateringCurrent */
+        WateringCurrent: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "current";
+        };
+        /** WateringOverdue */
+        WateringOverdue: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "overdue";
+        };
+        /** WateringRedAlert */
+        WateringRedAlert: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "redAlert";
+        };
+        /** WateringUnavailable */
+        WateringUnavailable: {
+            /** Format: int32 */
+            sampleCount: number;
+            elapsedMillis: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unavailable";
+        };
     };
     responses: never;
     parameters: never;
@@ -288,7 +348,7 @@ export interface operations {
             };
         };
     };
-    getPlants: {
+    getAttention: {
         parameters: {
             query?: never;
             header?: never;
@@ -302,15 +362,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Plant"][];
-                };
-            };
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
+                    "application/json": components["schemas"]["AttentionProjection"];
                 };
             };
         };

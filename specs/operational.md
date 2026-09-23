@@ -10,7 +10,7 @@ There is no runtime monitoring or alerting yet.
 
 ## Scaling characteristics
 
-The service is a single process for one household's bounded plant collection. Operation log and edit workflows are serialized within that process, and SQLite coordinates database access with foreign keys enabled and a five-second busy timeout.
+The service is a single process for one household's bounded plant collection. Operation log and edit workflows are serialized within that process, and SQLite coordinates database access with foreign keys enabled and a five-second busy timeout. Plant attention is materialized at startup and every five minutes. Its persistence read performs one indexed, newest-first operation seek per active Plant and stops after 20 waterings; archived Plant rows are still validated but their operation histories are not searched. A startup read failure prevents serving, while a later failure retains the previous complete projection.
 
 ## Runtime dependencies
 

@@ -14,25 +14,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
-  /plants:
+  /attention:
     get:
-      summary: List active plants
-      operationId: getPlants
+      summary: Read plant attention
+      operationId: getAttention
       responses:
         '200':
           description: ''
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Plant'
-        default:
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
+                $ref: '#/components/schemas/AttentionProjection'
   /plants/{plantId}/operations:
     get:
       summary: List a bounded page of plant operations
@@ -356,6 +348,20 @@ components:
       properties:
         message:
           type: string
+    AttentionProjection:
+      title: AttentionProjection
+      type: object
+      required:
+      - measuredAt
+      - plants
+      properties:
+        measuredAt:
+          type: string
+          format: date-time
+        plants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlantAttention'
     Care:
       title: Care
       type: object
@@ -501,6 +507,17 @@ components:
           type: string
         details:
           $ref: '#/components/schemas/PlantDetails'
+    PlantAttention:
+      title: PlantAttention
+      type: object
+      required:
+      - plant
+      - watering
+      properties:
+        plant:
+          $ref: '#/components/schemas/Plant'
+        watering:
+          $ref: '#/components/schemas/WateringAttention'
     PlantDetails:
       title: PlantDetails
       type: object
@@ -592,3 +609,100 @@ components:
           format: int32
           minimum: 1
           maximum: 100
+    WateringAttention:
+      title: WateringAttention
+      oneOf:
+      - $ref: '#/components/schemas/WateringCurrent'
+      - $ref: '#/components/schemas/WateringOverdue'
+      - $ref: '#/components/schemas/WateringRedAlert'
+      - $ref: '#/components/schemas/WateringUnavailable'
+      discriminator:
+        propertyName: kind
+        mapping:
+          current: '#/components/schemas/WateringCurrent'
+          overdue: '#/components/schemas/WateringOverdue'
+          redAlert: '#/components/schemas/WateringRedAlert'
+          unavailable: '#/components/schemas/WateringUnavailable'
+    WateringCurrent:
+      title: WateringCurrent
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: current
+    WateringOverdue:
+      title: WateringOverdue
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: overdue
+    WateringRedAlert:
+      title: WateringRedAlert
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: redAlert
+    WateringUnavailable:
+      title: WateringUnavailable
+      type: object
+      required:
+      - sampleCount
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        elapsedMillis:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+          const: unavailable

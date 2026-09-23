@@ -6,8 +6,13 @@ import * as Journal from "../../src/domain/Journal";
 import { care, operationsPage } from "./JournalTestSupport";
 
 const recent = care({ id: "o4", date: "2026-04-04T00:00:00Z", moisture: "wet" });
+const firstOlder = care({
+  id: "o3",
+  date: "2026-03-03T00:00:00Z",
+  moisture: "moderatePlus",
+});
 const older = [
-  care({ id: "o3", date: "2026-03-03T00:00:00Z", moisture: "moderatePlus" }),
+  firstOlder,
   care({ id: "o2", date: "2026-03-03T00:00:00Z", moisture: "dry", maybeNote: "Long note" }),
 ];
 
@@ -61,12 +66,12 @@ Vitest.describe("operation history", () => {
         name: "Edit historical care operation 2 from 2026-03-03",
       }),
     ).toBeInTheDocument();
-    Vitest.expect(edited).toEqual([older[0]]);
+    Vitest.expect(edited).toEqual([firstOlder]);
     setOperationChange({
       kind: "edited",
       operation: {
-        ...older[0]!,
-        details: { ...older[0]!.details, maybeNote: Journal.note("Updated note") },
+        ...firstOlder,
+        details: { ...firstOlder.details, maybeNote: Journal.note("Updated note") },
       },
     });
     Vitest.expect(await Testing.screen.findByText("Updated note")).toBeInTheDocument();
@@ -208,6 +213,31 @@ Vitest.describe("operation history", () => {
     await Promise.resolve();
     Vitest.expect(Testing.screen.getByText("Refreshed")).toBeInTheDocument();
     Vitest.expect(Testing.screen.queryByText("Long note")).not.toBeInTheDocument();
+  });
+
+  Vitest.it("should reset history when its index slot changes plant", async () => {
+    const [plantId, setPlantId] = createSignal(Journal.plantId("p1"));
+    const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older)));
+    Testing.render(() => (
+      <OperationHistory
+        plantId={plantId()}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={undefined}
+        onEdit={() => undefined}
+      />
+    ));
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    Vitest.expect(await Testing.screen.findByText("Long note")).toBeInTheDocument();
+
+    setPlantId(Journal.plantId("p2"));
+
+    Vitest.expect(Testing.screen.queryByRole("table")).not.toBeInTheDocument();
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByRole("table");
+    Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
   });
 
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {

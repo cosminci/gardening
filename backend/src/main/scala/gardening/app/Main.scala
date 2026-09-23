@@ -1,11 +1,17 @@
 package gardening.app
 
+import cats.syntax.either.*
 import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
-import gardening.adapters.persistence.{Sqlite, SqliteLocation, SqlitePlantJournalStore}
-import gardening.adapters.system.{SystemClock, UuidIdGenerator}
-import gardening.domain.PlantJournal
+import gardening.adapters.persistence.SqliteLocation
+import gardening.domain.attention.PlantAttentionMonitor
 import org.flywaydb.core.Flyway
+import ox.{EitherMode, forkError, sleep, supervisedError}
+import ox.either.*
 import sttp.tapir.server.netty.sync.NettySyncServer
+
+import scala.concurrent.duration.*
+import scala.util.chaining.*
+import scala.util.Using
 
 object Main:
 
@@ -16,14 +22,24 @@ object Main:
     val host      = sys.env.getOrElse("GARDENING_HOST", "0.0.0.0")
     val dbPath    = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
 
-    val connection = Sqlite.connect(SqliteLocation.File(dbPath))
-    try
-      val _         = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      val store     = SqlitePlantJournalStore.make(connection.transactor)
-      val journal   = PlantJournal.make(using store, UuidIdGenerator, SystemClock)
-      val endpoints =
-        List(HealthApi.serverEndpoint(version)) ++
-          JournalApi.serverEndpoints(using journal) ++
-          List(StaticSite.endpoint(staticDir))
-      val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-    finally connection.close()
+    Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
+      val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
+      Programs.make(resources).flatMap: programs =>
+        val endpoints =
+          JournalApi
+            .serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor)
+            .pipe(List(HealthApi.serverEndpoint(version)) ++ _ :+ StaticSite.endpoint(staticDir))
+        run(programs.plantAttentionMonitor):
+          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
+      .orThrow
+
+  private def run(attention: PlantAttentionMonitor)(http: => Unit) =
+    supervisedError(EitherMode[Throwable]()):
+      val _ = forkError(pollPlantAttention(attention))
+      http.pipe(_ => ().asRight)
+
+  private def pollPlantAttention(attention: PlantAttentionMonitor) =
+    Iterator.continually {
+      sleep(5.minutes)
+      val _ = attention.refreshAll
+    }.foreach(identity).pipe(_ => ().asRight)

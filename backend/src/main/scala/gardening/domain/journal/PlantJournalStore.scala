@@ -1,8 +1,9 @@
-package gardening.domain
+package gardening.domain.journal
+
+import gardening.domain.*
 
 trait PlantJournalStore:
   def getPlant(id: PlantId): GetPlantResult
-  def getPlants: GetPlantsResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperation(id: OperationId): GetOperationResult
   def addOperation(operation: Operation): LogOperationResult

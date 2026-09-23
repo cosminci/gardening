@@ -1,6 +1,8 @@
-package gardening.domain
+package gardening.domain.journal
 
 import cats.syntax.either.*
+import cats.syntax.option.*
+import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.numeric.GreaterEqual
@@ -13,7 +15,6 @@ import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
-  def getPlants: GetPlantsResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
@@ -31,8 +32,6 @@ object PlantJournal:
 
   private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^, clock: Clock^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
-
-    override def getPlants: GetPlantsResult = store.getPlants
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)
@@ -139,7 +138,7 @@ object PlantJournal:
               case None if page.hasNextPage =>
                 val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
                 read(OperationWindow(nextOffset, window.size))
-              case None => Option.empty[Operation].asRight
+              case None => none[Operation].asRight
           case GetOperationsResult.ReadFailed(reason) =>
             PlantUpdateInterruption.Failed(reason).asLeft
 
@@ -176,7 +175,7 @@ object PlantJournal:
                 RuntimeException("repot persistence and compensation failed", primary).tap(_.addSuppressed(compensation)).asLeft
 
     extension (condition: Boolean)
-      private def orSkip: Either[PlantUpdateInterruption, Unit] =
+      private def orSkip =
         Either.cond(condition, (), PlantUpdateInterruption.NotLatestRepot)
 
     extension (mutex: ReentrantLock)

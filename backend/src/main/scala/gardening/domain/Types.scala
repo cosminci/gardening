@@ -19,11 +19,6 @@ object OperationId:
   def apply(value: String): OperationId         = value
   extension (id: OperationId) def value: String = id
 
-type OperationOffset   = Int :| GreaterEqual[0]
-type OperationPageSize = Int :| Interval.Closed[1, 10]
-final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
-final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
-
 opaque type Species = String
 object Species:
   def apply(value: String): Species              = value
@@ -73,19 +68,6 @@ final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Optio
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
 final case class PesticideData(name: NomenclatureName, pesticideType: PesticideType, maybeInfo: Option[NomenclatureInfo])
 final case class Pesticide(id: PesticideId, data: PesticideData)
-
-enum CatalogReadResult[+A]:
-  case Read(entries: Vector[A])
-  case ReadFailed(reason: Throwable)
-
-enum CatalogAddResult[+A]:
-  case Added(entry: A)
-  case AddFailed(reason: Throwable)
-
-enum CatalogEditResult[+A]:
-  case Edited(entry: A)
-  case RecordMissing
-  case EditFailed(reason: Throwable)
 
 type Percentage = Int :| Interval.Closed[1, 100]
 
@@ -152,39 +134,3 @@ object OperationDetails:
   ) extends OperationDetails
 
 final case class Operation(id: OperationId, plantId: PlantId, date: Instant, details: OperationDetails)
-
-enum GetPlantResult:
-  case Read(plant: Plant)
-  case RecordMissing
-  case ReadFailed(reason: Throwable)
-
-enum GetPlantsResult:
-  case Read(plants: Vector[Plant])
-  case ReadFailed(reason: Throwable)
-
-enum GetOperationResult:
-  case Read(operation: Operation)
-  case RecordMissing
-  case ReadFailed(reason: Throwable)
-
-enum GetOperationsResult:
-  case Read(page: OperationPage)
-  case ReadFailed(reason: Throwable)
-
-enum LogOperationResult:
-  case Logged(id: OperationId)
-  case LoggingFailed(reason: Throwable)
-
-enum EditOperationResult:
-  case Edited(operation: Operation)
-  case OperationMissing
-  case OperationTypeMismatch
-  case EditFailed(reason: Throwable)
-
-enum OperationCompensationResult:
-  case Compensated
-  case CompensationFailed(reason: Throwable)
-
-enum UpdatePlantResult:
-  case Updated
-  case UpdateFailed(reason: Throwable)

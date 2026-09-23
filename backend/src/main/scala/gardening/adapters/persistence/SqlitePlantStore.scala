@@ -5,8 +5,10 @@ import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
-import gardening.domain.EditOperationResult.*
-import gardening.domain.LogOperationResult.*
+import gardening.domain.attention.*
+import gardening.domain.journal.*
+import gardening.domain.journal.EditOperationResult.*
+import gardening.domain.journal.LogOperationResult.*
 import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
@@ -17,22 +19,13 @@ import java.time.format.DateTimeFormatterBuilder
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
-object SqlitePlantJournalStore:
+object SqlitePlantStore:
 
   private val operationDateFormatter = DateTimeFormatterBuilder().appendInstant(9).toFormatter
 
-  def make(transactor: Transactor): PlantJournalStore = LiveSqlitePlantJournalStore(transactor)
+  def make(transactor: Transactor): PlantJournalStore & PlantAttentionStore = LiveSqlitePlantStore(transactor)
 
-  private class LiveSqlitePlantJournalStore(transactor: Transactor) extends PlantJournalStore:
-
-    override def getPlants: GetPlantsResult =
-      try
-        val plants = trust(connect(transactor)(selectPlants.query[PlantRow].run()).traverse(toPlant))
-        GetPlantsResult.Read(plants.filter(_.details.status === PlantStatus.Active))
-      catch case error: SqlException => GetPlantsResult.ReadFailed(error)
-
-    private def selectPlants: Frag =
-      sql"select id, species, nickname, location, substrate, status from plant"
+  private class LiveSqlitePlantStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
 
     override def getPlant(id: PlantId): GetPlantResult =
       try
@@ -41,7 +34,7 @@ object SqlitePlantJournalStore:
           case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
       catch case error: SqlException => GetPlantResult.ReadFailed(error)
 
-    private def selectPlant(id: String): Frag =
+    private def selectPlant(id: String) =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
 
     private def toPlant(row: PlantRow) =
@@ -64,7 +57,61 @@ object SqlitePlantJournalStore:
         GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
 
-    private def selectOperationsForPlant(plantId: String, window: OperationWindow): Frag =
+    override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
+      try
+        val rows    = connect(transactor)(selectAttentionSamples(size).query[AttentionSampleRow].run())
+        val samples = trust(rows.traverse(toAttentionSample))
+        GetAttentionSamplesResult.Read(samples.filter(_.plant.details.status === PlantStatus.Active))
+      catch
+        case error: SqlException       => GetAttentionSamplesResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetAttentionSamplesResult.ReadFailed(error)
+
+    private def selectAttentionSamples(size: WateringSampleSize) =
+      val sampleSize: Int = size
+      sql"""select plant.id,
+                   plant.species,
+                   plant.nickname,
+                   plant.location,
+                   plant.substrate,
+                   plant.status,
+                   coalesce((
+                     select json_group_array(watering.date order by watering.date desc, watering.id desc)
+                     from (
+                       select operation.id, operation.date
+                       from operation
+                       where plant.status = 'Active'
+                         and operation.plant_id = plant.id
+                         and operation.kind = 'Care'
+                         and exists (
+                           select 1
+                           from json_each(operation.payload, '$$.actions')
+                           where value = 'Watered'
+                         )
+                       order by operation.date desc, operation.id desc
+                       limit $sampleSize
+                     ) watering
+                   ), json('[]')) as watering_dates
+            from plant
+            order by plant.rowid"""
+
+    private def toAttentionSample(row: AttentionSampleRow) =
+      val plantRow    = PlantRow(row.id, row.species, row.nickname, row.location, row.substrate, row.status)
+      val storedDates = decodeWateringDates(row.wateringDates)
+      for
+        plant         <- toPlant(plantRow)
+        wateringDates <- storedDates.traverse(parseOperationDate)
+        // The SQL query limits each history to the maximum representable length.
+        // $COVERAGE-OFF$
+        wateringHistory <- WateringHistory
+          .from(wateringDates)
+          .leftMap(message => DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message")))
+      // $COVERAGE-ON$
+      yield PlantAttentionSample(plant, wateringHistory)
+
+    private def decodeWateringDates(value: String) =
+      trust(decode[Vector[String]](value))
+
+    private def selectOperationsForPlant(plantId: String, window: OperationWindow) =
       val readSize: Int = window.size + 1
       val offset: Int   = window.offset
       sql"""select id, plant_id, date, kind, payload
@@ -80,14 +127,17 @@ object SqlitePlantJournalStore:
           case Some(row) => GetOperationResult.Read(trust(toOperation(row)))
       catch case error: SqlException => GetOperationResult.ReadFailed(error)
 
-    private def selectOperation(id: String): Frag =
+    private def selectOperation(id: String) =
       sql"select id, plant_id, date, kind, payload from operation where id = $id"
 
     private def toOperation(row: OperationRow) =
       for
-        date    <- Try(Instant.parse(row.date)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: ${row.date}"))
+        date    <- parseOperationDate(row.date)
         details <- decodeOperationDetails(row.kind, row.payload)
       yield Operation(OperationId(row.id), PlantId(row.plantId), date, details)
+
+    private def parseOperationDate(value: String) =
+      Try(Instant.parse(value)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: $value"))
 
     override def addOperation(operation: Operation): LogOperationResult =
       try
@@ -95,7 +145,7 @@ object SqlitePlantJournalStore:
           insertOperationRow(operation).update.run().pipe(_ => Logged(operation.id))
       catch case e: SqlException => LoggingFailed(e)
 
-    private def insertOperationRow(operation: Operation): Frag =
+    private def insertOperationRow(operation: Operation) =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
       val storedDate               = operationDateFormatter.format(operation.date)
       sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"
@@ -190,14 +240,14 @@ object SqlitePlantJournalStore:
           case _ => CatalogEditResult.RecordMissing
       catch case error: SqlException => CatalogEditResult.EditFailed(error)
 
-    private def toComponent(row: ComponentRow): Either[Throwable, SubstrateComponent] =
+    private def toComponent(row: ComponentRow) =
       SubstrateComponentId
         .parse(row.id)
         .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
         .map: id =>
           SubstrateComponent(id, SubstrateComponentData(NomenclatureName(row.name), row.info.map(NomenclatureInfo.apply)))
 
-    private def toPesticide(row: PesticideRow): Either[Throwable, Pesticide] =
+    private def toPesticide(row: PesticideRow) =
       for
         id <- PesticideId
           .parse(row.id)
@@ -214,7 +264,7 @@ object SqlitePlantJournalStore:
       // Writes are validated before persistence; a decode failure is an invariant violation.
       decoded.left.map(DatabaseCorruption.apply).toTry.get
 
-    private def updatePlantRow(plant: Plant): Frag =
+    private def updatePlantRow(plant: Plant) =
       val details = plant.details
       sql"""update plant
            set species = ${details.species.value},
@@ -224,7 +274,7 @@ object SqlitePlantJournalStore:
                status = ${details.status.toString}
            where id = ${plant.id.value}"""
 
-    private def updateOperationRow(operationId: String, details: OperationDetails): Frag =
+    private def updateOperationRow(operationId: String, details: OperationDetails) =
       val (operationKind, payload) = encodeOperationDetails(details)
       sql"update operation set kind = $operationKind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
 
@@ -233,7 +283,7 @@ object SqlitePlantJournalStore:
         case care: OperationDetails.Care   => "Care"  -> care.asJson.noSpaces
         case repot: OperationDetails.Repot => "Repot" -> repot.asJson.noSpaces
 
-    private def decodeOperationDetails(kind: String, payload: String): Either[Throwable, OperationDetails] =
+    private def decodeOperationDetails(kind: String, payload: String) =
       kind match
         case "Care"  => decode[OperationDetails.Care](payload).leftMap(invalidOperationPayload)
         case "Repot" => decode[OperationDetails.Repot](payload).leftMap(invalidOperationPayload)
@@ -318,5 +368,14 @@ object SqlitePlantJournalStore:
       derives DbCodec
 
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
+  private case class AttentionSampleRow(
+      id: String,
+      species: String,
+      nickname: Option[String],
+      location: String,
+      substrate: String,
+      status: String,
+      wateringDates: String
+  ) derives DbCodec
   private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec
   private case class PesticideRow(id: String, name: String, pesticideType: String, info: Option[String]) derives DbCodec

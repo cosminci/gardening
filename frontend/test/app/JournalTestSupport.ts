@@ -6,6 +6,10 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
   { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
   { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
 ];
+const emptyAttentionResult: Journal.GetAttentionResult = {
+  kind: "read",
+  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants: [] },
+};
 
 export const ficus = (): Journal.Plant => ({
   id: Journal.plantId("p1"),
@@ -76,7 +80,7 @@ export const operationsPage = (
 });
 
 export const buildJournal = ({
-  getPlantsResult = { kind: "read", plants: [] },
+  getAttentionResults,
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
@@ -94,7 +98,7 @@ export const buildJournal = ({
   editedPesticides = [],
   operationWindows = [],
 }: {
-  getPlantsResult?: Journal.GetPlantsResult;
+  getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
   >;
@@ -117,10 +121,15 @@ export const buildJournal = ({
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): Journal.JournalClient => {
+  const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
+  let attentionReads = 0;
   const operationReads = new Map<string, number>();
 
   return {
-    getPlants: () => Promise.resolve(getPlantsResult),
+    getAttention: () => {
+      const read = attentionReads++;
+      return Promise.resolve(queuedResult(attentionResponses, read));
+    },
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });
       const results = getOperationsByPlantId[id];
@@ -129,7 +138,7 @@ export const buildJournal = ({
 
       const read = operationReads.get(id) ?? 0;
       operationReads.set(id, read + 1);
-      return Promise.resolve(results[Math.min(read, results.length - 1)]!);
+      return Promise.resolve(queuedResult(results, read));
     },
     logOperation: (id, details) => {
       logged.push({ plantId: id, details });
@@ -158,4 +167,10 @@ export const buildJournal = ({
       return Promise.resolve(pesticideEditResult);
     },
   };
+};
+
+const queuedResult = <Result>(results: readonly [Result, ...Result[]], read: number): Result => {
+  const result = results.at(Math.min(read, results.length - 1));
+  if (result === undefined) throw new Error("queued result is empty");
+  return result;
 };
