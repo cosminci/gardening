@@ -24,26 +24,22 @@ object Main:
 
     Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      Programs
-        .make(resources)
-        .flatMap: programs =>
-          val endpoints =
-            JournalApi
-              .serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor)
-              .pipe(List(HealthApi.serverEndpoint(version)) ++ _ ++ List(StaticSite.endpoint(staticDir)))
-          run(programs.plantAttentionMonitor):
-            val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-        .orThrow
+      Programs.make(resources).flatMap: programs =>
+        val endpoints =
+          JournalApi
+            .serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor)
+            .pipe(List(HealthApi.serverEndpoint(version)) ++ _ :+ StaticSite.endpoint(staticDir))
+        run(programs.plantAttentionMonitor):
+          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
+      .orThrow
 
   private def run(attention: PlantAttentionMonitor)(http: => Unit) =
     supervisedError(EitherMode[Throwable]()):
       val _ = forkError(pollPlantAttention(attention))
-      http
-      ().asRight
+      http.pipe(_ => ().asRight)
 
   private def pollPlantAttention(attention: PlantAttentionMonitor) =
     Iterator.continually {
       sleep(5.minutes)
       val _ = attention.refreshAll
-    }.foreach(identity)
-    ().asRight
+    }.foreach(identity).pipe(_ => ().asRight)

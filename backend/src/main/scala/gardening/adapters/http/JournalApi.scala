@@ -1,7 +1,6 @@
 package gardening.adapters.http
 
 import cats.syntax.either.*
-import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.*
 import gardening.domain.journal.*
@@ -18,6 +17,7 @@ import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
 import sttp.tapir.server.ServerEndpoint
 import java.time.Instant
+import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
 import scala.deriving.Mirror
 import scala.util.Try
 
@@ -25,31 +25,14 @@ final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object JournalApi:
 
-  private enum WateringAttentionOutput:
-    case Unavailable(sampleCount: WateringSampleCount, maybeElapsedMillis: Option[String])
-    case Current(
-        sampleCount: WateringSampleCount,
-        averageIntervalMillis: String,
-        elapsedMillis: String
-    )
-    case Overdue(
-        sampleCount: WateringSampleCount,
-        averageIntervalMillis: String,
-        elapsedMillis: String
-    )
-    case RedAlert(
-        sampleCount: WateringSampleCount,
-        averageIntervalMillis: String,
-        elapsedMillis: String
-    )
-
+  extension (attention: WateringAttention)
     // $COVERAGE-OFF$
-    def kind =
-      this match
-        case _: Unavailable => "unavailable"
-        case _: Current     => "current"
-        case _: Overdue     => "overdue"
-        case _: RedAlert    => "redAlert"
+    private def kind =
+      attention match
+        case _: WateringAttention.Unavailable => "unavailable"
+        case _: WateringAttention.Current     => "current"
+        case _: WateringAttention.Overdue     => "overdue"
+        case _: WateringAttention.RedAlert    => "redAlert"
     // $COVERAGE-ON$
 
   private val journalEndpoint      = endpoint.errorOut(JournalError.generic)
@@ -234,6 +217,10 @@ object JournalApi:
     Decoder.failedWithMessage("watering attention is output-only"),
     Encoder.encodeInt.contramap(value => value)
   )
+  private given Codec[FiniteDuration] = Codec.from(
+    Decoder.failedWithMessage("watering duration is output-only"),
+    Encoder.encodeString.contramap(_.toMillis.toString)
+  )
   private type JournalEnum = ActionType | MoistureLevel | PesticideType | PlantStatus
   private inline given [A <: JournalEnum](using Mirror.SumOf[A]): Codec[A] = ConfiguredEnumCodec.derived
   private given Encoder[Set[ActionType]]                                   = Encoder.encodeList[ActionType].contramap(_.toList.sortBy(_.toString))
@@ -245,39 +232,9 @@ object JournalApi:
   private given Codec.AsObject[OperationDetails]        = ConfiguredCodec.derived
   private given Codec.AsObject[PlantDetails]            = ConfiguredCodec.derived
   private given Codec.AsObject[Plant]                   = ConfiguredCodec.derived
-  private given Codec.AsObject[WateringAttentionOutput] = ConfiguredCodec.derived
-  private given Codec.AsObject[WateringAttention]       = Codec.AsObject.from(
-    Decoder.failedWithMessage("watering attention is output-only"),
-    Encoder.AsObject.instance(watering => summon[Codec.AsObject[WateringAttentionOutput]].encodeObject(wireWatering(watering)))
-  )
+  private given Codec.AsObject[WateringAttention]       = ConfiguredCodec.derived
   private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
-
-  private def wireWatering(watering: WateringAttention) =
-    watering match
-      case unavailable: WateringAttention.Unavailable =>
-        WateringAttentionOutput.Unavailable(
-          sampleCount = unavailable.sampleCount,
-          maybeElapsedMillis = unavailable.maybeElapsed.map(_.toMillis.toString)
-        )
-      case current: WateringAttention.Current =>
-        WateringAttentionOutput.Current(
-          sampleCount = current.sampleCount,
-          averageIntervalMillis = current.averageInterval.toMillis.toString,
-          elapsedMillis = current.elapsed.toMillis.toString
-        )
-      case overdue: WateringAttention.Overdue =>
-        WateringAttentionOutput.Overdue(
-          sampleCount = overdue.sampleCount,
-          averageIntervalMillis = overdue.averageInterval.toMillis.toString,
-          elapsedMillis = overdue.elapsed.toMillis.toString
-        )
-      case redAlert: WateringAttention.RedAlert =>
-        WateringAttentionOutput.RedAlert(
-          sampleCount = redAlert.sampleCount,
-          averageIntervalMillis = redAlert.averageInterval.toMillis.toString,
-          elapsedMillis = redAlert.elapsed.toMillis.toString
-        )
 
   private type WireText = PlantId | OperationId | Species | Nickname | Location | Note | NomenclatureName | NomenclatureInfo
   private given [A <: WireText]: Schema[A] = Schema.string
@@ -295,23 +252,23 @@ object JournalApi:
   private given Schema[WateringSampleCount] = Schema.schemaForInt
     .validate(Validator.min(0).and(Validator.max(20)))
     .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
-  private given Schema[WateringAttentionOutput.Current]     = Schema.derived[WateringAttentionOutput.Current].name(Schema.SName("WateringCurrent"))
-  private given Schema[WateringAttentionOutput.Overdue]     = Schema.derived[WateringAttentionOutput.Overdue].name(Schema.SName("WateringOverdue"))
-  private given Schema[WateringAttentionOutput.RedAlert]    = Schema.derived[WateringAttentionOutput.RedAlert].name(Schema.SName("WateringRedAlert"))
-  private given Schema[WateringAttentionOutput.Unavailable] = Schema
-    .derived[WateringAttentionOutput.Unavailable]
+  private given Schema[FiniteDuration] = Schema.schemaForString
+    .map(value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption)(_.toMillis.toString)
+  private given Schema[WateringAttention.Current]     = Schema.derived[WateringAttention.Current].name(Schema.SName("WateringCurrent"))
+  private given Schema[WateringAttention.Overdue]     = Schema.derived[WateringAttention.Overdue].name(Schema.SName("WateringOverdue"))
+  private given Schema[WateringAttention.RedAlert]    = Schema.derived[WateringAttention.RedAlert].name(Schema.SName("WateringRedAlert"))
+  private given Schema[WateringAttention.Unavailable] = Schema
+    .derived[WateringAttention.Unavailable]
     .name(Schema.SName("WateringUnavailable"))
-    .modify(_.maybeElapsedMillis)(_.copy(isOptional = false).nullable)
-  private given Schema[WateringAttentionOutput] = Schema
-    .oneOfUsingField[WateringAttentionOutput, String](_.kind, identity)(
-      "unavailable" -> summon[Schema[WateringAttentionOutput.Unavailable]],
-      "current"     -> summon[Schema[WateringAttentionOutput.Current]],
-      "overdue"     -> summon[Schema[WateringAttentionOutput.Overdue]],
-      "redAlert"    -> summon[Schema[WateringAttentionOutput.RedAlert]]
+    .modify(_.maybeElapsed)(_.copy(isOptional = false).nullable)
+  private given Schema[WateringAttention] = Schema
+    .oneOfUsingField[WateringAttention, String](_.kind, identity)(
+      "unavailable" -> summon[Schema[WateringAttention.Unavailable]],
+      "current"     -> summon[Schema[WateringAttention.Current]],
+      "overdue"     -> summon[Schema[WateringAttention.Overdue]],
+      "redAlert"    -> summon[Schema[WateringAttention.RedAlert]]
     )
     .name(Schema.SName("WateringAttention"))
-  private given Schema[WateringAttention] =
-    summon[Schema[WateringAttentionOutput]].map(_ => none[WateringAttention])(wireWatering)
   private given Schema[PlantAttention]      = Schema.derived
   private given Schema[AttentionProjection] = Schema.derived[AttentionProjection].modify(_.plants)(_.copy(isOptional = false))
   private given Schema[Substrate]           = summon[Schema[List[SubstratePart]]]
@@ -351,7 +308,9 @@ object JournalApi:
       case "maybeNickname"      => "nickname"
       case "maybeNote"          => "notes"
       case "maybeInfo"          => "info"
-      case "maybeElapsedMillis" => "elapsedMillis"
+      case "maybeElapsed"       => "elapsedMillis"
+      case "averageInterval"    => "averageIntervalMillis"
+      case "elapsed"            => "elapsedMillis"
       case "pesticideType"      => "type"
       case _                    => name
 
