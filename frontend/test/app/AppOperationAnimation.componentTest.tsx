@@ -3,7 +3,14 @@ import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import type { GetOperationsResult, OperationWindow, PlantId } from "../../src/domain/Journal";
 import { operationId } from "../../src/domain/Journal";
-import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
+import {
+  attentionResult,
+  buildJournal,
+  care,
+  ficus,
+  operationsPage,
+  unavailableAttention,
+} from "./JournalTestSupport";
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
@@ -19,7 +26,7 @@ Vitest.describe("animating operation changes", () => {
       finishRefresh = resolve;
     });
     const base = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [attentionResult([unavailableAttention(ficus())])],
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });

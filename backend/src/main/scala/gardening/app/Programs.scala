@@ -14,8 +14,4 @@ object Programs:
 
   def make(resources: AppResources): Either[Throwable, Programs] =
     val store = SqlitePlantStore.make(resources.transactor)
-    PlantAttentionMonitor.make(using store, SystemClock).map: plantAttentionMonitor =>
-      Programs(
-        plantJournal = PlantJournal.make(using store, UuidIdGenerator, SystemClock),
-        plantAttentionMonitor
-      )
+    PlantAttentionMonitor.make(using store, SystemClock).map(Programs(PlantJournal.make(using store, UuidIdGenerator, SystemClock), _))

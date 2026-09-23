@@ -1,54 +1,50 @@
 package gardening.adapters.persistence
 
-import gardening.domain.PlantId
-import gardening.domain.journal.GetPlantsResult
 import munit.FunSuite
-import org.flywaydb.core.Flyway
 
 import java.nio.file.Files
 import java.util.UUID
-import javax.sql.DataSource
+import scala.util.Using
 
 class SqliteSeamIntegrationTest extends FunSuite:
 
-  test("should connect to an in-memory database"):
-    val connection = Sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+  test("should retain an in-memory database while its resource is open"):
+    val sqlite = buildSqlite
+
+    Using.resource(sqlite.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+      Using.resource(connection.dataSource.getConnection()): writer =>
+        Using.resource(writer.createStatement()): statement =>
+          val _ = statement.executeUpdate("create table note (value text not null)")
+          val _ = statement.executeUpdate("insert into note (value) values ('watered')")
+
+      val actualNote =
+        Using.resource(connection.dataSource.getConnection()): reader =>
+          Using.resource(reader.createStatement()): statement =>
+            Using.resource(statement.executeQuery("select value from note")): result =>
+              assert(result.next())
+              result.getString("value")
+
+      assertEquals(actualNote, "watered")
+
+  test("should retain a file-backed database after its resource is reopened"):
+    val databasePath = Files.createTempFile("gardening-sqlite-suite", ".sqlite")
+    val sqlite       = buildSqlite
     try
-      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      seedPlant(connection.dataSource)
+      Using.resource(sqlite.connect(SqliteLocation.File(databasePath.toString))): connection =>
+        Using.resource(connection.dataSource.getConnection()): writer =>
+          Using.resource(writer.createStatement()): statement =>
+            val _ = statement.executeUpdate("create table note (value text not null)")
+            val _ = statement.executeUpdate("insert into note (value) values ('repotted')")
 
-      SqlitePlantStore.make(connection.transactor).getPlants match
-        case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
-        case other                        => fail(s"expected Read, got $other")
-    finally connection.close()
+      val actualNote =
+        Using.resource(sqlite.connect(SqliteLocation.File(databasePath.toString))): connection =>
+          Using.resource(connection.dataSource.getConnection()): reader =>
+            Using.resource(reader.createStatement()): statement =>
+              Using.resource(statement.executeQuery("select value from note")): result =>
+                assert(result.next())
+                result.getString("value")
 
-  test("should retain file-backed data after closing and reopening the database"):
-    val path = Files.createTempFile("gardening-sqlite-suite", ".sqlite")
-    try
-      val firstConnection = Sqlite.connect(SqliteLocation.File(path.toString))
-      try
-        val _ = Flyway.configure().dataSource(firstConnection.dataSource).load().migrate()
-        seedPlant(firstConnection.dataSource)
-      finally firstConnection.close()
+      assertEquals(actualNote, "repotted")
+    finally Files.delete(databasePath)
 
-      val reopenedConnection = Sqlite.connect(SqliteLocation.File(path.toString))
-      try
-        SqlitePlantStore.make(reopenedConnection.transactor).getPlants match
-          case GetPlantsResult.Read(plants) => assertEquals(plants.map(_.id), Vector(PlantId("p1")))
-          case other                        => fail(s"expected Read, got $other")
-      finally reopenedConnection.close()
-    finally Files.delete(path)
-
-  private def seedPlant(dataSource: DataSource) =
-    val connection = dataSource.getConnection()
-    try
-      val statement = connection.prepareStatement("insert into plant (id, species, location, status, substrate) values (?, ?, ?, ?, ?)")
-      try
-        statement.setString(1, "p1")
-        statement.setString(2, "Ficus lyrata")
-        statement.setString(3, "Balcony")
-        statement.setString(4, "Active")
-        statement.setString(5, """[{"component":"00000000-0000-4000-8000-000000000003","share":100}]""")
-        val _ = statement.executeUpdate()
-      finally statement.close()
-    finally connection.close()
+  private def buildSqlite = Sqlite.make

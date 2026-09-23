@@ -20,7 +20,11 @@ Vitest.describe("changing the journal", () => {
     });
     const logged: { plantId: string; details: Journal.OperationDetails }[] = [];
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage(),
@@ -81,7 +85,11 @@ Vitest.describe("changing the journal", () => {
       },
     };
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([updated])],
       },
@@ -128,22 +136,26 @@ Vitest.describe("changing the journal", () => {
 
   Vitest.it("should close the operation editor with Escape", async () => {
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const { container } = Testing.render(() => <App journal={journal} />);
     const current = Testing.within(container);
     await current.findByRole("article", { name: "Fern" });
-    const header = container.querySelector<HTMLElement>(".masthead")!;
-    const journalRows = container.querySelector<HTMLElement>(".journal")!;
+    const header = current.getByRole("heading", { name: "Plant journal" }).closest("header");
+    const journalRows = current.getByRole("region", { name: "Plant journal" });
 
     const trigger = current.getByRole("button", { name: "Log operation for Fern" });
     trigger.focus();
     Testing.fireEvent.click(trigger);
     const dialog = current.getByRole("dialog", { name: "Operation editor" });
     Vitest.expect(document.activeElement).toBe(dialog);
-    Vitest.expect(header.inert).toBe(true);
-    Vitest.expect(journalRows.inert).toBe(true);
+    Vitest.expect(header).toHaveProperty("inert", true);
+    Vitest.expect(journalRows).toHaveProperty("inert", true);
     Testing.fireEvent.keyDown(window, { key: "Enter" });
     Vitest.expect(current.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
     Testing.fireEvent.keyDown(window, { key: "Escape" });
@@ -151,8 +163,8 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(dialog).toHaveClass("sheet--closing");
     await Testing.waitFor(() => {
       Vitest.expect(current.queryByRole("dialog")).not.toBeInTheDocument();
-      Vitest.expect(header.inert).toBe(false);
-      Vitest.expect(journalRows.inert).toBe(false);
+      Vitest.expect(header).toHaveProperty("inert", false);
+      Vitest.expect(journalRows).toHaveProperty("inert", false);
       Vitest.expect(trigger).toHaveFocus();
     });
   });
@@ -167,7 +179,11 @@ Vitest.describe("changing the journal", () => {
     const addedComponent = { name: Journal.nomenclatureName("Pumice"), maybeInfo: null };
     const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
       componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
@@ -262,7 +278,11 @@ Vitest.describe("changing the journal", () => {
       pesticides: new Set([neemId]),
     });
     const journal = JournalFixtures.buildJournal({
-      getPlantsResult: { kind: "read", plants: [JournalFixtures.ficus()] },
+      getAttentionResults: [
+        JournalFixtures.attentionResult([
+          JournalFixtures.unavailableAttention(JournalFixtures.ficus()),
+        ]),
+      ],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
       pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },

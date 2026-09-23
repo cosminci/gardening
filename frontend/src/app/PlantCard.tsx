@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { formatSubstrate, plantDisplayName } from "./JournalLabels";
@@ -19,20 +19,29 @@ interface PlantCardProps {
   readonly onEdit: (operation: Journal.Operation) => void;
 }
 
+const WateringStatus: Component<{ watering: Journal.WateringAttention }> = (props) => (
+  <Switch fallback={<p class="watering-status watering-status--current">Watering current</p>}>
+    <Match when={props.watering.kind === "unavailable"}>
+      <p class="watering-status watering-status--unknown">Watering cadence unknown</p>
+    </Match>
+    <Match when={props.watering.kind === "redAlert"}>
+      <p class="watering-status watering-status--red-alert">
+        <span class="watering-status__symbol" aria-hidden="true">
+          !
+        </span>
+        <span>Watering red alert</span>
+      </p>
+    </Match>
+    <Match when={props.watering.kind === "overdue"}>
+      <p class="watering-status watering-status--overdue">Watering overdue</p>
+    </Match>
+  </Switch>
+);
+
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const plant = () => props.attention.plant;
   const name = () => plantDisplayName(plant());
   const recentOperations = () => [...props.operationPage.operations].reverse();
-  const wateringStatus = () => {
-    const cadence = props.attention.cadence;
-    if (cadence.kind === "unavailable")
-      return { className: "unknown", label: "Watering cadence unknown", warning: false };
-    if (cadence.state === "redAlert")
-      return { className: "red-alert", label: "Watering red alert", warning: true };
-    if (cadence.state === "overdue")
-      return { className: "overdue", label: "Watering overdue", warning: false };
-    return { className: "current", label: "Watering current", warning: false };
-  };
 
   return (
     <article class="plant-card" aria-label={name()}>
@@ -44,14 +53,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{plant().details.species}</p>
             </div>
-            <p class={`watering-status watering-status--${wateringStatus().className}`}>
-              <Show when={wateringStatus().warning}>
-                <span class="watering-status__symbol" aria-hidden="true">
-                  !
-                </span>
-              </Show>
-              <span>{wateringStatus().label}</span>
-            </p>
+            <WateringStatus watering={props.attention.watering} />
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>

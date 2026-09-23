@@ -4,253 +4,303 @@ import cats.syntax.option.*
 import gardening.domain.*
 import io.github.iltotore.iron.autoRefine
 
-import java.time.{Duration, Instant}
+import language.experimental.captureChecking
+
+import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import scala.concurrent.duration.*
+import scala.jdk.DurationConverters.*
 
 class PlantAttentionMonitorComponentTest extends munit.FunSuite:
 
-  private val start       = Instant.parse("2026-01-01T00:00:00Z")
-  private val componentId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
-  private val substrate   = Substrate.of(List(SubstratePart(componentId, 100))).toOption.getOrElse(fail("invalid substrate"))
+  private val referenceTime = Instant.parse("2026-01-01T00:00:00Z")
+  private val componentId   = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
+  private val substrate     = Substrate.of(List(SubstratePart(componentId, 100))).toOption.getOrElse(fail("invalid substrate"))
+  private val plant         =
+    Plant(PlantId("p1"), PlantDetails(Species("Ficus"), none, Location("Office"), substrate, PlantStatus.Active))
 
-  test("should infer cadence from the latest bounded watering samples"):
-    val unknown = plant("unknown", "Balcony", "Ficus", none)
-    val scored  = plant("scored", "Office", "Monstera", Nickname("Monty").some)
-    val store   = StoreStub(
-      Vector(unknown, scored),
-      Map(unknown.id -> wateringDates(4, Duration.ofDays(2)), scored.id -> wateringDates(25, Duration.ofDays(2)))
-    )
-    val attention  = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
-    val projection = attention.current
+  test(s"should return ${WateringAttention.Unavailable} when a plant has fewer than five recorded waterings"):
+    val measurementTime      = referenceTime
+    val wateringInterval     = 1.day
+    val elapsedSinceWatering = 12.hours
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(4)(index => latestWatering - wateringInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
 
-    assertEquals(projection.plants.map(_.plant.id), Vector(unknown.id, scored.id))
-    projection.plants.head.cadence match
-      case WateringCadence.Unavailable(sampleCount, maybeElapsed) =>
-        assertEquals(sampleCount, 4)
-        assertEquals(maybeElapsed, Duration.ofDays(2).some)
-      case cadence => fail(s"expected unavailable cadence, got $cadence")
-    projection.plants(1).cadence match
-      case WateringCadence.Inferred(sampleCount, average, elapsed, Urgency.Finite(_, denominator), state) =>
-        assertEquals(sampleCount, 20)
-        assertEquals(average, Duration.ofDays(2))
-        assertEquals(elapsed, Duration.ofDays(2))
-        assertEquals(denominator, average)
-        assertEquals(state, WateringState.Current)
-      case cadence => fail(s"expected inferred cadence, got $cadence")
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
 
-    assertEquals(store.wateringRequests.get(), Vector(20))
+    val expectedWatering   = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = elapsedSinceWatering.some)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
 
-  test("should change from current to overdue and red alert at the defined boundaries"):
-    val caredFor  = plant("p1", "Office", "Ficus", none)
-    val waterings = wateringDates(5, Duration.ofDays(2))
-    val latest    = waterings.head
-    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> waterings))
-    val clock     = MutableClock(latest.plus(Duration.ofDays(2)))
-    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
+    assertEquals(monitor.current, expectedProjection)
+    assertEquals(refs.getAttentionSamplesRequests.get(), Vector(20))
 
-    assertEquals(inferredState(attention.current), WateringState.Current)
-    clock.current.set(latest.plus(Duration.ofDays(2)).plusNanos(1))
-    assertEquals(inferredState(attention.refreshAll), WateringState.Overdue)
-    clock.current.set(latest.plus(Duration.ofDays(3)).minusNanos(1))
-    assertEquals(inferredState(attention.refreshAll), WateringState.Overdue)
-    clock.current.set(latest.plus(Duration.ofDays(3)))
-    assertEquals(inferredState(attention.refreshAll), WateringState.RedAlert)
-    clock.current.set(latest.plus(Duration.ofDays(3)).plusNanos(1))
-    assertEquals(inferredState(attention.refreshAll), WateringState.RedAlert)
+  test(s"should return ${WateringAttention.Current} when a plant was last watered one average interval ago"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = averageInterval
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
+
+  test(s"should return ${WateringAttention.Overdue} when a plant was last watered more than one average interval ago"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = averageInterval + 1.milli
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.Overdue(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
+
+  test(s"should return ${WateringAttention.Overdue} until a plant is 24 hours past its average watering interval"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = averageInterval + 24.hours - 1.milli
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.Overdue(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
+
+  test(s"should return ${WateringAttention.RedAlert} when a plant reaches 24 hours past its average watering interval"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = averageInterval + 24.hours
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.RedAlert(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
+
+  test(s"should return ${WateringAttention.RedAlert} when a plant exceeds 24 hours past its average watering interval"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = averageInterval + 24.hours + 1.milli
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults        = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.RedAlert(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
 
   test("should publish an empty projection when there are no active plants"):
-    val clock     = FixedClock(start)
-    val attention = PlantAttentionMonitor.make(using StoreStub(Vector.empty, Map.empty), clock).getOrElse(fail("initial attention failed"))
+    val refs               = Refs()
+    val monitor            = buildMonitor(refs).getOrElse(fail("initial attention failed"))
+    val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector.empty)
 
-    assertEquals(attention.current, AttentionProjection(start, Vector.empty))
+    assertEquals(monitor.current, expectedProjection)
 
-  test("should report unavailable cadence for a plant without waterings"):
-    val caredFor  = plant("p1", "Office", "Ficus", none)
-    val attention = PlantAttentionMonitor.make(using StoreStub(Vector(caredFor), Map(caredFor.id -> Vector.empty)), FixedClock(start))
-      .getOrElse(fail("initial attention failed"))
+  test(s"should return ${WateringAttention.Unavailable} when a plant has no watering samples"):
+    val wateringHistory = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
+    val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults   = Vector(samplesRead)
 
-    assertEquals(attention.current.plants, Vector(PlantAttention(caredFor, WateringCadence.Unavailable(sampleCount = 0, maybeElapsed = none))))
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
 
-  test("should give equal timestamps a deterministic zero then unbounded urgency"):
-    val caredFor  = plant("p1", "Office", "Ficus", none)
-    val waterings = Vector.fill(5)(start)
-    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> waterings))
-    val clock     = MutableClock(start)
-    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val expectedWatering   = WateringAttention.Unavailable(sampleCount = 0, maybeElapsed = none)
+    val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector(PlantAttention(plant, expectedWatering)))
 
-    assertEquals(inferredUrgency(attention.current), Urgency.Finite(Duration.ZERO, Duration.ZERO))
-    clock.current.set(start.plusNanos(1))
-    assertEquals(inferredUrgency(attention.refreshAll), Urgency.Unbounded)
+    assertEquals(monitor.current, expectedProjection)
 
-  test("should recompute urgency with time and no new operations"):
-    val fast  = plant("fast", "Office", "Ficus", none)
-    val slow  = plant("slow", "Office", "Monstera", none)
-    val clock = MutableClock(start)
-    val store = StoreStub(
-      Vector(fast, slow),
-      Map(
-        fast.id -> wateringDates(5, Duration.ofDays(10), latest = start.minus(Duration.ofDays(1))),
-        slow.id -> wateringDates(5, Duration.ofDays(20), latest = start.minus(Duration.ofDays(10)))
-      )
-    )
-    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
+  test(s"should return ${WateringAttention.Current} when watering timestamps and elapsed time are equal"):
+    val wateringDates   = Vector.fill(5)(referenceTime)
+    val wateringHistory = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults   = Vector(samplesRead)
 
-    assertEquals(
-      attention.current.plants.map(entry => entry.plant.id -> entry.cadence),
-      Vector(
-        fast.id -> WateringCadence.Inferred(
-          sampleCount = 5,
-          averageInterval = Duration.ofDays(10),
-          elapsed = Duration.ofDays(1),
-          urgency = Urgency.Finite(Duration.ofDays(1), Duration.ofDays(10)),
-          state = WateringState.Current
-        ),
-        slow.id -> WateringCadence.Inferred(
-          sampleCount = 5,
-          averageInterval = Duration.ofDays(20),
-          elapsed = Duration.ofDays(10),
-          urgency = Urgency.Finite(Duration.ofDays(10), Duration.ofDays(20)),
-          state = WateringState.Current
-        )
-      )
-    )
-    clock.current.set(start.plus(Duration.ofDays(20)))
-    assertEquals(
-      refreshedCadences(attention.refreshAll),
-      Vector(
-        fast.id -> Urgency.Finite(Duration.ofDays(21), Duration.ofDays(10)),
-        slow.id -> Urgency.Finite(Duration.ofDays(30), Duration.ofDays(20))
-      )
-    )
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => referenceTime, sampleResults).getOrElse(fail("initial attention failed"))
 
-  test("should recompute after stored edits add or remove a watering"):
-    val caredFor  = plant("p1", "Office", "Ficus", none)
-    val initial   = wateringDates(4, Duration.ofDays(2))
-    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> initial))
-    val attention = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
+    val expectedWatering   = WateringAttention.Current(sampleCount = 5, averageInterval = 0.millis, elapsed = 0.millis)
+    val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector(PlantAttention(plant, expectedWatering)))
 
-    assertUnavailable(attention.current)
-    store.updatedWaterings.set(Map(caredFor.id -> wateringDates(5, Duration.ofDays(2))).some)
-    assertInferred(attention.refreshAll)
-    store.updatedWaterings.set(Map(caredFor.id -> initial).some)
-    assertUnavailable(attention.refreshAll)
+    assertEquals(monitor.current, expectedProjection)
+
+  test(s"should return ${WateringAttention.Overdue} when equal watering timestamps have positive elapsed time"):
+    val measurementTime = referenceTime + 1.milli
+    val wateringDates   = Vector.fill(5)(referenceTime)
+    val wateringHistory = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults   = Vector(samplesRead)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering   = WateringAttention.Overdue(sampleCount = 5, averageInterval = 0.millis, elapsed = 1.milli)
+    val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+
+    assertEquals(monitor.current, expectedProjection)
+
+  test("should recompute elapsed watering time when refreshed without new waterings"):
+    val initialMeasurementTime = referenceTime
+    val averageInterval        = 1.day
+    val initialElapsed         = 12.hours
+    val latestWatering         = initialMeasurementTime - initialElapsed
+    val wateringDates          = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory        = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val sampleResults          = Vector(samplesRead)
+
+    val refs        = Refs()
+    val currentTime = AtomicReference(initialMeasurementTime)
+    val monitor     = buildMonitor(refs, () => currentTime.get(), sampleResults).getOrElse(fail("initial attention failed"))
+
+    val initialWatering   = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = initialElapsed)
+    val initialProjection = AttentionProjection(measuredAt = initialMeasurementTime, plants = Vector(PlantAttention(plant, initialWatering)))
+
+    assertEquals(monitor.current, initialProjection)
+
+    val refreshedMeasurementTime = initialMeasurementTime + 1.day
+    val refreshedElapsed         = initialElapsed + 1.day
+    val refreshedWatering        = WateringAttention.Overdue(sampleCount = 5, averageInterval = averageInterval, elapsed = refreshedElapsed)
+    val refreshedProjection = AttentionProjection(measuredAt = refreshedMeasurementTime, plants = Vector(PlantAttention(plant, refreshedWatering)))
+    val expectedRefresh     = RefreshAttentionResult.Refreshed(refreshedProjection)
+    currentTime.set(refreshedMeasurementTime)
+
+    assertEquals(monitor.refreshAll, expectedRefresh)
+
+  test(s"should infer ${WateringAttention.Current} from a fifth recorded watering when refreshed"):
+    val measurementTime       = referenceTime
+    val averageInterval       = 1.day
+    val elapsedSinceWatering  = 12.hours
+    val latestWatering        = measurementTime - elapsedSinceWatering
+    val beforeWateringDates   = Vector.tabulate(4)(index => latestWatering - averageInterval * index.toLong)
+    val beforeWateringHistory = WateringHistory.from(beforeWateringDates).fold(message => fail(message), identity)
+    val beforeWatering        = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, beforeWateringHistory)))
+    val afterWateringDates    = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val afterWateringHistory  = WateringHistory.from(afterWateringDates).fold(message => fail(message), identity)
+    val afterWatering         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, afterWateringHistory)))
+    val sampleResults         = Vector(beforeWatering, afterWatering)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering      = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
+    val refreshedProjection   = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+    val expectedRefreshResult = RefreshAttentionResult.Refreshed(refreshedProjection)
+
+    assertEquals(monitor.refreshAll, expectedRefreshResult)
+
+  test(s"should return ${WateringAttention.Unavailable} after a recorded watering is removed and attention is refreshed"):
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = 12.hours
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val beforeRemovalDates   = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val beforeRemovalHistory = WateringHistory.from(beforeRemovalDates).fold(message => fail(message), identity)
+    val beforeRemoval        = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, beforeRemovalHistory)))
+    val afterRemovalDates    = Vector.tabulate(4)(index => latestWatering - averageInterval * index.toLong)
+    val afterRemovalHistory  = WateringHistory.from(afterRemovalDates).fold(message => fail(message), identity)
+    val afterRemoval         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, afterRemovalHistory)))
+    val sampleResults        = Vector(beforeRemoval, afterRemoval)
+
+    val refs    = Refs()
+    val monitor = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+
+    val expectedWatering      = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = elapsedSinceWatering.some)
+    val refreshedProjection   = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant, expectedWatering)))
+    val expectedRefreshResult = RefreshAttentionResult.Refreshed(refreshedProjection)
+
+    assertEquals(monitor.refreshAll, expectedRefreshResult)
 
   test("should retain the last complete projection when refresh fails"):
-    val caredFor  = plant("p1", "Office", "Ficus", none)
-    val store     = StoreStub(Vector(caredFor), Map(caredFor.id -> wateringDates(5, Duration.ofDays(2))))
-    val clock     = FixedClock(start.plus(Duration.ofDays(50)))
-    val attention = PlantAttentionMonitor.make(using store, clock).getOrElse(fail("initial attention failed"))
+    val measurementTime      = referenceTime
+    val averageInterval      = 1.day
+    val elapsedSinceWatering = 12.hours
+    val latestWatering       = measurementTime - elapsedSinceWatering
+    val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
+    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant, wateringHistory)))
+    val failure              = RuntimeException("store down")
+    val samplesReadFailed    = GetAttentionSamplesResult.ReadFailed(failure)
+    val sampleResults        = Vector(samplesRead, samplesReadFailed)
 
-    val current = attention.current
+    val refs              = Refs()
+    val monitor           = buildMonitor(refs, () => measurementTime, sampleResults).getOrElse(fail("initial attention failed"))
+    val initialProjection = monitor.current
 
-    val failure = RuntimeException("store down")
-    store.nextSamplesResult.set(GetAttentionSamplesResult.ReadFailed(failure).some)
-    assertEquals(attention.refreshAll, RefreshAttentionResult.RefreshFailed(failure))
-    assertEquals(attention.current, current)
+    val expectedRefreshResult = RefreshAttentionResult.RefreshFailed(failure)
 
-  test("should reject an oversized sample without replacing the current projection"):
-    val caredFor = plant("p1", "Office", "Ficus", none)
-    val samples  = AtomicReference(Vector(PlantAttentionSample(caredFor, wateringDates(5, Duration.ofDays(2)))))
-    val store    = new PlantAttentionStore:
-      override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
-        assertEquals(size, 20)
-        GetAttentionSamplesResult.Read(samples.get())
-    val attention = PlantAttentionMonitor.make(using store, FixedClock(start.plus(Duration.ofDays(50)))).getOrElse(fail("initial attention failed"))
-    val current   = attention.current
-
-    samples.set(Vector(PlantAttentionSample(caredFor, wateringDates(21, Duration.ofDays(2)))))
-
-    attention.refreshAll match
-      case RefreshAttentionResult.RefreshFailed(reason) =>
-        assertEquals(reason.getMessage, "attention store returned 21 waterings; expected at most 20")
-      case other => fail(s"expected RefreshFailed, got $other")
-    assertEquals(attention.current, current)
+    assertEquals(monitor.refreshAll, expectedRefreshResult)
+    assertEquals(monitor.current, initialProjection)
 
   test("should fail construction when the initial projection cannot be materialized"):
-    val failure = RuntimeException("store down")
-    val store   = StoreStub(Vector.empty, Map.empty)
-    store.nextSamplesResult.set(GetAttentionSamplesResult.ReadFailed(failure).some)
+    val failure           = RuntimeException("store down")
+    val samplesReadFailed = GetAttentionSamplesResult.ReadFailed(failure)
 
-    PlantAttentionMonitor.make(using store, FixedClock(start)) match
+    val refs          = Refs()
+    val monitorResult = buildMonitor(refs, getAttentionSamplesResults = Vector(samplesReadFailed))
+
+    monitorResult match
       case Left(reason) => assertEquals(reason, failure)
       case Right(_)     => fail("expected initial attention failure")
 
-  private def inferredState(projection: AttentionProjection) =
-    projection match
-      case AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, _, state)))) => state
-      case other => fail(s"expected one inferred cadence, got $other")
+  extension (instant: Instant)
+    private def +(duration: FiniteDuration) = instant.plus(duration.toJava)
+    private def -(duration: FiniteDuration) = instant.minus(duration.toJava)
 
-  private def inferredState(result: RefreshAttentionResult) =
-    result match
-      case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, _, state))))) =>
-        state
-      case other => fail(s"expected one inferred cadence, got $other")
+  private case class Refs(
+      getAttentionSamplesRequests: AtomicReference[Vector[WateringSampleSize]] = AtomicReference(Vector.empty)
+  )
 
-  private def inferredUrgency(projection: AttentionProjection) =
-    projection match
-      case AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, urgency, _)))) => urgency
-      case other => fail(s"expected one inferred cadence, got $other")
-
-  private def inferredUrgency(result: RefreshAttentionResult) =
-    result match
-      case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, WateringCadence.Inferred(_, _, _, urgency, _))))) =>
-        urgency
-      case other => fail(s"expected one inferred cadence, got $other")
-
-  private def refreshedCadences(result: RefreshAttentionResult) =
-    result match
-      case RefreshAttentionResult.Refreshed(projection) =>
-        projection.plants.map:
-          case PlantAttention(plant, WateringCadence.Inferred(_, _, _, urgency, _)) => plant.id -> urgency
-          case other                                                                => fail(s"expected inferred cadence, got $other")
-      case other => fail(s"expected refreshed projection, got $other")
-
-  private def assertUnavailable(result: RefreshAttentionResult) =
-    result match
-      case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Unavailable)))) => ()
-      case other => fail(s"expected unavailable cadence, got $other")
-
-  private def assertUnavailable(projection: AttentionProjection) =
-    projection match
-      case AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Unavailable))) => ()
-      case other                                                                             => fail(s"expected unavailable cadence, got $other")
-
-  private def assertInferred(result: RefreshAttentionResult) =
-    result match
-      case RefreshAttentionResult.Refreshed(AttentionProjection(_, Vector(PlantAttention(_, _: WateringCadence.Inferred)))) => ()
-      case other => fail(s"expected inferred cadence, got $other")
-
-  private def plant(id: String, location: String, species: String, maybeNickname: Option[Nickname]) =
-    Plant(PlantId(id), PlantDetails(Species(species), maybeNickname, Location(location), substrate, PlantStatus.Active))
-
-  private def wateringDates(
-      count: Int,
-      interval: Duration,
-      latest: Instant = start.plus(Duration.ofDays(48))
+  private def buildMonitor(
+      refs: Refs,
+      clock: Clock^ = () => referenceTime,
+      getAttentionSamplesResults: Vector[GetAttentionSamplesResult] = Vector(GetAttentionSamplesResult.Read(Vector.empty))
   ) =
-    Vector.tabulate(count): index =>
-      latest.minus(interval.multipliedBy(index.toLong))
-
-  final private case class FixedClock(current: Instant) extends Clock:
-    override def now(): Instant = current
-
-  final private case class MutableClock(current: AtomicReference[Instant]) extends Clock:
-    override def now(): Instant = current.get()
-
-  private object MutableClock:
-    def apply(current: Instant): MutableClock = MutableClock(AtomicReference(current))
-
-  final private case class StoreStub(
-      plants: Vector[Plant],
-      waterings: Map[PlantId, Vector[Instant]],
-      nextSamplesResult: AtomicReference[Option[GetAttentionSamplesResult]] = AtomicReference(none),
-      updatedWaterings: AtomicReference[Option[Map[PlantId, Vector[Instant]]]] = AtomicReference(none),
-      wateringRequests: AtomicReference[Vector[WateringSampleSize]] = AtomicReference(Vector.empty)
-  ) extends PlantAttentionStore:
-    override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
-      wateringRequests.updateAndGet(_ :+ size)
-      val currentWaterings = updatedWaterings.get().getOrElse(waterings)
-      nextSamplesResult.getAndSet(none).getOrElse:
-        GetAttentionSamplesResult.Read:
-          plants.map(plant => PlantAttentionSample(plant, currentWaterings.getOrElse(plant.id, Vector.empty).take(size)))
+    val readIndex = AtomicInteger()
+    val store     = new PlantAttentionStore:
+      override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
+        refs.getAttentionSamplesRequests.updateAndGet(_ :+ size)
+        getAttentionSamplesResults
+          .lift(readIndex.getAndIncrement())
+          .orElse(getAttentionSamplesResults.lastOption)
+          .getOrElse(fail("missing getAttentionSamples result"))
+    PlantAttentionMonitor.make(using store, clock)

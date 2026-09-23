@@ -34,24 +34,23 @@ export const unavailableAttention = (
   sampleCount = 0,
 ): Journal.PlantAttention => ({
   plant,
-  cadence: { kind: "unavailable", sampleCount, maybeElapsed: null },
+  watering: { kind: "unavailable", sampleCount, maybeElapsed: null },
 });
 
-export const inferredAttention = (
+export const scoredAttention = (
   plant: Journal.Plant,
-  state: Journal.WateringState = "current",
-  urgency: Journal.Urgency = { kind: "finite", numeratorNanos: "1", denominatorNanos: "1" },
+  kind: "current" | "overdue" | "redAlert" = "current",
+  averageInterval = Journal.milliseconds("86400000"),
+  elapsed = Journal.milliseconds(
+    kind === "current" ? "43200000" : kind === "overdue" ? "90000000" : "176400000",
+  ),
 ): Journal.PlantAttention => ({
   plant,
-  cadence: {
-    kind: "inferred",
+  watering: {
+    kind,
     sampleCount: 5,
-    averageInterval: Journal.duration("PT24H"),
-    elapsed: Journal.duration(
-      state === "current" ? "PT12H" : state === "overdue" ? "PT25H" : "PT49H",
-    ),
-    urgency,
-    state,
+    averageInterval,
+    elapsed,
   },
 });
 
@@ -110,7 +109,6 @@ export const operationsPage = (
 
 export const buildJournal = ({
   getAttentionResults,
-  getPlantsResult = { kind: "read", plants: [] },
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
@@ -129,7 +127,6 @@ export const buildJournal = ({
   operationWindows = [],
 }: {
   getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
-  getPlantsResult?: Journal.GetPlantsResult;
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
   >;
@@ -152,20 +149,14 @@ export const buildJournal = ({
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): Journal.JournalClient => {
-  const attentionResponses =
-    getAttentionResults ??
-    (getPlantsResult.kind === "read"
-      ? ([
-          attentionResult(getPlantsResult.plants.map((plant) => unavailableAttention(plant))),
-        ] as const)
-      : ([{ kind: "readFailed", reason: getPlantsResult.reason }] as const));
+  const attentionResponses = getAttentionResults ?? ([attentionResult([])] as const);
   let attentionReads = 0;
   const operationReads = new Map<string, number>();
 
   return {
     getAttention: () => {
       const read = attentionReads++;
-      return Promise.resolve(attentionResponses[Math.min(read, attentionResponses.length - 1)]!);
+      return Promise.resolve(queuedResult(attentionResponses, read));
     },
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });
@@ -175,7 +166,7 @@ export const buildJournal = ({
 
       const read = operationReads.get(id) ?? 0;
       operationReads.set(id, read + 1);
-      return Promise.resolve(results[Math.min(read, results.length - 1)]!);
+      return Promise.resolve(queuedResult(results, read));
     },
     logOperation: (id, details) => {
       logged.push({ plantId: id, details });
@@ -204,4 +195,10 @@ export const buildJournal = ({
       return Promise.resolve(pesticideEditResult);
     },
   };
+};
+
+const queuedResult = <Result>(results: readonly [Result, ...Result[]], read: number): Result => {
+  const result = results.at(Math.min(read, results.length - 1));
+  if (result === undefined) throw new Error("queued result is empty");
+  return result;
 };

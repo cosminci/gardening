@@ -48,13 +48,16 @@ lazy val root = (project in file("."))
       Wart.IsInstanceOf,
       Wart.OptionPartial,
       Wart.TryPartial,
-      Wart.EitherProjectionPartial
+      Wart.EitherProjectionPartial,
+      Wart.IterableOps,
+      Wart.SeqApply
     ),
     coverageFailOnMinimum      := true,
     coverageMinimumStmtTotal   := 100,
     coverageMinimumBranchTotal := 100,
     coverageExcludedPackages := List(
-      "gardening\\.app\\..*" // composition root and build-time OpenAPI writer; exercised by the packaged runtime, not unit tests
+      "gardening\\.app\\..*", // composition root; exercised by the packaged runtime, not unit tests
+      "gardening\\.adapters\\.http\\.OpenApiDocs" // build-time OpenAPI projection
     ).mkString(";"),
     Test / fork := true,
     // tapir pulls Netty's `netty-all` aggregate, which drags in codecs this app never uses (and

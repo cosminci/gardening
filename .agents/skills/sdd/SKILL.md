@@ -12,7 +12,7 @@ Scale the ceremony to the change: a one-line behaviour tweak needs a short spec 
 
 ## Before you start — create the checklist
 
-Create `.agent-work/<slug>/checklist.md` listing every phase gate below plus every quality-standard item that applies to the artifacts you'll produce. Check items off as you go; before finishing, confirm each is satisfied or explicitly justified. The checklist is your proof of discipline — it is never reviewed and never leaves `.agent-work/`.
+Create `.agent-work/<slug>/checklist.md` listing every phase gate below plus every quality-standard item that applies to the artifacts you'll produce. Include the [implementation authoring checklist](#implementation-authoring-checklist) for every change that writes code. Check items off as you go; before finishing, inspect every touched code and test file against each applicable item, then confirm it is satisfied or explicitly justified. The checklist is your proof of discipline — it is never reviewed and never leaves `.agent-work/`.
 
 ## Phase 1 — Classify
 
@@ -155,6 +155,53 @@ Make the tests pass. Zero warnings, 100% coverage, and green gates are not negot
 
 Gate: all of the above exit zero for the complete implementation. Do not weaken a gate to pass
 (see CLAUDE.md → What agents must not do).
+
+### Implementation authoring checklist
+
+Before declaring any code implementation complete, add these items to the change checklist and
+review every touched code and test file against them. An item may be marked not applicable only
+when the checklist records why.
+
+- [ ] Keep assertions to one physical line in the normal case. Extract clearly named
+  `expectedX` and `actualX` values to do so; further decompose deeply nested expressions into
+  values when needed.
+- [ ] Omit return types from private members unless the member returns `Unit`.
+- [ ] Model tests as small use cases through the trait under test, not as implementation details.
+  A small number of use cases should cover the dominant behavior; add exceptional cases only when
+  they represent real user or domain behavior, and fold them into an existing use case when that
+  makes the behavior clearer.
+- [ ] Order tests, fields, methods, and other declarations from top to bottom and left to right by
+  semantic importance and value.
+- [ ] Use this test-suite shape without exception: reusable, non-trivial mock data first; use-case
+  tests second; then `Ref` values and `buildX` helpers, where `X` is the tested trait.
+- [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
+  cannot leak beyond its boundary and a codec cannot express the format cleanly.
+- [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need
+  only its `buildX` call to set up its harness.
+- [ ] Use Cats syntax where it expresses the value directly, such as `.some` and `.asRight`.
+- [ ] Use named arguments only when the value alone does not make its role clear.
+- [ ] Model invalid states out of the domain. A case class must not permit nonsensical field
+  combinations.
+- [ ] Use coverage exclusions only for `app.*`, OpenAPI document generation, documented
+  scoverage bugs, or genuinely nonsensical adapter implementation paths. Domain use cases must
+  make impossible states unrepresentable rather than excluding them.
+- [ ] Name values for the meaning they establish, not merely the helper call that produced them.
+  Prefer `wateredPlantOperations` over `watered` when the value describes a vector of watered
+  care operations; make construction arguments equally self-describing.
+- [ ] Declare fixtures in semantic scenario order, grouping all values that describe one state or
+  use case together instead of grouping values by their type.
+- [ ] Interpolate semantically meaningful domain values into test names so type or state renames
+  keep descriptions correct; for example, use `s"should return ${WateringAttention.Current} ..."`
+  rather than spelling `Current` in the name.
+- [ ] Put application logic behind a trait named for its behavior, with an identically named
+  companion that exposes `make` and a private `Live<TraitName>` implementation. Tests exercise
+  the trait produced by `make`, never the private implementation.
+- [ ] Let integration tests own their resource lifecycle. A builder constructs a resource only;
+  each use case explicitly acquires, uses, and releases it through the ecosystem's standard
+  resource primitive. Never pass a test body into a callback-style setup helper.
+- [ ] Structure every test as Arrange, Act, Assert: declare fixtures first; then references,
+  build the trait under test, and execute the behavior; finally declare expected values and make
+  assertions. Separate Arrange, Act, and Assert with mandatory blank lines.
 
 ## Phase 5 — Archive and living-doc PR
 

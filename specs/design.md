@@ -8,7 +8,7 @@ plant-journal keeps the household's plants, current substrates, and dated care h
 
 ## Domain model
 
-A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. Plant attention pairs an active Plant with unavailable or inferred watering cadence measured from its latest bounded watering sample. Inferred cadence carries exact urgency and a current, overdue, or red-alert state. Substrate-components and Pesticides are editable nomenclatures with stable identifiers, names, and optional usage information; each Pesticide also has a Fungicide, Insecticide, or Treatment type. A Substrate records component identifiers and percentage shares, while a Care operation records selected pesticide identifiers. Moisture-levels, Action-types, and Pesticide types are fixed English vocabularies; free text remains verbatim.
+A Plant has fixed descriptive details, an active or archived status, and a current Substrate. Each Operation belongs to one Plant and is either a Care operation or a Repot operation. Plant attention pairs an active Plant with unavailable or available watering attention measured from its latest bounded watering sample. Available attention carries the sample count, average interval, and elapsed time and is current, overdue, or red alert. Substrate-components and Pesticides are editable nomenclatures with stable identifiers, names, and optional usage information; each Pesticide also has a Fungicide, Insecticide, or Treatment type. A Substrate records component identifiers and percentage shares, while a Care operation records selected pesticide identifiers. Moisture-levels, Action-types, and Pesticide types are fixed English vocabularies; free text remains verbatim.
 
 ```mermaid
 erDiagram
@@ -35,9 +35,9 @@ erDiagram
 - Substrate-component and pesticide catalogs can be listed, extended, and edited, but not deleted. Editing preserves the stable identifier used by existing substrates and operations.
 - The browser loads both catalogs for operation forms. Substrate-components are defined or edited beside a substrate mix; pesticides are defined or edited beside the pesticide choices. Each editor opens in an adjacent sheet without replacing the operation form.
 - The browser orders plants for display and shows each plant's three latest operations from oldest to newest. Older operations load on demand in ten-row, newest-first pages; loading, empty, and retryable failure states remain inside the expanded history.
-- Plant attention is materialized at startup and refreshed every five minutes. Each measurement reads at most the latest 20 watering timestamps per active Plant; fewer than five makes cadence unavailable, otherwise cadence is the arithmetic mean of consecutive timestamps.
-- Urgency is the exact elapsed/cadence ratio. A Plant is current through its cadence, overdue immediately afterward, and in red alert at cadence plus 24 hours. A zero cadence has zero urgency at zero elapsed and unbounded urgency after time advances.
-- The browser orders unavailable cadence first, then inferred cadence by descending urgency, then location, species, nickname, and Plant identifier. A card whose index slot changes Plant resets its local operation-history state.
+- Plant attention is materialized at startup and refreshed every five minutes. Each measurement reads at most the latest 20 watering timestamps per active Plant; fewer than five makes watering attention unavailable, otherwise the average interval is the arithmetic mean of consecutive timestamps.
+- Urgency is the exact elapsed/average-interval ratio. A Plant is current through its average interval, overdue immediately afterward, and in red alert at the average interval plus 24 hours. A zero average interval has zero urgency at zero elapsed and unbounded urgency after time advances.
+- The browser orders unavailable attention first, then available attention by descending urgency, then location, species, nickname, and Plant identifier. A card whose index slot changes Plant resets its local operation-history state.
 - Recent and historical operations share display semantics and the same editing sheet while retaining layouts suited to cards and rows. Long values wrap, note line breaks remain visible, narrow tables scroll without losing column association, and reduced-motion preferences suppress expansion animation.
 - After a successful log, the browser reloads the journal. A historical edit refreshes its visible row without creating a separate editing path.
 
@@ -51,7 +51,7 @@ erDiagram
 - Database-access failures are reported separately from stored-data corruption.
 - API failures remain explicit failures in the browser; the interface does not present stale writes as successful.
 - A startup attention-read failure prevents startup. A later refresh failure retains the last complete projection and does not stop HTTP service.
-- Plants without waterings remain visible with unavailable cadence. Equal watering timestamps are ordered by Operation identifier. Unknown attention values fail at the HTTP client boundary rather than rendering a reassuring default.
+- Plants without waterings remain visible with unavailable attention. Equal watering timestamps are ordered by Operation identifier. Unknown attention values fail at the HTTP client boundary rather than rendering a reassuring default.
 
 ## Invariants
 

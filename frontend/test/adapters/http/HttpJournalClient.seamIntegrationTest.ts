@@ -4,6 +4,29 @@ import * as Journal from "../../../src/domain/Journal";
 import { jsonResponse, respondingWith } from "./HttpTestSupport";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
+const plant = (id: string, nickname: string | null = null): Journal.Plant => ({
+  id: Journal.plantId(id),
+  details: {
+    species: Journal.species("Ficus lyrata"),
+    maybeNickname: nickname === null ? null : Journal.nickname(nickname),
+    location: Journal.location("Balcony"),
+    substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    status: "active",
+  },
+});
+const wirePlant = (value: Journal.Plant) => ({
+  id: value.id,
+  details: {
+    species: value.details.species,
+    nickname: value.details.maybeNickname,
+    location: value.details.location,
+    substrate: value.details.substrate.map((part) => ({
+      componentId: part.component,
+      share: part.share,
+    })),
+    status: value.details.status,
+  },
+});
 const expectKind = (result: Promise<unknown>, kind: string) =>
   expect(result).resolves.toMatchObject({ kind });
 const expectResult = (result: Promise<unknown>, expected: object) =>
@@ -11,16 +34,12 @@ const expectResult = (result: Promise<unknown>, expected: object) =>
 
 describe("HttpJournalClient", () => {
   it("should translate the attention projection into domain values", async () => {
-    const plant = (id: string, nickname: string | null = null) => ({
-      id,
-      details: {
-        species: "Ficus lyrata",
-        nickname,
-        location: "Balcony",
-        substrate: [{ componentId: perliteId, share: 100 }],
-        status: "active" as const,
-      },
-    });
+    const noSamples = plant("no-samples");
+    const unknown = plant("unknown");
+    const finite = plant("finite", "Fern");
+    const unbounded = plant("unbounded");
+    const current = plant("current");
+    const redAlert = plant("red-alert");
     const requests: Request[] = [];
     const journal = makeHttpJournalClient(
       respondingWith(
@@ -29,35 +48,48 @@ describe("HttpJournalClient", () => {
             measuredAt: "2026-01-10T00:00:00Z",
             plants: [
               {
-                plant: plant("unknown"),
-                sampleCount: 4,
-                cadenceAvailable: false,
-                averageInterval: null,
-                elapsed: null,
-                urgency: null,
-                state: null,
+                plant: wirePlant(noSamples),
+                watering: { kind: "unavailable", sampleCount: 0, elapsedMillis: null },
               },
               {
-                plant: plant("finite", "Fern"),
-                sampleCount: 5,
-                cadenceAvailable: true,
-                averageInterval: "PT24H",
-                elapsed: "PT25H",
-                urgency: {
-                  unbounded: false,
-                  numeratorNanos: "90000000000000",
-                  denominatorNanos: "86400000000000",
+                plant: wirePlant(unknown),
+                watering: { kind: "unavailable", sampleCount: 4, elapsedMillis: "86400000" },
+              },
+              {
+                plant: wirePlant(finite),
+                watering: {
+                  kind: "overdue",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "90000000",
                 },
-                state: "overdue",
               },
               {
-                plant: plant("unbounded"),
-                sampleCount: 5,
-                cadenceAvailable: true,
-                averageInterval: "PT0S",
-                elapsed: "PT1S",
-                urgency: { unbounded: true, numeratorNanos: null, denominatorNanos: null },
-                state: "redAlert",
+                plant: wirePlant(unbounded),
+                watering: {
+                  kind: "overdue",
+                  sampleCount: 5,
+                  averageIntervalMillis: "0",
+                  elapsedMillis: "1000",
+                },
+              },
+              {
+                plant: wirePlant(current),
+                watering: {
+                  kind: "current",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "43200000",
+                },
+              },
+              {
+                plant: wirePlant(redAlert),
+                watering: {
+                  kind: "redAlert",
+                  sampleCount: 5,
+                  averageIntervalMillis: "86400000",
+                  elapsedMillis: "176400000",
+                },
               },
             ],
           }),
@@ -66,91 +98,120 @@ describe("HttpJournalClient", () => {
       ),
     );
 
-    await expect(journal.getAttention()).resolves.toMatchObject({
+    await expect(journal.getAttention()).resolves.toEqual({
       kind: "read",
       projection: {
-        measuredAt: "2026-01-10T00:00:00Z",
+        measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
         plants: [
           {
-            plant: { id: "unknown" },
-            cadence: { kind: "unavailable", sampleCount: 4, maybeElapsed: null },
-          },
-          {
-            plant: { id: "finite", details: { maybeNickname: "Fern" } },
-            cadence: {
-              kind: "inferred",
-              sampleCount: 5,
-              averageInterval: "PT24H",
-              elapsed: "PT25H",
-              urgency: {
-                kind: "finite",
-                numeratorNanos: "90000000000000",
-                denominatorNanos: "86400000000000",
-              },
-              state: "overdue",
+            plant: noSamples,
+            watering: {
+              kind: "unavailable",
+              sampleCount: 0,
+              maybeElapsed: null,
             },
           },
           {
-            plant: { id: "unbounded" },
-            cadence: {
-              kind: "inferred",
-              urgency: { kind: "unbounded" },
-              state: "redAlert",
+            plant: unknown,
+            watering: {
+              kind: "unavailable",
+              sampleCount: 4,
+              maybeElapsed: Journal.milliseconds("86400000"),
+            },
+          },
+          {
+            plant: finite,
+            watering: {
+              kind: "overdue",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("90000000"),
+            },
+          },
+          {
+            plant: unbounded,
+            watering: {
+              kind: "overdue",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("0"),
+              elapsed: Journal.milliseconds("1000"),
+            },
+          },
+          {
+            plant: current,
+            watering: {
+              kind: "current",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("43200000"),
+            },
+          },
+          {
+            plant: redAlert,
+            watering: {
+              kind: "redAlert",
+              sampleCount: 5,
+              averageInterval: Journal.milliseconds("86400000"),
+              elapsed: Journal.milliseconds("176400000"),
             },
           },
         ],
       },
     });
-    expect(new URL(requests[0]!.url).pathname).toBe("/attention");
+    expect(new URL(requests.at(0)?.url ?? "").pathname).toBe("/attention");
   });
 
-  it("should reject an incomplete attention projection", async () => {
-    const journal = makeHttpJournalClient(
-      respondingWith([jsonResponse({ measuredAt: "2026-01-10T00:00:00Z" })]),
-    );
-
-    await expect(journal.getAttention()).resolves.toMatchObject({
-      kind: "readFailed",
-      reason: new Error("attention projection is missing plants"),
-    });
-  });
-
-  it("should reject an unknown watering state", async () => {
+  it("should reject malformed watering-attention measurements", async () => {
     const journal = makeHttpJournalClient(
       respondingWith([
         jsonResponse({
           measuredAt: "2026-01-10T00:00:00Z",
           plants: [
             {
-              plant: {
-                id: "p1",
-                details: {
-                  species: "Ficus lyrata",
-                  nickname: null,
-                  location: "Balcony",
-                  substrate: [{ componentId: perliteId, share: 100 }],
-                  status: "active",
-                },
+              plant: wirePlant(plant("p1")),
+              watering: {
+                kind: "overdue",
+                sampleCount: 5,
+                averageIntervalMillis: "86400000",
+                elapsedMillis: "soon",
               },
-              sampleCount: 5,
-              cadenceAvailable: true,
-              averageInterval: "PT24H",
-              elapsed: "PT25H",
-              urgency: {
-                unbounded: false,
-                numeratorNanos: "90000000000000",
-                denominatorNanos: "86400000000000",
-              },
-              state: "futureState",
             },
           ],
         }),
       ]),
     );
 
-    await expect(journal.getAttention()).resolves.toMatchObject({
+    await expect(journal.getAttention()).resolves.toEqual({
       kind: "readFailed",
-      reason: new Error("invalid watering state: futureState"),
+      reason: new RangeError("invalid milliseconds: soon"),
+    });
+  });
+
+  it("should reject an unknown watering-attention classification", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({
+          measuredAt: "2026-01-10T00:00:00Z",
+          plants: [
+            {
+              plant: wirePlant(plant("p1")),
+              watering: {
+                kind: "futureState",
+                sampleCount: 5,
+                averageIntervalMillis: "86400000",
+                elapsedMillis: "90000000",
+              },
+            },
+          ],
+        }),
+      ]),
+    );
+
+    await expect(journal.getAttention()).resolves.toEqual({
+      kind: "readFailed",
+      reason: new Error(
+        'invalid watering attention: {"kind":"futureState","sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"90000000"}',
+      ),
     });
   });
 
@@ -347,18 +408,30 @@ describe("HttpJournalClient", () => {
         "PUT /operations/o1",
       ],
     );
-    await expect(requests[0]!.json()).resolves.toEqual({
-      kind: "care",
-      actions: ["watered"],
-      pesticides: ["00000000-0000-4000-8001-000000000003"],
-      moisture: "wet",
-      notes: null,
-    });
-    await expect(requests[1]!.json()).resolves.toEqual({
-      kind: "repot",
-      substrate: [{ componentId: perliteId, share: 80 }],
-      notes: "Fresh",
-    });
+    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+      {
+        kind: "care",
+        actions: ["watered"],
+        pesticides: ["00000000-0000-4000-8001-000000000003"],
+        moisture: "wet",
+        notes: null,
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+      {
+        kind: "repot",
+        substrate: [{ componentId: perliteId, share: 80 }],
+        notes: "Fresh",
+      },
+    ]);
   });
 
   it("should send substrate component and pesticide catalog changes", async () => {
@@ -425,18 +498,20 @@ describe("HttpJournalClient", () => {
         `PUT /pesticides/${pesticide}`,
       ],
     );
-    await expect(requests[0]!.json()).resolves.toEqual({ name: "Perlite", info: "Adds drainage" });
-    await expect(requests[1]!.json()).resolves.toEqual({ name: "Perlite fine", info: null });
-    await expect(requests[2]!.json()).resolves.toEqual({
-      name: "Neem oil",
-      type: "insecticide",
-      info: "Dilute first",
-    });
-    await expect(requests[3]!.json()).resolves.toEqual({
-      name: "Neem",
-      type: "insecticide",
-      info: null,
-    });
+    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+      { name: "Perlite", info: "Adds drainage" },
+      { name: "Perlite fine", info: null },
+      {
+        name: "Neem oil",
+        type: "insecticide",
+        info: "Dilute first",
+      },
+      {
+        name: "Neem",
+        type: "insecticide",
+        info: null,
+      },
+    ]);
   });
 
   it("should translate HTTP and network failures into explicit domain failures", async () => {

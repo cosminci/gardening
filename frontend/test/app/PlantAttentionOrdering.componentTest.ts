@@ -1,95 +1,177 @@
 import { describe, expect, it } from "vitest";
 import { orderPlantAttention } from "../../src/app/PlantAttentionOrdering";
-import {
-  location,
-  nickname,
-  plantId,
-  species,
-  type Plant,
-  type PlantAttention,
-  type Urgency,
-} from "../../src/domain/Journal";
-import * as JournalFixtures from "./JournalTestSupport";
+import * as Journal from "../../src/domain/Journal";
 
 describe("plant attention ordering", () => {
-  const plant = (
-    id: string,
-    plantLocation = "Office",
-    plantSpecies = "Ficus",
-    plantNickname: string | null = null,
-  ): Plant => ({
-    ...JournalFixtures.ficus(),
-    id: plantId(id),
+  const referencePlant: Journal.Plant = {
+    id: Journal.plantId("plant"),
     details: {
-      ...JournalFixtures.ficus().details,
-      location: location(plantLocation),
-      species: species(plantSpecies),
-      maybeNickname: plantNickname === null ? null : nickname(plantNickname),
+      species: Journal.species("Ficus"),
+      maybeNickname: null,
+      location: Journal.location("Office"),
+      substrate: Journal.substrate([]),
+      status: "active",
     },
+  };
+
+  it("should place plants with unknown watering cadence before plants with scored watering attention", () => {
+    const unknownPlant = { ...referencePlant, id: Journal.plantId("unknown") };
+    const scoredPlant = { ...referencePlant, id: Journal.plantId("scored") };
+    const unknown: Journal.PlantAttention = {
+      plant: unknownPlant,
+      watering: { kind: "unavailable", sampleCount: 4, maybeElapsed: null },
+    };
+    const scored: Journal.PlantAttention = {
+      plant: scoredPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("172800000"),
+        elapsed: Journal.milliseconds("86400000"),
+      },
+    };
+
+    const orderedPlantIds = orderPlantAttention([scored, unknown]).map(({ plant }) => plant.id);
+
+    expect(orderedPlantIds).toEqual(["unknown", "scored"]);
   });
 
-  const inferred = (value: Plant, urgency: Urgency): PlantAttention =>
-    JournalFixtures.inferredAttention(value, "current", urgency);
+  it("should order scored plants by their exact watering-attention ratio", () => {
+    const lessUrgentPlant = { ...referencePlant, id: Journal.plantId("less-urgent") };
+    const moreUrgentPlant = { ...referencePlant, id: Journal.plantId("more-urgent") };
+    const lessUrgent: Journal.PlantAttention = {
+      plant: lessUrgentPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("2"),
+        elapsed: Journal.milliseconds("1"),
+      },
+    };
+    const moreUrgent: Journal.PlantAttention = {
+      plant: moreUrgentPlant,
+      watering: {
+        kind: "overdue",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("4"),
+        elapsed: Journal.milliseconds("6"),
+      },
+    };
 
-  const finite = (numeratorNanos: string, denominatorNanos: string): Urgency => ({
-    kind: "finite",
-    numeratorNanos,
-    denominatorNanos,
+    const orderedPlantIds = orderPlantAttention([lessUrgent, moreUrgent]).map(
+      ({ plant }) => plant.id,
+    );
+
+    expect(orderedPlantIds).toEqual(["more-urgent", "less-urgent"]);
   });
 
-  const ids = (values: readonly PlantAttention[]) =>
-    orderPlantAttention(values).map(({ plant: value }) => value.id);
+  it("should place a plant with elapsed time and no average interval above recently watered plants", () => {
+    const elapsedPlant = { ...referencePlant, id: Journal.plantId("elapsed") };
+    const recentlyWateredPlant = {
+      ...referencePlant,
+      id: Journal.plantId("recently-watered"),
+    };
+    const elapsed: Journal.PlantAttention = {
+      plant: elapsedPlant,
+      watering: {
+        kind: "overdue",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("0"),
+        elapsed: Journal.milliseconds("1"),
+      },
+    };
+    const recentlyWatered: Journal.PlantAttention = {
+      plant: recentlyWateredPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("0"),
+        elapsed: Journal.milliseconds("0"),
+      },
+    };
 
-  it("should order cadence and exact urgency in both input directions", () => {
-    const unknown = JournalFixtures.unavailableAttention(plant("unknown"));
-    const unbounded = inferred(plant("unbounded"), { kind: "unbounded" });
-    const high = inferred(plant("high"), finite("3", "2"));
-    const equal = inferred(plant("equal"), finite("6", "4"));
-    const low = inferred(plant("low"), finite("1", "2"));
-    const zero = inferred(plant("zero"), finite("0", "0"));
+    const orderedPlantIds = orderPlantAttention([recentlyWatered, elapsed]).map(
+      ({ plant }) => plant.id,
+    );
 
-    expect(ids([high, unknown])).toEqual(["unknown", "high"]);
-    expect(ids([unknown, high])).toEqual(["unknown", "high"]);
-    expect(ids([high, unbounded])).toEqual(["unbounded", "high"]);
-    expect(ids([unbounded, high])).toEqual(["unbounded", "high"]);
-    expect(ids([unbounded, unbounded])).toEqual(["unbounded", "unbounded"]);
-    expect(ids([low, high])).toEqual(["high", "low"]);
-    expect(ids([high, low])).toEqual(["high", "low"]);
-    expect(ids([equal, high])).toEqual(["equal", "high"]);
-    expect(ids([zero, low])).toEqual(["low", "zero"]);
-    expect(ids([low, zero])).toEqual(["low", "zero"]);
+    expect(orderedPlantIds).toEqual(["elapsed", "recently-watered"]);
   });
 
-  it("should order ties by location, species, nickname, then identifier", () => {
-    const beforeByLocation = JournalFixtures.unavailableAttention(plant("location-a", "Balcony"));
-    const afterByLocation = JournalFixtures.unavailableAttention(plant("location-z", "Kitchen"));
-    const beforeBySpecies = JournalFixtures.unavailableAttention(
-      plant("species-a", "Office", "Ficus"),
-    );
-    const afterBySpecies = JournalFixtures.unavailableAttention(
-      plant("species-z", "Office", "Monstera"),
-    );
-    const beforeByNickname = JournalFixtures.unavailableAttention(
-      plant("nickname-a", "Office", "Monstera"),
-    );
-    const afterByNickname = JournalFixtures.unavailableAttention(
-      plant("nickname-z", "Office", "Monstera", "Monty"),
-    );
-    const beforeById = JournalFixtures.unavailableAttention(
-      plant("id-a", "Office", "Monstera", "Monty"),
-    );
-    const afterById = JournalFixtures.unavailableAttention(
-      plant("id-z", "Office", "Monstera", "Monty"),
+  it("should use plant details when scored plants have equal watering attention", () => {
+    const firstPlant = { ...referencePlant, id: Journal.plantId("first") };
+    const secondPlant = { ...referencePlant, id: Journal.plantId("second") };
+    const first: Journal.PlantAttention = {
+      plant: firstPlant,
+      watering: {
+        kind: "overdue",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("2"),
+        elapsed: Journal.milliseconds("3"),
+      },
+    };
+    const second: Journal.PlantAttention = {
+      plant: secondPlant,
+      watering: {
+        kind: "overdue",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("4"),
+        elapsed: Journal.milliseconds("6"),
+      },
+    };
+
+    const orderedPlantIds = orderPlantAttention([second, first]).map(({ plant }) => plant.id);
+
+    expect(orderedPlantIds).toEqual(["first", "second"]);
+  });
+
+  it("should order equal watering attention by location, species, nickname, then identifier", () => {
+    const watering: Journal.WateringAttention = {
+      kind: "unavailable",
+      sampleCount: 4,
+      maybeElapsed: null,
+    };
+    const kitchenFicus = {
+      ...referencePlant,
+      id: Journal.plantId("kitchen-ficus"),
+      details: { ...referencePlant.details, location: Journal.location("Kitchen") },
+    };
+    const officeFicus = {
+      ...referencePlant,
+      id: Journal.plantId("office-ficus"),
+      details: { ...referencePlant.details, location: Journal.location("Office") },
+    };
+    const officeMonstera = {
+      ...referencePlant,
+      id: Journal.plantId("office-monstera"),
+      details: {
+        ...referencePlant.details,
+        location: Journal.location("Office"),
+        species: Journal.species("Monstera"),
+      },
+    };
+    const officeMontyA = {
+      ...referencePlant,
+      id: Journal.plantId("office-monty-a"),
+      details: {
+        ...referencePlant.details,
+        location: Journal.location("Office"),
+        species: Journal.species("Monstera"),
+        maybeNickname: Journal.nickname("Monty"),
+      },
+    };
+    const officeMontyZ = { ...officeMontyA, id: Journal.plantId("office-monty-z") };
+    const attention = [officeMontyZ, officeMontyA, officeMonstera, officeFicus, kitchenFicus].map(
+      (plant) => ({ plant, watering }),
     );
 
-    expect(ids([afterByLocation, beforeByLocation])).toEqual(["location-a", "location-z"]);
-    expect(ids([beforeByLocation, afterByLocation])).toEqual(["location-a", "location-z"]);
-    expect(ids([afterBySpecies, beforeBySpecies])).toEqual(["species-a", "species-z"]);
-    expect(ids([beforeBySpecies, afterBySpecies])).toEqual(["species-a", "species-z"]);
-    expect(ids([afterByNickname, beforeByNickname])).toEqual(["nickname-a", "nickname-z"]);
-    expect(ids([beforeByNickname, afterByNickname])).toEqual(["nickname-a", "nickname-z"]);
-    expect(ids([afterById, beforeById])).toEqual(["id-a", "id-z"]);
-    expect(ids([beforeById, afterById])).toEqual(["id-a", "id-z"]);
-    expect(ids([beforeById, beforeById])).toEqual(["id-a", "id-a"]);
+    const orderedPlantIds = orderPlantAttention(attention).map(({ plant }) => plant.id);
+
+    expect(orderedPlantIds).toEqual([
+      "kitchen-ficus",
+      "office-ficus",
+      "office-monstera",
+      "office-monty-a",
+      "office-monty-z",
+    ]);
   });
 });

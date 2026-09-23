@@ -27,10 +27,6 @@ enum GetPlantResult:
   case RecordMissing
   case ReadFailed(reason: Throwable)
 
-enum GetPlantsResult:
-  case Read(plants: Vector[Plant])
-  case ReadFailed(reason: Throwable)
-
 enum GetOperationResult:
   case Read(operation: Operation)
   case RecordMissing

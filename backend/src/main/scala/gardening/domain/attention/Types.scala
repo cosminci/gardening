@@ -2,37 +2,48 @@ package gardening.domain.attention
 
 import gardening.domain.Plant
 import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.collection.MaxLength
 import io.github.iltotore.iron.constraint.numeric.Interval
 
-import java.time.{Duration, Instant}
+import java.time.Instant
+import scala.concurrent.duration.*
 
 type WateringSampleSize  = Int :| Interval.Closed[1, 20]
 type WateringSampleCount = Int :| Interval.Closed[0, 20]
+type WateringHistory     = Vector[Instant] :| MaxLength[20]
 
-final case class PlantAttentionSample(plant: Plant, wateringDates: Vector[Instant])
+object WateringHistory:
+  def from(dates: Vector[Instant]): Either[String, Vector[Instant] :| MaxLength[20]] = dates.refineEither[MaxLength[20]]
+
+  extension (history: WateringHistory)
+    def sampleCount: WateringSampleCount = history.size.assume[Interval.Closed[0, 20]]
+
+final case class PlantAttentionSample(plant: Plant, wateringDates: WateringHistory)
 
 enum GetAttentionSamplesResult:
   case Read(samples: Vector[PlantAttentionSample])
   case ReadFailed(reason: Throwable)
 
-enum Urgency:
-  case Finite(elapsed: Duration, averageInterval: Duration)
-  case Unbounded
+sealed trait WateringAttention:
+  def sampleCount: WateringSampleCount
 
-enum WateringState:
-  case Current, Overdue, RedAlert
+object WateringAttention:
+  final case class Unavailable(sampleCount: WateringSampleCount, maybeElapsed: Option[FiniteDuration]) extends WateringAttention
 
-enum WateringCadence:
-  case Unavailable(sampleCount: WateringSampleCount, maybeElapsed: Option[Duration])
-  case Inferred(
-      sampleCount: WateringSampleCount,
-      averageInterval: Duration,
-      elapsed: Duration,
-      urgency: Urgency,
-      state: WateringState
-  )
+  sealed trait Available extends WateringAttention:
+    def averageInterval: FiniteDuration
+    def elapsed: FiniteDuration
 
-final case class PlantAttention(plant: Plant, cadence: WateringCadence)
+    def assess =
+      if elapsed >= averageInterval + 24.hours then RedAlert(sampleCount, averageInterval, elapsed)
+      else if elapsed > averageInterval then Overdue(sampleCount, averageInterval, elapsed)
+      else Current(sampleCount, averageInterval, elapsed)
+
+  final case class Current(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration)  extends Available
+  final case class Overdue(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration)  extends Available
+  final case class RedAlert(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+
+final case class PlantAttention(plant: Plant, watering: WateringAttention)
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
 
 enum RefreshAttentionResult:

@@ -9,34 +9,32 @@ Derive plant attention from bounded watering history and publish it for presenta
 
 ## What & Why
 
-- Active plants are ordered by display name in the browser; watering cadence, urgency, alert state, and attention ordering are not modelled.
+- Active plants are ordered by display name in the browser; watering cadence, attention classification, and attention ordering are not modelled.
 - The backend will own materialized attention measurements through a vendor-neutral read port. The browser will order those measurements for presentation; a future metrics adapter can consume them without UI ordering semantics.
 
 ## Domain / Design Notes
 
 ```scala
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
-final case class PlantAttention(plant: Plant, cadence: WateringCadence)
+final case class PlantAttention(plant: Plant, watering: WateringAttention)
 type WateringSampleCount = Int :| Interval.Closed[0, 20]
 type WateringSampleSize = Int :| Interval.Closed[1, 20]
 type OperationPageSize = Int :| Interval.Closed[1, 10]
 
-enum Urgency:
-  case Finite(elapsed: Duration, averageInterval: Duration)
-  case Unbounded
+sealed trait WateringAttention:
+  def sampleCount: WateringSampleCount
 
-enum WateringCadence:
-  case Unavailable(sampleCount: WateringSampleCount, maybeElapsed: Option[Duration])
-  case Inferred(
-      sampleCount: WateringSampleCount,
-      averageInterval: Duration,
-      elapsed: Duration,
-      urgency: Urgency,
-      state: WateringState
-  )
+object WateringAttention:
+  final case class Unavailable(sampleCount: WateringSampleCount, maybeElapsed: Option[FiniteDuration]) extends WateringAttention
 
-enum WateringState:
-  case Current, Overdue, RedAlert
+  sealed trait Available extends WateringAttention:
+    def averageInterval: FiniteDuration
+    def elapsed: FiniteDuration
+
+  object Available:
+    final case class Current(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+    final case class Overdue(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
+    final case class RedAlert(sampleCount: WateringSampleCount, averageInterval: FiniteDuration, elapsed: FiniteDuration) extends Available
 
 enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)
@@ -52,10 +50,10 @@ trait PlantAttentionStore:
 
 - `WateringSampleCount` is 0–20. The attention-owned persistence port reads every active Plant together with up to the requested number of its watering dates. Watering selection, timestamp-descending order, identifier tie-break, and the per-plant limit are part of that domain-facing contract. SQLite returns one row per Plant and uses the operation index to seek each active Plant's bounded recent history.
 - Plant values are shared domain concepts. Journal mutation and retrieval contracts, attention persistence reads, and attention calculation and projection contracts remain separate subdomains. A persistence adapter may implement both subdomain ports without making either domain depend on the other.
-- Cadence uses the latest 5–20 watering-selected operations. Fewer than five is unavailable; otherwise the average is the arithmetic mean of consecutive timestamps.
-- Urgency is the exact elapsed/average ratio, not a floating-point approximation. A zero average has zero urgency at zero elapsed and unbounded urgency after time advances.
-- State is `Current` through the average interval, `Overdue` immediately after it, and `RedAlert` at average plus 24 hours. Unknown cadence has no state.
-- Browser ordering is unknown cadence first, then inferred cadence by exact urgency descending. Ties use location, species, nickname with absence before presence, then plant identifier, all ascending.
+- Watering attention uses the latest 5–20 watering-selected operations. Fewer than five is unavailable; otherwise the average is the arithmetic mean of consecutive timestamps.
+- `WateringAttention` is the complete classification: `Current` through the average interval, `Overdue` immediately after it, and `RedAlert` at average plus 24 hours. `Unavailable` cannot carry an overdue or warning classification.
+- Browser ordering derives the exact elapsed/average ratio from scored attention rather than receiving a second urgency classification. A zero average sorts as zero attention at zero elapsed and unbounded attention after time advances.
+- Browser ordering is unavailable attention first, then scored attention by the derived ratio descending. Ties use location, species, nickname with absence before presence, then plant identifier, all ascending.
 - Attention is materialized during startup and recomputed every five minutes. Startup failure aborts the application; later failure retains the prior measurement. Journal changes become visible on the next recomputation, and publication replaces the snapshot atomically.
 - HTTP translates attention outside the core without adding presentation order. The browser reads it on load and after a successful operation save; a future metrics adapter can read the same port without determining scrape versus push now.
 
@@ -76,7 +74,7 @@ trait PlantAttentionStore:
 - At the average interval a plant is current; immediately after it is overdue; immediately below average plus 24 hours it remains overdue; at and above that threshold it is red alert. Unknown cadence has no overdue or red-alert state.
 - Startup and each five-minute interval publish a newly measured complete projection, including watering logs and edits that changed stored qualifying operations since the prior measurement. Startup failure aborts the application; a later refresh failure never exposes a partial projection.
 - The browser orders attention values and preserves backend state. Red-alert cards show a large `!` with non-live `Watering red alert` text; overdue and unknown cadence are distinct without relying on color. Card controls, keyboard focus, desktop layout, and landscape-mobile layout remain usable after reorder.
-- The operation-read API remains bounded for all callers. The attention read port contains measurement time, sample count, average interval, elapsed time, urgency, and state as available, without metrics-vendor dependencies.
+- The operation-read API remains bounded for all callers. The attention read port contains measurement time and one watering classification carrying its applicable sample count, average interval, and elapsed time, without metrics-vendor dependencies.
 
 ## Doc Sync
 

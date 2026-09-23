@@ -14,7 +14,6 @@ import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
-  def getPlants: GetPlantsResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def logOperation(plantId: PlantId, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
@@ -32,8 +31,6 @@ object PlantJournal:
 
   private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^, clock: Clock^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
-
-    override def getPlants: GetPlantsResult = store.getPlants
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)

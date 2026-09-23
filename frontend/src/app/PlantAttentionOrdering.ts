@@ -1,31 +1,43 @@
 import type * as Journal from "../domain/Journal";
 
 const compareText = (first: string, second: string) =>
-  first < second ? -1 : first > second ? 1 : 0;
+  Number(first > second) - Number(first < second);
 
-const compareUrgency = (first: Journal.Urgency, second: Journal.Urgency) => {
-  if (first.kind === "unbounded") return second.kind === "unbounded" ? 0 : -1;
-  if (second.kind === "unbounded") return 1;
+interface AttentionScore {
+  readonly unbounded: boolean;
+  readonly numerator: bigint;
+  readonly denominator: bigint;
+}
 
-  const ratio = (urgency: Extract<Journal.Urgency, { kind: "finite" }>) => {
-    const denominator = BigInt(urgency.denominatorNanos);
-    return denominator === 0n
-      ? { numerator: 0n, denominator: 1n }
-      : { numerator: BigInt(urgency.numeratorNanos), denominator };
+const attentionScore = (watering: Journal.WateringAttention): AttentionScore | null => {
+  if (watering.kind === "unavailable") return null;
+  const zeroAverage = watering.averageInterval === 0n;
+  const unbounded = zeroAverage && watering.elapsed > 0n;
+  return {
+    unbounded,
+    numerator: watering.elapsed,
+    denominator: unbounded ? 0n : zeroAverage ? 1n : watering.averageInterval,
   };
-  const firstRatio = ratio(first);
-  const secondRatio = ratio(second);
-  const firstProduct = firstRatio.numerator * secondRatio.denominator;
-  const secondProduct = secondRatio.numerator * firstRatio.denominator;
-  return firstProduct > secondProduct ? -1 : firstProduct < secondProduct ? 1 : 0;
+};
+
+const compareAttentionScores = (first: AttentionScore, second: AttentionScore) => {
+  const unbounded = Number(second.unbounded) - Number(first.unbounded);
+  if (unbounded !== 0) return unbounded;
+
+  const firstProduct = first.numerator * second.denominator;
+  const secondProduct = second.numerator * first.denominator;
+  return Number(firstProduct < secondProduct) - Number(firstProduct > secondProduct);
 };
 
 const comparePlantAttention = (first: Journal.PlantAttention, second: Journal.PlantAttention) => {
-  if (first.cadence.kind === "unavailable" && second.cadence.kind === "inferred") return -1;
-  if (first.cadence.kind === "inferred" && second.cadence.kind === "unavailable") return 1;
-  if (first.cadence.kind === "inferred" && second.cadence.kind === "inferred") {
-    const urgency = compareUrgency(first.cadence.urgency, second.cadence.urgency);
-    if (urgency !== 0) return urgency;
+  const firstScore = attentionScore(first.watering);
+  const secondScore = attentionScore(second.watering);
+
+  const availability = Number(firstScore !== null) - Number(secondScore !== null);
+  if (availability !== 0) return availability;
+  if (firstScore !== null && secondScore !== null) {
+    const attention = compareAttentionScores(firstScore, secondScore);
+    if (attention !== 0) return attention;
   }
 
   const firstDetails = first.plant.details;

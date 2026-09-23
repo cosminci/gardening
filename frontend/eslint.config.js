@@ -36,10 +36,4 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx}"],
     ...solid,
   },
-  {
-    files: ["test/**/*.{ts,tsx}"],
-    rules: {
-      "@typescript-eslint/no-non-null-assertion": "off",
-    },
-  },
 );

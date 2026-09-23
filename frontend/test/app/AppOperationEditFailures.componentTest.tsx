@@ -1,13 +1,20 @@
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
-import { buildJournal, ficus, operationsPage, repot } from "./JournalTestSupport";
+import {
+  attentionResult,
+  buildJournal,
+  ficus,
+  operationsPage,
+  repot,
+  unavailableAttention,
+} from "./JournalTestSupport";
 
 describe("operation edit failures", () => {
   it("should report when an operation no longer exists", async () => {
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [attentionResult([unavailableAttention(ficus())])],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationMissing" },
     });
@@ -25,7 +32,7 @@ describe("operation edit failures", () => {
   it("should report an attempt to change an operation type", async () => {
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [attentionResult([unavailableAttention(ficus())])],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationTypeMismatch" },
     });
@@ -46,7 +53,7 @@ describe("operation edit failures", () => {
     const reason = new Error("private details");
     const existing = repot("o1", "2026-03-03T00:00:00Z");
     const journal = buildJournal({
-      getPlantsResult: { kind: "read", plants: [ficus()] },
+      getAttentionResults: [attentionResult([unavailableAttention(ficus())])],
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "editFailed", reason },
     });

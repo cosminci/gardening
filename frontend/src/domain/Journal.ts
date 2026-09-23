@@ -7,7 +7,7 @@ export type Nickname = Brand<string, "Nickname">;
 export type Location = Brand<string, "Location">;
 export type Note = Brand<string, "Note">;
 export type Instant = Brand<string, "Instant">;
-export type Duration = Brand<string, "Duration">;
+export type Milliseconds = Brand<bigint, "Milliseconds">;
 export type Percentage = Brand<number, "Percentage">;
 export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
@@ -21,7 +21,10 @@ export const nickname = (value: string): Nickname => value as Nickname;
 export const location = (value: string): Location => value as Location;
 export const note = (value: string): Note => value as Note;
 export const instant = (value: string): Instant => value as Instant;
-export const duration = (value: string): Duration => value as Duration;
+export const milliseconds = (value: string): Milliseconds => {
+  if (!/^[0-9]+$/.test(value)) throw new RangeError(`invalid milliseconds: ${value}`);
+  return BigInt(value) as Milliseconds;
+};
 export const percentage = (value: number): Percentage => value as Percentage;
 export const substrateComponentId = (value: string): SubstrateComponentId =>
   value as SubstrateComponentId;
@@ -83,30 +86,34 @@ export interface Plant {
   readonly details: PlantDetails;
 }
 
-export type Urgency =
-  | { readonly kind: "finite"; readonly numeratorNanos: string; readonly denominatorNanos: string }
-  | { readonly kind: "unbounded" };
-
-export type WateringState = "current" | "overdue" | "redAlert";
-
-export type WateringCadence =
+export type WateringAttention =
   | {
       readonly kind: "unavailable";
       readonly sampleCount: number;
-      readonly maybeElapsed: Duration | null;
+      readonly maybeElapsed: Milliseconds | null;
     }
   | {
-      readonly kind: "inferred";
+      readonly kind: "current";
       readonly sampleCount: number;
-      readonly averageInterval: Duration;
-      readonly elapsed: Duration;
-      readonly urgency: Urgency;
-      readonly state: WateringState;
+      readonly averageInterval: Milliseconds;
+      readonly elapsed: Milliseconds;
+    }
+  | {
+      readonly kind: "overdue";
+      readonly sampleCount: number;
+      readonly averageInterval: Milliseconds;
+      readonly elapsed: Milliseconds;
+    }
+  | {
+      readonly kind: "redAlert";
+      readonly sampleCount: number;
+      readonly averageInterval: Milliseconds;
+      readonly elapsed: Milliseconds;
     };
 
 export interface PlantAttention {
   readonly plant: Plant;
-  readonly cadence: WateringCadence;
+  readonly watering: WateringAttention;
 }
 
 export interface AttentionProjection {
@@ -146,10 +153,6 @@ export interface OperationPage {
   readonly operations: readonly Operation[];
   readonly hasNextPage: boolean;
 }
-
-export type GetPlantsResult =
-  | { readonly kind: "read"; readonly plants: readonly Plant[] }
-  | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type GetAttentionResult =
   | { readonly kind: "read"; readonly projection: AttentionProjection }

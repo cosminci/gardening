@@ -10,6 +10,7 @@ import ox.either.*
 import sttp.tapir.server.netty.sync.NettySyncServer
 
 import scala.concurrent.duration.*
+import scala.util.chaining.*
 import scala.util.Using
 
 object Main:
@@ -27,36 +28,22 @@ object Main:
         .make(resources)
         .flatMap: programs =>
           val endpoints =
-            List(HealthApi.serverEndpoint(version)) ++
-              JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
-              List(StaticSite.endpoint(staticDir))
-          start(
-            http = () =>
-              val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-            ,
-            plantAttentionMonitor = programs.plantAttentionMonitor,
-            awaitNext = () =>
-              sleep(5.minutes)
-              ().asRight
-          )
+            JournalApi
+              .serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor)
+              .pipe(List(HealthApi.serverEndpoint(version)) ++ _ ++ List(StaticSite.endpoint(staticDir)))
+          run(programs.plantAttentionMonitor):
+            val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
         .orThrow
 
-  private[app] def start(
-      http: () => Unit,
-      plantAttentionMonitor: PlantAttentionMonitor,
-      awaitNext: () => Either[Throwable, Unit]
-  ) =
+  private def run(attention: PlantAttentionMonitor)(http: => Unit) =
     supervisedError(EitherMode[Throwable]()):
-      val _ = forkError(pollPlantAttention(plantAttentionMonitor, awaitNext))
-      http().asRight
+      val _ = forkError(pollPlantAttention(attention))
+      http
+      ().asRight
 
-  private def pollPlantAttention(
-      plantAttentionMonitor: PlantAttentionMonitor,
-      awaitNext: () => Either[Throwable, Unit]
-  ) =
-    Iterator
-      .continually(awaitNext().map: _ =>
-        val _ = plantAttentionMonitor.refreshAll
-        ())
-      .collectFirst { case failure @ Left(_) => failure }
-      .fold[Either[Throwable, Unit]](().asRight)(identity)
+  private def pollPlantAttention(attention: PlantAttentionMonitor) =
+    Iterator.continually {
+      sleep(5.minutes)
+      val _ = attention.refreshAll
+    }.foreach(identity)
+    ().asRight

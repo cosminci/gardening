@@ -174,57 +174,41 @@ const toPlant = (value: Wire["Plant"]): Journal.Plant => ({
   },
 });
 
-const toAttentionProjection = (
-  value: Wire["AttentionProjectionResponse"],
-): Journal.AttentionProjection => {
+const toAttentionProjection = (value: Wire["AttentionProjection"]): Journal.AttentionProjection => {
   return {
     measuredAt: Journal.instant(value.measuredAt),
-    plants: required(value.plants, "attention projection is missing plants").map(toPlantAttention),
+    plants: value.plants.map(toPlantAttention),
   };
 };
 
-const toPlantAttention = (value: Wire["PlantAttentionResponse"]): Journal.PlantAttention => {
-  const elapsed = value.elapsed ?? null;
-  const maybeElapsed = elapsed === null ? null : Journal.duration(elapsed);
-  if (!value.cadenceAvailable)
-    return {
-      plant: toPlant(value.plant),
-      cadence: { kind: "unavailable", sampleCount: value.sampleCount, maybeElapsed },
-    };
-
-  return {
-    plant: toPlant(value.plant),
-    cadence: {
-      kind: "inferred",
-      sampleCount: value.sampleCount,
-      averageInterval: Journal.duration(
-        required(value.averageInterval, "inferred watering cadence is missing its average"),
-      ),
-      elapsed: required(maybeElapsed, "inferred watering cadence is missing elapsed time"),
-      urgency: toUrgency(required(value.urgency, "inferred watering cadence is missing urgency")),
-      state: toWateringState(required(value.state, "inferred watering cadence is missing state")),
-    },
-  };
-};
-
-const toUrgency = (value: Wire["UrgencyResponse"]): Journal.Urgency => {
-  if (value.unbounded) return { kind: "unbounded" };
-  return {
-    kind: "finite",
-    numeratorNanos: required(value.numeratorNanos, "finite urgency is missing its numerator"),
-    denominatorNanos: required(value.denominatorNanos, "finite urgency is missing its denominator"),
-  };
-};
-
-const toWateringState = (value: unknown): Journal.WateringState => {
-  if (value === "current" || value === "overdue" || value === "redAlert") return value;
-  throw new Error(`invalid watering state: ${String(value)}`);
-};
-
-const required = <Value>(value: Value | null | undefined, message: string): Value => {
-  const present = value ?? null;
-  if (present === null) throw new Error(message);
-  return present;
+const toPlantAttention = (value: Wire["PlantAttention"]): Journal.PlantAttention => {
+  const watering = value.watering;
+  switch (watering.kind) {
+    case "unavailable":
+      return {
+        plant: toPlant(value.plant),
+        watering: {
+          kind: "unavailable",
+          sampleCount: watering.sampleCount,
+          maybeElapsed:
+            watering.elapsedMillis === null ? null : Journal.milliseconds(watering.elapsedMillis),
+        },
+      };
+    case "current":
+    case "overdue":
+    case "redAlert":
+      return {
+        plant: toPlant(value.plant),
+        watering: {
+          kind: watering.kind,
+          sampleCount: watering.sampleCount,
+          averageInterval: Journal.milliseconds(watering.averageIntervalMillis),
+          elapsed: Journal.milliseconds(watering.elapsedMillis),
+        },
+      };
+    default:
+      throw new Error(`invalid watering attention: ${JSON.stringify(watering)}`);
+  }
 };
 
 const toOperation = (value: Wire["Operation"]): Journal.Operation => ({

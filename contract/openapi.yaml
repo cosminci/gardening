@@ -14,25 +14,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
-  /plants:
-    get:
-      summary: List active plants
-      operationId: getPlants
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Plant'
-        default:
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
   /attention:
     get:
       summary: Read plant attention
@@ -43,7 +24,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AttentionProjectionResponse'
+                $ref: '#/components/schemas/AttentionProjection'
   /plants/{plantId}/operations:
     get:
       summary: List a bounded page of plant operations
@@ -367,11 +348,12 @@ components:
       properties:
         message:
           type: string
-    AttentionProjectionResponse:
-      title: AttentionProjectionResponse
+    AttentionProjection:
+      title: AttentionProjection
       type: object
       required:
       - measuredAt
+      - plants
       properties:
         measuredAt:
           type: string
@@ -379,7 +361,7 @@ components:
         plants:
           type: array
           items:
-            $ref: '#/components/schemas/PlantAttentionResponse'
+            $ref: '#/components/schemas/PlantAttention'
     Care:
       title: Care
       type: object
@@ -410,6 +392,27 @@ components:
         kind:
           type: string
           const: care
+    Current:
+      title: Current
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: current
     HealthResponse:
       title: HealthResponse
       type: object
@@ -479,6 +482,27 @@ components:
             $ref: '#/components/schemas/Operation'
         hasNextPage:
           type: boolean
+    Overdue:
+      title: Overdue
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: overdue
     Pesticide:
       title: Pesticide
       type: object
@@ -525,37 +549,17 @@ components:
           type: string
         details:
           $ref: '#/components/schemas/PlantDetails'
-    PlantAttentionResponse:
-      title: PlantAttentionResponse
+    PlantAttention:
+      title: PlantAttention
       type: object
       required:
       - plant
-      - sampleCount
-      - cadenceAvailable
+      - watering
       properties:
         plant:
           $ref: '#/components/schemas/Plant'
-        sampleCount:
-          type: integer
-          format: int32
-        cadenceAvailable:
-          type: boolean
-        averageInterval:
-          type:
-          - string
-          - 'null'
-        elapsed:
-          type:
-          - string
-          - 'null'
-        urgency:
-          anyOf:
-          - $ref: '#/components/schemas/UrgencyResponse'
-          - type: 'null'
-        state:
-          anyOf:
-          - $ref: '#/components/schemas/WateringState'
-          - type: 'null'
+        watering:
+          $ref: '#/components/schemas/WireWateringAttention'
     PlantDetails:
       title: PlantDetails
       type: object
@@ -587,6 +591,27 @@ components:
       enum:
       - active
       - archived
+    RedAlert:
+      title: RedAlert
+      type: object
+      required:
+      - sampleCount
+      - averageIntervalMillis
+      - elapsedMillis
+      - kind
+      properties:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        averageIntervalMillis:
+          type: string
+        elapsedMillis:
+          type: string
+        kind:
+          type: string
+          const: redAlert
     Repot:
       title: Repot
       type: object
@@ -647,26 +672,37 @@ components:
           format: int32
           minimum: 1
           maximum: 100
-    UrgencyResponse:
-      title: UrgencyResponse
+    Unavailable:
+      title: Unavailable
       type: object
       required:
-      - unbounded
+      - sampleCount
+      - elapsedMillis
+      - kind
       properties:
-        unbounded:
-          type: boolean
-        numeratorNanos:
+        sampleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 20
+        elapsedMillis:
           type:
           - string
           - 'null'
-        denominatorNanos:
-          type:
-          - string
-          - 'null'
-    WateringState:
-      title: WateringState
-      type: string
-      enum:
-      - current
-      - overdue
-      - redAlert
+        kind:
+          type: string
+          const: unavailable
+    WireWateringAttention:
+      title: WireWateringAttention
+      oneOf:
+      - $ref: '#/components/schemas/Current'
+      - $ref: '#/components/schemas/Overdue'
+      - $ref: '#/components/schemas/RedAlert'
+      - $ref: '#/components/schemas/Unavailable'
+      discriminator:
+        propertyName: kind
+        mapping:
+          current: '#/components/schemas/Current'
+          overdue: '#/components/schemas/Overdue'
+          redAlert: '#/components/schemas/RedAlert'
+          unavailable: '#/components/schemas/Unavailable'

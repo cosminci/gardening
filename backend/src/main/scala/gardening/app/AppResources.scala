@@ -14,4 +14,4 @@ final class AppResources private (connection: SqliteConnection) extends AutoClos
 object AppResources:
 
   def acquire(database: SqliteLocation): AppResources =
-    AppResources(Sqlite.connect(database))
+    AppResources(Sqlite.make.connect(database))

@@ -2,14 +2,13 @@ import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import {
-  location,
+  milliseconds,
   nickname,
   nomenclatureName,
   pesticideId,
   plantId,
-  species,
 } from "../../src/domain/Journal";
-import type { OperationWindow, Plant, PlantId, Urgency } from "../../src/domain/Journal";
+import type { OperationWindow, Plant, PlantId } from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
 
 describe("browsing the journal", () => {
@@ -25,17 +24,13 @@ describe("browsing the journal", () => {
       actions,
       pesticides,
     });
-    const operations = [
-      treated,
-      JournalFixtures.care({
-        id: "o2",
-        date: "2026-02-02T00:00:00Z",
-        moisture: "moderatePlus",
-        actions: new Set(),
-      }),
-      JournalFixtures.repot("o3", "2026-03-03T00:00:00Z"),
-      JournalFixtures.care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "dry" }),
-    ];
+    const moderateCare = JournalFixtures.care({
+      id: "o2",
+      date: "2026-02-02T00:00:00Z",
+      moisture: "moderatePlus",
+      actions: new Set(),
+    });
+    const repot = JournalFixtures.repot("o3", "2026-03-03T00:00:00Z");
     const pesticideCatalog = [
       {
         id: neemId,
@@ -54,13 +49,11 @@ describe("browsing the journal", () => {
       getAttentionResults: [
         JournalFixtures.attentionResult([
           JournalFixtures.unavailableAttention(JournalFixtures.monstera()),
-          JournalFixtures.inferredAttention(JournalFixtures.ficus(), "redAlert"),
+          JournalFixtures.scoredAttention(JournalFixtures.ficus(), "redAlert"),
         ]),
       ],
       getOperationsByPlantId: {
-        p1: [
-          JournalFixtures.operationsPage([operations[0]!, operations[2]!, operations[1]!], true),
-        ],
+        p1: [JournalFixtures.operationsPage([treated, repot, moderateCare], true)],
         p2: [JournalFixtures.operationsPage()],
       },
       getPesticidesResult: { kind: "read", entries: pesticideCatalog },
@@ -75,14 +68,12 @@ describe("browsing the journal", () => {
     expect(within(card).getAllByText("Perlite 100%")).toHaveLength(2);
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
-    expect(renderedOperations[0]).toHaveTextContent(
+    expect(renderedOperations.map((operation) => operation.textContent)).toEqual([
       "2026-02-02EditCareMoistureModerate +ActionsNone recorded",
-    );
-    expect(renderedOperations[1]).toHaveTextContent("2026-03-03EditRepotSubstratePerlite 100%");
-    expect(renderedOperations[2]).toHaveTextContent(
+      "2026-03-03EditRepotSubstratePerlite 100%",
       "2026-04-05EditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
-    );
-    expect(within(renderedOperations[2]!).getByText("2026-04-05")).toHaveAttribute(
+    ]);
+    expect(within(card).getByText("2026-04-05")).toHaveAttribute(
       "datetime",
       "2026-04-04T22:30:00Z",
     );
@@ -113,66 +104,37 @@ describe("browsing the journal", () => {
     expect(screen.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
   });
 
-  it("should order unknown cadence first, then urgency, then plant fields", async () => {
-    const plant = (
-      id: string,
-      plantLocation: string,
-      plantSpecies: string,
-      plantNickname: string | null,
-    ): Plant => ({
+  it("should render backend attention in presentation order", async () => {
+    const plant = (id: string, plantNickname: string): Plant => ({
       ...JournalFixtures.ficus(),
       id: plantId(id),
       details: {
         ...JournalFixtures.ficus().details,
-        location: location(plantLocation),
-        species: species(plantSpecies),
-        maybeNickname: plantNickname === null ? null : nickname(plantNickname),
+        maybeNickname: nickname(plantNickname),
       },
     });
-    const finite = (numeratorNanos: string, denominatorNanos: string): Urgency => ({
-      kind: "finite",
-      numeratorNanos,
-      denominatorNanos,
-    });
-    const unknownFirst = plant("z", "Balcony", "Ficus", null);
-    const unknownLast = plant("y", "Kitchen", "Anthurium", null);
-    const urgent = plant("c", "Office", "Ficus", null);
-    const tiedLocationFirst = plant("f", "Balcony", "Zamioculcas", null);
-    const tiedSpeciesFirst = plant("b", "Office", "Ficus", null);
-    const tiedNoName = plant("a", "Office", "Monstera", null);
-    const tiedWithName = plant("d", "Office", "Monstera", "Monty");
-    const sameNamedLast = plant("e", "Office", "Monstera", "Monty");
-    const tiedOtherName = plant("g", "Office", "Monstera", "Zed");
-    const recentlyWatered = plant("h", "Office", "Orchid", null);
+    const unknown = plant("unknown", "Unknown");
+    const urgent = plant("urgent", "Urgent");
+    const recentlyWatered = plant("current", "Current");
     const operationWindows: { plantId: PlantId; window: OperationWindow }[] = [];
     const journal = JournalFixtures.buildJournal({
       getAttentionResults: [
         JournalFixtures.attentionResult([
-          JournalFixtures.inferredAttention(recentlyWatered, "current", finite("1", "10")),
-          JournalFixtures.inferredAttention(tiedOtherName),
-          JournalFixtures.inferredAttention(sameNamedLast),
-          JournalFixtures.inferredAttention(tiedWithName),
-          JournalFixtures.inferredAttention(tiedNoName),
-          JournalFixtures.inferredAttention(tiedSpeciesFirst),
-          JournalFixtures.inferredAttention(tiedLocationFirst),
-          JournalFixtures.inferredAttention(urgent, "redAlert", { kind: "unbounded" }),
-          JournalFixtures.unavailableAttention(unknownLast),
-          JournalFixtures.unavailableAttention(unknownFirst),
+          JournalFixtures.scoredAttention(
+            recentlyWatered,
+            "current",
+            milliseconds("10"),
+            milliseconds("1"),
+          ),
+          JournalFixtures.scoredAttention(urgent, "redAlert", milliseconds("0"), milliseconds("1")),
+          JournalFixtures.unavailableAttention(unknown),
         ]),
       ],
       getOperationsByPlantId: Object.fromEntries(
-        [
-          unknownFirst,
-          unknownLast,
-          urgent,
-          tiedLocationFirst,
-          tiedSpeciesFirst,
-          tiedNoName,
-          tiedWithName,
-          sameNamedLast,
-          tiedOtherName,
-          recentlyWatered,
-        ].map(({ id }) => [id, [JournalFixtures.operationsPage()]]),
+        [unknown, urgent, recentlyWatered].map(({ id }) => [
+          id,
+          [JournalFixtures.operationsPage()],
+        ]),
       ),
       operationWindows,
     });
@@ -181,29 +143,11 @@ describe("browsing the journal", () => {
 
     const articles = await screen.findAllByRole("article");
     expect(articles.map((article) => article.getAttribute("aria-label"))).toEqual([
-      "Ficus",
-      "Anthurium",
-      "Ficus",
-      "Zamioculcas",
-      "Ficus",
-      "Monstera",
-      "Monty",
-      "Monty",
-      "Zed",
-      "Orchid",
+      "Unknown",
+      "Urgent",
+      "Current",
     ]);
-    expect(operationWindows.map(({ plantId: id }) => id)).toEqual([
-      "z",
-      "y",
-      "c",
-      "f",
-      "b",
-      "a",
-      "d",
-      "e",
-      "g",
-      "h",
-    ]);
+    expect(operationWindows.map(({ plantId: id }) => id)).toEqual(["unknown", "urgent", "current"]);
   });
 
   it("should identify a journal containing one active plant", async () => {

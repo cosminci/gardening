@@ -13,6 +13,7 @@ import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
 import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.collection.MaxLength
 import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
 import java.time.format.DateTimeFormatterBuilder
@@ -26,15 +27,6 @@ object SqlitePlantStore:
   def make(transactor: Transactor): PlantJournalStore & PlantAttentionStore = LiveSqlitePlantStore(transactor)
 
   private class LiveSqlitePlantStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
-
-    override def getPlants: GetPlantsResult =
-      try
-        val plants = trust(connect(transactor)(selectPlants.query[PlantRow].run()).traverse(toPlant))
-        GetPlantsResult.Read(plants.filter(_.details.status === PlantStatus.Active))
-      catch case error: SqlException => GetPlantsResult.ReadFailed(error)
-
-    private def selectPlants =
-      sql"select id, species, nickname, location, substrate, status from plant"
 
     override def getPlant(id: PlantId): GetPlantResult =
       try
@@ -84,9 +76,9 @@ object SqlitePlantStore:
                    plant.substrate,
                    plant.status,
                    coalesce((
-                     select json_group_array(watering.date)
+                     select json_group_array(watering.date order by watering.date desc, watering.id desc)
                      from (
-                       select operation.date
+                       select operation.id, operation.date
                        from operation
                        where plant.status = 'Active'
                          and operation.plant_id = plant.id
@@ -109,7 +101,7 @@ object SqlitePlantStore:
       for
         plant         <- toPlant(plantRow)
         wateringDates <- storedDates.traverse(parseOperationDate)
-      yield PlantAttentionSample(plant, wateringDates)
+      yield PlantAttentionSample(plant, wateringDates.assume[MaxLength[20]])
 
     private def decodeWateringDates(value: String) =
       trust(decode[Vector[String]](value))

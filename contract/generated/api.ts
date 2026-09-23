@@ -21,23 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List active plants */
-        get: operations["getPlants"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/attention": {
         parameters: {
             query?: never;
@@ -173,11 +156,11 @@ export interface components {
         ApiError: {
             message: string;
         };
-        /** AttentionProjectionResponse */
-        AttentionProjectionResponse: {
+        /** AttentionProjection */
+        AttentionProjection: {
             /** Format: date-time */
             measuredAt: string;
-            plants?: components["schemas"]["PlantAttentionResponse"][];
+            plants: components["schemas"]["PlantAttention"][];
         };
         /** Care */
         Care: {
@@ -190,6 +173,18 @@ export interface components {
              * @enum {string}
              */
             kind: "care";
+        };
+        /** Current */
+        Current: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "current";
         };
         /** HealthResponse */
         HealthResponse: {
@@ -220,6 +215,18 @@ export interface components {
             operations: components["schemas"]["Operation"][];
             hasNextPage: boolean;
         };
+        /** Overdue */
+        Overdue: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "overdue";
+        };
         /** Pesticide */
         Pesticide: {
             /** Format: uuid */
@@ -242,16 +249,10 @@ export interface components {
             id: string;
             details: components["schemas"]["PlantDetails"];
         };
-        /** PlantAttentionResponse */
-        PlantAttentionResponse: {
+        /** PlantAttention */
+        PlantAttention: {
             plant: components["schemas"]["Plant"];
-            /** Format: int32 */
-            sampleCount: number;
-            cadenceAvailable: boolean;
-            averageInterval?: string | null;
-            elapsed?: string | null;
-            urgency?: components["schemas"]["UrgencyResponse"] | null;
-            state?: components["schemas"]["WateringState"] | null;
+            watering: components["schemas"]["WireWateringAttention"];
         };
         /** PlantDetails */
         PlantDetails: {
@@ -266,6 +267,18 @@ export interface components {
          * @enum {string}
          */
         PlantStatus: "active" | "archived";
+        /** RedAlert */
+        RedAlert: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "redAlert";
+        };
         /** Repot */
         Repot: {
             substrate: components["schemas"]["SubstratePart"][];
@@ -294,17 +307,19 @@ export interface components {
             /** Format: int32 */
             share: number;
         };
-        /** UrgencyResponse */
-        UrgencyResponse: {
-            unbounded: boolean;
-            numeratorNanos?: string | null;
-            denominatorNanos?: string | null;
+        /** Unavailable */
+        Unavailable: {
+            /** Format: int32 */
+            sampleCount: number;
+            elapsedMillis: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unavailable";
         };
-        /**
-         * WateringState
-         * @enum {string}
-         */
-        WateringState: "current" | "overdue" | "redAlert";
+        /** WireWateringAttention */
+        WireWateringAttention: components["schemas"]["Current"] | components["schemas"]["Overdue"] | components["schemas"]["RedAlert"] | components["schemas"]["Unavailable"];
     };
     responses: never;
     parameters: never;
@@ -333,33 +348,6 @@ export interface operations {
             };
         };
     };
-    getPlants: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Plant"][];
-                };
-            };
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
     getAttention: {
         parameters: {
             query?: never;
@@ -374,7 +362,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AttentionProjectionResponse"];
+                    "application/json": components["schemas"]["AttentionProjection"];
                 };
             };
         };

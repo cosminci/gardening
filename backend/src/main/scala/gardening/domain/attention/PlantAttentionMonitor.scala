@@ -1,16 +1,17 @@
 package gardening.domain.attention
 
 import cats.syntax.either.*
-import cats.syntax.traverse.*
+import cats.syntax.option.*
 import gardening.domain.*
-import io.github.iltotore.iron.*
+import gardening.domain.attention.WateringHistory.*
 import io.github.iltotore.iron.autoRefine
-import io.github.iltotore.iron.constraint.numeric.Interval
 
 import language.experimental.captureChecking
 
-import java.time.{Duration, Instant}
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.duration.*
 
 trait PlantAttentionMonitor:
   def current: AttentionProjection
@@ -41,31 +42,25 @@ object PlantAttentionMonitor:
 
   private def projectionFor(samples: Vector[PlantAttentionSample])(using clock: Clock^) =
     val measuredAt = clock.now()
-    samples.traverse(attentionFor(_, measuredAt)).map(AttentionProjection(measuredAt, _))
+    AttentionProjection(measuredAt, samples.map(attentionFor(_, measuredAt))).asRight
 
   private def attentionFor(sample: PlantAttentionSample, measuredAt: Instant) =
-    val dates        = sample.wateringDates
-    val maybeElapsed = dates.headOption.map(Duration.between(_, measuredAt))
-    dates.size
-      .refineOption[Interval.Closed[0, 20]]
-      .toRight(RuntimeException(s"attention store returned ${dates.size} waterings; expected at most 20"))
-      .map: sampleCount =>
-        val cadence =
-          if dates.size < 5 then WateringCadence.Unavailable(sampleCount, maybeElapsed)
-          else inferCadence(dates, sampleCount, measuredAt)
-        PlantAttention(sample.plant, cadence)
+    val dates       = sample.wateringDates
+    val sampleCount = dates.sampleCount
+    val watering    =
+      dates.headOption match
+        case None                 => WateringAttention.Unavailable(sampleCount, Option.empty)
+        case Some(latestWatering) =>
+          val timeSinceWatering = elapsed(latestWatering, measuredAt)
+          if sampleCount < 5 then WateringAttention.Unavailable(sampleCount, timeSinceWatering.some)
+          else assessWatering(dates, sampleCount, timeSinceWatering)
+    PlantAttention(sample.plant, watering)
 
-  private def inferCadence(dates: Vector[Instant], sampleCount: WateringSampleCount, measuredAt: Instant) =
-    val intervals = dates.reverse.sliding(2).map(interval => Duration.between(interval.head, interval.last))
-    val average   = intervals.foldLeft(Duration.ZERO)(_.plus(_)).dividedBy(dates.size - 1L)
-    val elapsed   = Duration.between(dates.head, measuredAt)
-    val urgency   =
-      if average.isZero && elapsed.isZero then Urgency.Finite(Duration.ZERO, Duration.ZERO)
-      else if average.isZero then Urgency.Unbounded
-      else Urgency.Finite(elapsed, average)
-    WateringCadence.Inferred(sampleCount, average, elapsed, urgency, wateringState(elapsed, average))
+  private def assessWatering(dates: Vector[Instant], sampleCount: WateringSampleCount, timeSinceWatering: FiniteDuration) =
+    val intervals = dates.reverse.sliding(2).flatMap: window =>
+      window.headOption.zip(window.lastOption).map((previous, current) => elapsed(previous, current))
+    val average = intervals.foldLeft(Duration.Zero)(_ + _) / (dates.size - 1L)
+    WateringAttention.Current(sampleCount, average, timeSinceWatering).assess
 
-  private def wateringState(elapsed: Duration, average: Duration) =
-    if elapsed.compareTo(average.plus(Duration.ofHours(24))) >= 0 then WateringState.RedAlert
-    else if elapsed.compareTo(average) > 0 then WateringState.Overdue
-    else WateringState.Current
+  private def elapsed(previous: Instant, current: Instant) =
+    ChronoUnit.MILLIS.between(previous, current).millis

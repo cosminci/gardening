@@ -17,7 +17,7 @@ Cross-cutting test conventions and gates live in [CONTRIBUTING.md](../CONTRIBUTI
 
 Persistence tests create uniquely named shared in-memory SQLite databases and apply all Flyway migrations before constructing the store. Stable catalog UUIDs and typed nomenclature data keep catalog references explicit. Tests seed valid records through focused helpers and insert malformed values through SQL when verifying corruption attribution.
 
-Frontend tests use typed Plant, Operation, Substrate-component, and Pesticide builders plus queued client or HTTP results, keeping dates and identifiers deterministic.
+Frontend tests keep domain values and short sequences explicit in the owning use case, with deterministic dates and identifiers. Suite-local client builders own queued outcomes and captured calls without hiding domain setup behind configurable fixture factories.
 
 ## Integration boundaries
 
