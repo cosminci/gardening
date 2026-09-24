@@ -22,6 +22,16 @@ describe("release script", () => {
     expect(readSteps(workspace)).toEqual(expectedSteps);
   });
 
+  it("should publish using the short-lived GitHub Actions token", () => {
+    const workspace = buildReleaseWorkspace();
+
+    const result = runRelease(workspace, "v1.0.0-rc.1", "", "none", "ci-token");
+
+    const expectedPublishStep = "dagger call publish --tag v1.0.0-rc.1 --token=env:GITHUB_TOKEN";
+    expect(result.status).toBe(0);
+    expect(readSteps(workspace)).toContain(expectedPublishStep);
+  });
+
   it("should refuse to start when publishing credentials are absent", () => {
     const workspace = buildReleaseWorkspace();
 
@@ -89,7 +99,13 @@ function buildReleaseWorkspace(): string {
   return workspace;
 }
 
-function runRelease(workspace: string, tag: string, token = "test-token", fail = "none") {
+function runRelease(
+  workspace: string,
+  tag: string,
+  token = "test-token",
+  fail = "none",
+  workflowToken = "",
+) {
   const inheritedPath = process.env.PATH;
   if (!inheritedPath) throw new Error("PATH must be set to run release use cases");
   return spawnSync("bash", [releaseScript, tag], {
@@ -102,6 +118,7 @@ function runRelease(workspace: string, tag: string, token = "test-token", fail =
       RELEASE_LOG: join(workspace, "steps"),
       RELEASE_FAIL: fail,
       GITHUB_PERSONAL_PAT: token,
+      GITHUB_TOKEN: workflowToken,
     },
   });
 }
