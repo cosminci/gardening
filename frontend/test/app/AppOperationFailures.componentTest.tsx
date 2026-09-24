@@ -34,7 +34,9 @@ Vitest.describe("operation failures", () => {
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "loggingFailed", reason },
     });
-    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    Testing.render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -62,7 +64,12 @@ Vitest.describe("operation failures", () => {
         logOperationResult: { kind: "plantArchived" },
       });
       Testing.render(() => (
-        <App journal={journal} substrates={journal} pesticideCatalog={journal} />
+        <App
+          journal={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
       ));
       await Testing.screen.findByRole("button", { name: "Log operation for Fern" });
 
@@ -88,7 +95,9 @@ Vitest.describe("operation failures", () => {
       }),
       logOperation: () => Promise.reject(new Error("private details")),
     };
-    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    Testing.render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -112,7 +121,9 @@ Vitest.describe("operation failures", () => {
       getAttention: () =>
         attentionReads++ === 0 ? base.getAttention() : Promise.reject(new Error("private details")),
     };
-    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    Testing.render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -155,7 +166,12 @@ Vitest.describe("operation failures", () => {
         logOperation: () => Promise.resolve({ kind: "logged" as const, id: operationId("new") }),
       };
       Testing.render(() => (
-        <App journal={journal} substrates={journal} pesticideCatalog={journal} />
+        <App
+          journal={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -215,7 +231,9 @@ Vitest.describe("operation failures", () => {
       },
       logOperation: () => saving,
     };
-    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    Testing.render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));

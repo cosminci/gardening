@@ -15,7 +15,6 @@ import sttp.tapir.server.stub.TapirStubInterpreter
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
-import scala.concurrent.duration.*
 import scala.util.chaining.*
 
 class JournalApiSeamIntegrationTest extends munit.FunSuite:
@@ -59,57 +58,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(getOperations(server, offset = 0, pageSize = 0).code, StatusCode.BadRequest)
     assertEquals(getOperations(server, offset = 0, pageSize = 10).code, StatusCode.Ok)
     assertEquals(getOperations(server, offset = 0, pageSize = 11).code, StatusCode.BadRequest)
-
-  test("should expose the attention projection"):
-    val unknownPlant     = plant.copy(id = PlantId("unknown"))
-    val currentPlant     = plant.copy(id = PlantId("current"))
-    val zeroAveragePlant = plant.copy(id = PlantId("zero-average"))
-    val projection       = AttentionProjection(
-      measuredAt = date,
-      plants = Vector(
-        PlantAttention(
-          plantId = unknownPlant.id,
-          watering = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = 12.hours.some)
-        ),
-        PlantAttention(
-          plantId = plant.id,
-          watering = WateringAttention.RedAlert(sampleCount = 5, averageInterval = 24.hours, elapsed = 49.hours)
-        ),
-        PlantAttention(
-          plantId = currentPlant.id,
-          watering = WateringAttention.Current(sampleCount = 5, averageInterval = 24.hours, elapsed = 12.hours)
-        ),
-        PlantAttention(
-          plantId = zeroAveragePlant.id,
-          watering = WateringAttention.Overdue(sampleCount = 5, averageInterval = 0.millis, elapsed = 1.milli)
-        )
-      )
-    )
-    val response = get("/attention", buildServer(Refs(attentionProjection = projection)))
-    val expected =
-      s"""{
-         |  "measuredAt": "$date",
-         |  "plants": [
-         |    {
-         |      "plantId": "unknown",
-         |      "watering": {"sampleCount":4,"elapsedMillis":"43200000","kind":"unavailable"}
-         |    },
-         |    {
-         |      "plantId": "p1",
-         |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"176400000","kind":"redAlert"}
-         |    },
-         |    {
-         |      "plantId": "current",
-         |      "watering": {"sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"43200000","kind":"current"}
-         |    },
-         |    {
-         |      "plantId": "zero-average",
-         |      "watering": {"sampleCount":5,"averageIntervalMillis":"0","elapsedMillis":"1","kind":"overdue"}
-         |    }
-         |  ]
-         |}""".stripMargin
-
-    assertResponse(response, StatusCode.Ok, expected)
 
   test("should use the recent-operation window by default"):
     val refs     = Refs()
@@ -319,7 +267,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), expected)
 
   private case class Refs(
-      attentionProjection: AttentionProjection = AttentionProjection(date, Vector.empty),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
       archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
@@ -352,7 +299,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
         refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => refs.editOperationResult)
     val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection           = refs.attentionProjection
+      override def current: AttentionProjection           = fail("journal HTTP must not read attention")
       override def refreshAll: RefreshAttentionResult     = fail("HTTP must not refresh attention")
       override def removeArchivedPlant(id: PlantId): Unit =
         val _ = refs.removedArchivedPlantIds.updateAndGet(_ :+ id)
@@ -378,5 +325,3 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
-  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
-    assertEquals(response.code -> jsonBody(response), status -> json(body))

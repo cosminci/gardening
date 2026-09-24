@@ -68,8 +68,8 @@ object PesticideApi:
     Decoder.decodeString.map(NomenclatureInfo.apply),
     Encoder.encodeString.contramap(_.value)
   )
-  // Tapir requires bidirectional codecs for output-only pesticide identifiers.
   private given Codec[PesticideId] = Codec.from(
+    // Pesticide identifiers appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
     // $COVERAGE-ON$
@@ -79,14 +79,15 @@ object PesticideApi:
   private given Codec.AsObject[PesticideData] = ConfiguredCodec.derived
   private given Codec.AsObject[Pesticide]     = ConfiguredCodec.derived
 
-  // OpenAPI generation reads the schema; the server never decodes pesticide identifiers in bodies.
-  // $COVERAGE-OFF$
   private given Schema[PesticideId] = Schema.string
-    .map(PesticideId.parse)(_.value.toString)
-    .format("uuid")
-  private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType]
-    .apply(encode = Some(value => lowerCamel(value.productPrefix)))
+    // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+    // $COVERAGE-OFF$
+    .map(PesticideId.parse)(_.value.toString).format("uuid")
   // $COVERAGE-ON$
+  private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType]
+    // OpenAPI uses this pesticide-type schema encoder; JSON responses use Circe.
+    // $COVERAGE-OFF$
+    .apply(encode = Some(value => lowerCamel(value.productPrefix)))
   private given Schema[NomenclatureName] = Schema.string
   private given Schema[NomenclatureInfo] = Schema.string
   private given Schema[PesticideData]    = Schema.derived[PesticideData]
