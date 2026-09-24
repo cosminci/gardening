@@ -455,16 +455,10 @@ describe("HttpJournalClient", () => {
     expect(requests[0]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
-  it("should translate substrate component and pesticide catalogs", async () => {
+  it("should translate pesticide catalogs", async () => {
     const requests: Request[] = [];
     const fetch = respondingWith(
       [
-        jsonResponse([
-          {
-            id: perliteId,
-            data: { name: "Perlite", info: "Adds drainage" },
-          },
-        ]),
         jsonResponse([
           {
             id: "00000000-0000-4000-8001-000000000003",
@@ -475,15 +469,6 @@ describe("HttpJournalClient", () => {
       requests,
     );
     const journal = makeHttpJournalClient(fetch);
-    const expectedComponents = [
-      {
-        id: perliteId,
-        data: {
-          name: Journal.nomenclatureName("Perlite"),
-          maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
-        },
-      },
-    ];
     const expectedPesticides = [
       {
         id: Journal.pesticideId("00000000-0000-4000-8001-000000000003"),
@@ -495,15 +480,13 @@ describe("HttpJournalClient", () => {
       },
     ];
 
-    const componentsResult = await journal.getSubstrateComponents();
     const pesticidesResult = await journal.getPesticides();
     const requestedPaths = requests.map(
       (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
 
-    expect(componentsResult).toEqual({ kind: "read", entries: expectedComponents });
     expect(pesticidesResult).toEqual({ kind: "read", entries: expectedPesticides });
-    expect(requestedPaths).toEqual(["GET /substrate-components", "GET /pesticides"]);
+    expect(requestedPaths).toEqual(["GET /pesticides"]);
   });
 
   it("should send operation details and preserve write outcomes", async () => {
@@ -604,13 +587,11 @@ describe("HttpJournalClient", () => {
     expect(actualRequests).toEqual(expectedRequests);
   });
 
-  it("should send substrate component and pesticide catalog changes", async () => {
+  it("should send pesticide catalog changes", async () => {
     const requests: Request[] = [];
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const fetch = respondingWith(
       [
-        jsonResponse({ id: perliteId, data: { name: "Perlite", info: "Adds drainage" } }, 201),
-        jsonResponse({ id: perliteId, data: { name: "Perlite fine", info: null } }),
         jsonResponse(
           {
             id: pesticide,
@@ -625,11 +606,6 @@ describe("HttpJournalClient", () => {
       ],
       requests,
     );
-    const perlite = {
-      name: Journal.nomenclatureName("Perlite"),
-      maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
-    };
-    const finePerlite = { name: Journal.nomenclatureName("Perlite fine"), maybeInfo: null };
     const neemOil = {
       name: Journal.nomenclatureName("Neem oil"),
       pesticideType: "insecticide" as const,
@@ -642,8 +618,6 @@ describe("HttpJournalClient", () => {
     };
     const journal = makeHttpJournalClient(fetch);
 
-    const addedComponent = await journal.addSubstrateComponent(perlite);
-    const editedComponent = await journal.editSubstrateComponent(perliteId, finePerlite);
     const addedPesticide = await journal.addPesticide(neemOil);
     const editedPesticide = await journal.editPesticide(pesticide, neem);
     const requestedPaths = requests.map(
@@ -651,20 +625,11 @@ describe("HttpJournalClient", () => {
     );
     const requestBodies = await Promise.all(requests.map((request) => request.json()));
 
-    const expectedPaths = [
-      "POST /substrate-components",
-      `PUT /substrate-components/${perliteId}`,
-      "POST /pesticides",
-      `PUT /pesticides/${pesticide}`,
-    ];
+    const expectedPaths = ["POST /pesticides", `PUT /pesticides/${pesticide}`];
     const expectedBodies = [
-      { name: "Perlite", info: "Adds drainage" },
-      { name: "Perlite fine", info: null },
       { name: "Neem oil", type: "insecticide", info: "Dilute first" },
       { name: "Neem", type: "insecticide", info: null },
     ];
-    expect(addedComponent).toMatchObject({ kind: "added", entry: { id: perliteId } });
-    expect(editedComponent).toMatchObject({ kind: "edited", entry: { data: finePerlite } });
     expect(addedPesticide).toMatchObject({ kind: "added", entry: { id: pesticide } });
     expect(editedPesticide).toMatchObject({ kind: "edited", entry: { data: neem } });
     expect(requestedPaths).toEqual(expectedPaths);
@@ -688,17 +653,11 @@ describe("HttpJournalClient", () => {
         jsonResponse({ message: "journal could not be changed" }, 500),
         jsonResponse({ message: "catalog could not be read" }, 500),
         jsonResponse({ message: "catalog could not be changed" }, 500),
-        jsonResponse({ message: "component not found" }, 404),
-        jsonResponse({ message: "catalog could not be changed" }, 500),
-        jsonResponse({ message: "catalog could not be read" }, 500),
-        jsonResponse({ message: "catalog could not be changed" }, 500),
         jsonResponse({ message: "pesticide not found" }, 404),
         jsonResponse({ message: "catalog could not be changed" }, 500),
       ]),
     );
-    const component = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
-    const componentData = { name: Journal.nomenclatureName("Perlite"), maybeInfo: null };
     const pesticideData = {
       name: Journal.nomenclatureName("Neem"),
       pesticideType: "insecticide" as const,
@@ -721,12 +680,6 @@ describe("HttpJournalClient", () => {
       kind: "operationMissing",
     });
     await expectKind(httpFailures.editOperation(Journal.operationId("o1"), details), "editFailed");
-    await expectKind(httpFailures.getSubstrateComponents(), "readFailed");
-    await expectKind(httpFailures.addSubstrateComponent(componentData), "addFailed");
-    await expectResult(httpFailures.editSubstrateComponent(component, componentData), {
-      kind: "recordMissing",
-    });
-    await expectKind(httpFailures.editSubstrateComponent(component, componentData), "editFailed");
     await expectKind(httpFailures.getPesticides(), "readFailed");
     await expectKind(httpFailures.addPesticide(pesticideData), "addFailed");
     await expectResult(httpFailures.editPesticide(pesticide, pesticideData), {
@@ -735,9 +688,7 @@ describe("HttpJournalClient", () => {
     await expectKind(httpFailures.editPesticide(pesticide, pesticideData), "editFailed");
 
     const reason = new Error("offline");
-    const networkFailures = makeHttpJournalClient(
-      respondingWith(new Array<Error>(10).fill(reason)),
-    );
+    const networkFailures = makeHttpJournalClient(respondingWith(new Array<Error>(7).fill(reason)));
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
     await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
@@ -755,12 +706,6 @@ describe("HttpJournalClient", () => {
     );
     await expectNetworkFailure(
       networkFailures.editOperation(Journal.operationId("o1"), details),
-      "editFailed",
-    );
-    await expectNetworkFailure(networkFailures.getSubstrateComponents(), "readFailed");
-    await expectNetworkFailure(networkFailures.addSubstrateComponent(componentData), "addFailed");
-    await expectNetworkFailure(
-      networkFailures.editSubstrateComponent(component, componentData),
       "editFailed",
     );
     await expectNetworkFailure(networkFailures.getPesticides(), "readFailed");

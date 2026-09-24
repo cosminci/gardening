@@ -5,6 +5,7 @@ import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
 import gardening.domain.attention.*
+import gardening.domain.catalog.*
 import gardening.domain.journal.*
 import gardening.domain.journal.EditOperationResult.*
 import gardening.domain.journal.LogOperationResult.*
@@ -65,6 +66,13 @@ object SqlitePlantStore:
           case None      => GetPlantResult.RecordMissing
           case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
       catch case error: SqlException => GetPlantResult.ReadFailed(error)
+
+    override def updatePlant(plant: Plant): UpdatePlantResult =
+      try
+        transact(transactor)(updatePlantRow(plant).update.run()) match
+          case 1 => UpdatePlantResult.Updated
+          case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
+      catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
 
     private def selectPlant(id: String) =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
@@ -226,43 +234,6 @@ object SqlitePlantStore:
           case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
 
-    override def updatePlant(plant: Plant): UpdatePlantResult =
-      try
-        transact(transactor)(updatePlantRow(plant).update.run()) match
-          case 1 => UpdatePlantResult.Updated
-          case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
-      catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
-
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
-      try
-        CatalogReadResult.Read(
-          trust(
-            connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run()).traverse(toComponent)
-          )
-        )
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
-
-    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
-      try
-        val row = ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value))
-        transact(transactor):
-          sql"insert into substrate_component (id, name, info) values (${row.id}, ${row.name}, ${row.info})".update.run()
-        CatalogAddResult.Added(component)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
-
-    override def editSubstrateComponent(
-        id: SubstrateComponentId,
-        data: SubstrateComponentData
-    ): CatalogEditResult[SubstrateComponent] =
-      try
-        transact(transactor):
-          sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)}
-               where id = ${id.value.toString}""".update.run()
-        match
-          case 1 => CatalogEditResult.Edited(SubstrateComponent(id, data))
-          case _ => CatalogEditResult.RecordMissing
-      catch case error: SqlException => CatalogEditResult.EditFailed(error)
-
     override def getPesticides: CatalogReadResult[Pesticide] =
       try
         CatalogReadResult.Read(
@@ -290,13 +261,6 @@ object SqlitePlantStore:
           case 1 => CatalogEditResult.Edited(Pesticide(id, data))
           case _ => CatalogEditResult.RecordMissing
       catch case error: SqlException => CatalogEditResult.EditFailed(error)
-
-    private def toComponent(row: ComponentRow) =
-      SubstrateComponentId
-        .parse(row.id)
-        .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
-        .map: id =>
-          SubstrateComponent(id, SubstrateComponentData(NomenclatureName(row.name), row.info.map(NomenclatureInfo.apply)))
 
     private def toPesticide(row: PesticideRow) =
       for
@@ -424,5 +388,4 @@ object SqlitePlantStore:
       id: String,
       wateringDates: String
   ) derives DbCodec
-  private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec
   private case class PesticideRow(id: String, name: String, pesticideType: String, info: Option[String]) derives DbCodec

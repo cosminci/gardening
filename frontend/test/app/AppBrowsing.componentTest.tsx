@@ -99,7 +99,7 @@ describe("browsing the journal", () => {
       operationWindows,
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     const card = await screen.findByRole("article", { name: "Fern" });
     expect(within(card).getByText("Ficus lyrata")).toBeInTheDocument();
@@ -212,7 +212,7 @@ describe("browsing the journal", () => {
       operationWindows,
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     const articles = await screen.findAllByRole("article");
     expect(articles.map((article) => article.getAttribute("aria-label"))).toEqual([
@@ -229,7 +229,7 @@ describe("browsing the journal", () => {
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     const heading = await screen.findByRole("heading", { name: "Plant Journal" });
     const garden = await screen.findByRole("button", { name: /Garden.*1 plant/ });
@@ -246,7 +246,7 @@ describe("browsing the journal", () => {
       getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
 
     cemetery.focus();
@@ -266,7 +266,7 @@ describe("browsing the journal", () => {
       getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
-    const mounted = render(() => <App journal={journal} />);
+    const mounted = render(() => <App journal={journal} substrates={journal} />);
     await screen.findByRole("region", { name: "Garden" });
 
     fireEvent.click(screen.getByRole("button", { name: /Cemetery/ }));
@@ -275,7 +275,7 @@ describe("browsing the journal", () => {
     const cemeteryHash = window.location.hash;
 
     mounted.unmount();
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     const restoredCemetery = await screen.findByRole("region", { name: "Cemetery" });
     const selectedCemetery = screen.getByRole("button", { name: /Cemetery/ });
     const restoredCemeteryLabel = restoredCemetery.getAttribute("aria-label");
@@ -305,7 +305,7 @@ describe("browsing the journal", () => {
         status === "archived" ? Promise.reject(new Error("offline")) : base.getPlants(),
     };
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     const selectedCemetery = screen.getByRole("button", { name: /Cemetery/ });
@@ -360,7 +360,7 @@ describe("browsing the journal", () => {
       getOperationDates,
     };
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*2 plants/ });
     const unopenedStatuses = [...statuses];
@@ -408,7 +408,7 @@ describe("browsing the journal", () => {
         });
       },
     };
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
@@ -452,7 +452,7 @@ describe("browsing the journal", () => {
         }),
       getOperationDates,
     };
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*1 plant/ });
 
     fireEvent.click(cemetery);
@@ -480,7 +480,7 @@ describe("browsing the journal", () => {
           ? Promise.resolve({ kind: "readFailed" as const, reason: new Error("offline") })
           : base.getPlants(),
     };
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
 
     fireEvent.click(cemetery);
@@ -503,7 +503,7 @@ describe("browsing the journal", () => {
       ...base,
       getPlants: (status?: string) => (status === "archived" ? archivedRequest : base.getPlants()),
     };
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
@@ -551,7 +551,7 @@ describe("browsing the journal", () => {
       getOperations: (id: PlantId, window: OperationWindow) =>
         id === archivedPlant.id ? pendingHistory : base.getOperations(id, window),
     };
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
@@ -584,7 +584,7 @@ describe("browsing the journal", () => {
         }),
     };
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByRole("button", { name: /Cemetery.*0/ })).toBeNull();
@@ -596,7 +596,7 @@ describe("browsing the journal", () => {
       getAttentionResults: [{ kind: "readFailed", reason }],
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
@@ -633,7 +633,7 @@ describe("browsing the journal", () => {
         getAttentionResults: [attention],
         getPlantsResults: [plants],
       });
-      const view = render(() => <App journal={journal} />);
+      const view = render(() => <App journal={journal} substrates={journal} />);
 
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent("The journal could not be loaded.");
@@ -649,7 +649,7 @@ describe("browsing the journal", () => {
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
@@ -661,7 +661,7 @@ describe("browsing the journal", () => {
       getAttention: () => Promise.reject(new Error("private details")),
     };
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
@@ -675,7 +675,7 @@ describe("browsing the journal", () => {
       },
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
@@ -689,7 +689,7 @@ describe("browsing the journal", () => {
       },
     });
 
-    render(() => <App journal={journal} />);
+    render(() => <App journal={journal} substrates={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();

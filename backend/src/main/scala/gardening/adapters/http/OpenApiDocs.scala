@@ -5,7 +5,7 @@ import sttp.tapir.docs.openapi.{OpenAPIDocsInterpreter, OpenAPIDocsOptions}
 
 object OpenApiDocs:
 
-  private val endpoints = HealthApi.endpoint :: JournalApi.publicEndpoints
+  private val endpoints = HealthApi.endpoint :: JournalApi.publicEndpoints ++ SubstrateComponentApi.publicEndpoints
   private val options   = OpenAPIDocsOptions.default.copy(markOptionsAsNullable = true)
 
   val yaml: String =

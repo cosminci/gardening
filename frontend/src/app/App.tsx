@@ -10,6 +10,7 @@ import {
 } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
@@ -21,6 +22,7 @@ import "./app.css";
 
 interface AppProps {
   readonly journal: Journal.JournalClient;
+  readonly substrates: SubstrateComponentClient;
 }
 
 interface GardenHistory {
@@ -72,7 +74,7 @@ export const App: Component<AppProps> = (props) => {
         journal.getPlants(),
         journal.getArchivedCount(),
         journal.getAttention(),
-        journal.getSubstrateComponents(),
+        props.substrates.getSubstrateComponents(),
         journal.getPesticides(),
       ]);
     if (version !== loadVersion) return;
@@ -272,16 +274,16 @@ export const App: Component<AppProps> = (props) => {
   };
 
   const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
-    const result = await props.journal.addSubstrateComponent(data);
+    const result = await props.substrates.addSubstrateComponent(data);
     if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
     return result;
   };
 
-  const editSubstrateComponent: Journal.JournalClient["editSubstrateComponent"] = async (
+  const editSubstrateComponent: SubstrateComponentClient["editSubstrateComponent"] = async (
     id,
     data,
   ) => {
-    const result = await props.journal.editSubstrateComponent(id, data);
+    const result = await props.substrates.editSubstrateComponent(id, data);
     if (result.kind === "edited")
       setSubstrateComponents((current) =>
         current.map((component) => (component.id === id ? result.entry : component)),
