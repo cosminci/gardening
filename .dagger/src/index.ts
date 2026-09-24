@@ -6,7 +6,7 @@ import { contractDrift } from "./hooks/contract";
 import * as Git from "./hooks/git";
 import { frontendCheck } from "./hooks/frontend";
 import { runtimeImage } from "./hooks/image";
-import { pipelineCheck } from "./hooks/pipeline";
+import { localSetupCheck, pipelineCheck } from "./hooks/pipeline";
 import * as Selection from "./selection";
 import { assertReleaseVersion, deriveVersion, releaseVersion } from "./version";
 
@@ -55,6 +55,7 @@ export class Gardening {
     }
     if (components.includes("pipeline")) {
       await this.pipelineCheck(source);
+      await localSetupCheck(source).stdout();
       done.push("pipeline");
     }
     return done.length === 0 ? "verify: nothing affected" : `verify: ${done.join(", ")} ok`;

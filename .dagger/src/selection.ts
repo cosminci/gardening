@@ -11,7 +11,7 @@ export function parseChangedPaths(raw: string): readonly string[] {
 
 /** Components a single changed path affects. The contract sits between the two app components, so
  * a contract change affects both; pipeline sources and workflows affect the pipeline. Paths outside these
- * roots (docs, tooling) affect nothing.
+ * roots (docs and unrelated tooling) affect nothing.
  */
 export function componentsForPath(path: string): readonly Component[] {
   if (path.startsWith("contract/")) return ["backend", "frontend"];
@@ -20,6 +20,7 @@ export function componentsForPath(path: string): readonly Component[] {
   if (
     path === "dagger.json" ||
     path.startsWith(".dagger/") ||
+    path.startsWith("scripts/") ||
     path.startsWith(".github/workflows/")
   )
     return ["pipeline"];
