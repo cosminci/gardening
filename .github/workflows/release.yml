@@ -18,7 +18,7 @@ jobs:
       run:
         shell: bash
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,3 +66,11 @@ jobs:
             *) echo "GHCR lookup failed: HTTP $status" >&2; exit 1 ;;
           esac
           dagger call publish --tag="$tag" --token=env:GITHUB_TOKEN --registry-user="$GITHUB_ACTOR"
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            tag -a "v$tag" -m "Plant journal $tag"
+          credential=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $credential" \
+            git push origin "refs/tags/v$tag"

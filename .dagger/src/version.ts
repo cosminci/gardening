@@ -19,7 +19,13 @@ export function releaseVersion(now: Date): string {
 }
 
 export function assertReleaseVersion(tag: string): void {
-  if (!/^\d{4}\.(?:[1-9]|1[0-2])\.(?:[1-9]|[12]\d|3[01])-T\d{6}$/.test(tag)) {
+  const match =
+    /^(\d{4})\.([1-9]|1[0-2])\.([1-9]|[12]\d|3[01])-T(?:[01]\d|2[0-3])[0-5]\d[0-5]\d$/.exec(tag);
+  if (
+    match === null ||
+    new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDate() !==
+      Number(match[3])
+  ) {
     throw new Error(`invalid release version: ${tag}`);
   }
 }

@@ -4,7 +4,9 @@ The private `ghcr.io/cosminci/plant-journal` image serves the frontend and API o
 
 ## Publish a version
 
-Every PR runs the [affected-component build check](../.github/workflows/build.yml) without publishing. Once merged to `main`, run the [publish workflow](../.github/workflows/release.yml) manually from **main** in GitHub Actions. It performs full verification, then publishes one private `linux/amd64` GHCR image with a UTC tag such as `2026.9.24-T170609`. Read the exact tag and digest from the workflow output; the image carries commit/version labels and `/health` reports its version. No `latest` alias or Git release tag is created. Only trusted maintainers should dispatch publishing because the workflow runs code from main with package-write permission.
+Every PR runs the [affected-component build check](../.github/workflows/build.yml) without publishing. Once merged to `main`, run the [publish workflow](../.github/workflows/release.yml) manually from **main** in GitHub Actions. It performs full verification, then publishes one private `linux/amd64` GHCR image with a UTC tag such as `2026.9.24-T170609` and annotates the built commit with the matching Git tag `v2026.9.24-T170609`. Read the exact image tag and digest from the workflow output; the image carries commit/version labels and `/health` reports its version. No `latest` alias is created. Only trusted maintainers should dispatch publishing because the workflow runs code from main with package-write permission.
+
+If the Git tag push fails after the image publishes, use the image's commit label to annotate that same commit with the matching `v`-prefixed tag and push only the tag; the published image tag is not replaced.
 
 ## Install once
 

@@ -10,7 +10,7 @@ Build only affected components during review; publish timestamped plant-journal 
 ## What & Why
 
 - Pull requests need automatic checks scoped to changed components. Publishing should instead be an explicit operator action on merged main, with full verification before a private image is released.
-- Release identities are UTC date-and-time stamps in `YYYY.M.D-THHMMSS` form, not semantic versions or Git release tags. The operator imports an Unraid template once, then edits its image tag when WUD reports an update.
+- Release identities are UTC date-and-time stamps in `YYYY.M.D-THHMMSS` form, not semantic versions. The operator imports an Unraid template once, then edits its image tag when WUD reports an update.
 
 ## Domain / Design Notes
 
@@ -31,7 +31,7 @@ Build only affected components during review; publish timestamped plant-journal 
 
 - Every pull request runs an affected-component Dagger check. Backend, frontend, pipeline, or any combination selected by changed paths receives its applicable checks; backend/contract changes also check contract drift. Review checks never publish.
 - A manually dispatched publishing check runs only from merged main, fully verifies the system, assigns one UTC timestamp version, and refuses already-published versions before publication. Failure in verification or registry authentication prevents publication.
-- Authenticated publication provides a private `linux/amd64` GHCR image under only its timestamp tag, carrying version and commit provenance and an immutable digest. No `latest` alias or Git release tag is maintained; credentials are not exposed.
+- Authenticated publication provides a private `linux/amd64` GHCR image under only its timestamp tag, carrying version and commit provenance and an immutable digest; it then annotates the built commit with a matching `v`-prefixed Git tag. No `latest` alias is maintained; credentials are not exposed.
 - The operator imports the Unraid template once, supplies read-only registry credentials, selects an existing published version, and applies it to run one container with persistent writable journal data. Unraid reports pull and startup failures; the operator verifies that the service reports the selected version and is reachable on the LAN and tailnet, not the public internet.
 - WUD is configured once on the NAS to report newer timestamped versions of this service without updating it; no WUD configuration is persisted in the repository. The operator edits the existing Unraid template's version and applies it when ready; journal entries remain available after replacement. Other containers retain their existing update behavior.
 - The already-published trial remains runnable and its version checkable until the operator moves to a timestamped image. For incompatible images, the operator stops the service and manually restores a compatible existing Unraid backup before applying a selected version.

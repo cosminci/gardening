@@ -17,7 +17,12 @@ export function componentsForPath(path: string): readonly Component[] {
   if (path.startsWith("contract/")) return ["backend", "frontend"];
   if (path.startsWith("backend/")) return ["backend"];
   if (path.startsWith("frontend/")) return ["frontend"];
-  if (path.startsWith(".dagger/") || path.startsWith(".github/workflows/")) return ["pipeline"];
+  if (
+    path === "dagger.json" ||
+    path.startsWith(".dagger/") ||
+    path.startsWith(".github/workflows/")
+  )
+    return ["pipeline"];
   return [];
 }
 

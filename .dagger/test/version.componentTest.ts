@@ -23,27 +23,40 @@ describe("releaseVersion", () => {
     expect(releaseVersion(publishedAt)).toBe("2026.9.24-T070609");
   });
 
-  describe("assertReleaseVersion", () => {
-    it("should accept a UTC timestamp without altering its image tag", () => {
-      expect(() => {
-        assertReleaseVersion("2026.9.24-T170609");
-      }).not.toThrow();
-    });
-
-    it("should reject old semantic versions and malformed timestamps", () => {
-      for (const tag of ["v1.0.0", "1.0.0-rc.2", "2026.13.24-T170609", "2026.9.24-T1706"]) {
-        expect(() => {
-          assertReleaseVersion(tag);
-        }).toThrow("invalid release version");
-      }
-    });
-  });
-
   it("should distinguish releases in different seconds, including across midnight", () => {
     const before = new Date("2026-09-24T23:59:59.000Z");
     const after = new Date("2026-09-25T00:00:00.000Z");
 
     expect(releaseVersion(before)).toBe("2026.9.24-T235959");
     expect(releaseVersion(after)).toBe("2026.9.25-T000000");
+  });
+});
+
+describe("assertReleaseVersion", () => {
+  it("should accept a UTC release timestamp", () => {
+    const validateTag = () => {
+      assertReleaseVersion("2026.9.24-T170609");
+    };
+
+    expect(validateTag).not.toThrow();
+  });
+
+  it("should reject semantic versions and impossible date or time stamps", () => {
+    const invalidTags = [
+      "v1.0.0",
+      "1.0.0-rc.2",
+      "2026.13.24-T170609",
+      "2026.2.30-T170609",
+      "2026.9.24-T999999",
+      "2026.9.24-T176060",
+    ];
+
+    for (const tag of invalidTags) {
+      const validateTag = () => {
+        assertReleaseVersion(tag);
+      };
+
+      expect(validateTag).toThrow("invalid release version");
+    }
   });
 });

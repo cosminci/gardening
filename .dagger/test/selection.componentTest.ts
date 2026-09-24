@@ -22,6 +22,7 @@ describe("componentsForPath", () => {
   });
   it("maps a pipeline path to pipeline", () => {
     expect(Selection.componentsForPath(".dagger/src/index.ts")).toEqual(["pipeline"]);
+    expect(Selection.componentsForPath("dagger.json")).toEqual(["pipeline"]);
     expect(Selection.componentsForPath(".github/workflows/build.yml")).toEqual(["pipeline"]);
     expect(Selection.componentsForPath(".github/workflows/release.yml")).toEqual(["pipeline"]);
   });
