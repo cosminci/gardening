@@ -1,4 +1,4 @@
-# Proposed HTTP resource paths
+# HTTP resource path transition
 
 Journal routes use plant identity as a filter or relationship, never as a child of operations. Archiving uses `application/json-patch+json` (RFC 6902) to replace the plant's status. Other routes retain their existing verb, inputs, response body/status, and error behavior.
 

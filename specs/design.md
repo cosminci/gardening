@@ -4,7 +4,7 @@
 
 ## Service overview
 
-plant-journal keeps the household's plants, current substrates, and dated care history. The backend persists journal state and periodically measures watering attention; the browser orders the active garden by attention and displays recorded care dates in the archived cemetery, with recent and historical operations.
+plant-journal keeps the household's plants and dated care operations together as a journal. Substrate components and pesticides are independently editable nomenclatures; the backend periodically measures watering attention, and the browser orders the active garden by attention and displays recorded care dates in the archived cemetery.
 
 ## Domain model
 
@@ -30,7 +30,7 @@ erDiagram
 
 - Plant reads return current details for active plants by default or archived plants on request. Status filtering precedes decoding, so corruption in an archived plant does not prevent garden reads. Attention reads return the latest complete, separately measured identity-and-watering projection for active plants; the browser joins it to current plant details by identifier.
 - The garden opens with its loaded active count and a separate archived count; the archived list loads only when the cemetery opens. Once loaded, the cemetery count is its list size. Its cards replace watering attention with a RIP marker and the recorded care range as `dd.mm.yyyy` dates, or unknown dates if there are no operations; recent and paginated history and editing remain available.
-- Archiving an active Plant requires an explicit permanent-action confirmation. Success moves that Plant to the cemetery, refreshes the garden and archived count, preserves its history, and restores focus to a persistent control. Cancelling leaves the journal unchanged and restores focus. The cemetery has no restoration or add-operation control.
+- Archiving an active Plant requires an explicit permanent-action confirmation. Success moves that Plant to the cemetery, refreshes the garden and archived count, preserves its history, and restores focus to a persistent control. The archive response waits for one full attention refresh; if that refresh fails, the archive still succeeds and the previous complete projection remains until a later refresh. Cancelling leaves the journal unchanged and restores focus. The cemetery has no restoration or add-operation control.
 - Logging care or repot for an archived Plant is rejected even if its form was opened before archiving. Editing an existing operation's details remains available without changing the operation's date or the recorded care range.
 - The logging form starts at the current local minute, accepts edits, and submits the selected time as an absolute instant. The backend persists that instant with a new operation identifier. Editing changes only kind-specific details, never the recorded time.
 - A latest repot log or edit also persists its substrate as the plant's current mix; an older repot or ordinary care does not. A failed post-write plant read or update compensates the operation write, reporting both failures if compensation also fails. Mutation workflows are serialized.
@@ -78,18 +78,28 @@ erDiagram
 
 ## Component architecture
 
-Domain services own journal behavior and watering assessment through separate, use-case-shaped capability ports. The application injects HTTP, persistence, clock, and identifier adapters into the services without moving business orchestration into those adapters. The SQLite adapter implements both persistence ports: journal reads select plants by status and validate their stored details, while attention reads select active plant identities and bounded watering dates.
+Plant and operation HTTP APIs and browser clients are separate resource boundaries that share one journal domain service and persistence port. Attention has its own monitor and port; substrate components and pesticides each have their own catalog service, port, and persistence adapter. Composition injects these capabilities into the services; the SQLite journal adapter also serves attention reads.
 
 ```mermaid
 flowchart LR
-    Browser["SolidJS browser"] -->|"same-origin HTTP"| HTTP["Tapir / Netty HTTP adapter"]
-    Static["Built frontend assets"] --> HTTP
-    HTTP --> Journal["PlantJournal domain service"]
-    HTTP --> Attention["PlantAttentionMonitor"]
-    Journal --> StorePort["PlantJournalStore capability"]
-    Attention --> AttentionPort["PlantAttentionStore capability"]
-    Journal --> IDs["IdGenerator capability"]
-    Attention --> Clock["Clock capability"]
-    StorePort --> SQLite["SQLite adapter"]
-    AttentionPort --> SQLite
+    Browser["SolidJS resource clients"] --> Plants["Plant HTTP API"]
+    Browser --> Operations["Operation HTTP API"]
+    Browser --> AttentionAPI["Attention HTTP API"]
+    Browser --> SubstrateAPI["Substrate-component HTTP API"]
+    Browser --> PesticideAPI["Pesticide HTTP API"]
+    Plants --> Journal["PlantJournal"]
+    Operations --> Journal
+    AttentionAPI --> Attention["PlantAttentionMonitor"]
+    SubstrateAPI --> Substrate["SubstrateComponentCatalog"]
+    PesticideAPI --> Pesticide["PesticideCatalog"]
+    Journal --> JournalPort["PlantJournalStore"]
+    Journal --> SubstratePort["SubstrateComponentStore"]
+    Journal --> PesticidePort["PesticideStore"]
+    Attention --> AttentionPort["PlantAttentionStore"]
+    Substrate --> SubstratePort
+    Pesticide --> PesticidePort
+    JournalPort --> JournalSQLite["SQLite journal adapter"]
+    AttentionPort --> JournalSQLite
+    SubstratePort --> SubstrateSQLite["SQLite substrate adapter"]
+    PesticidePort --> PesticideSQLite["SQLite pesticide adapter"]
 ```
