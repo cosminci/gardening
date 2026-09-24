@@ -43,7 +43,5 @@ export function runtimeImage(source: Dagger.Directory, info: ImageInfo): Dagger.
       .withLabel("org.opencontainers.image.revision", info.revision)
       .withLabel("org.opencontainers.image.created", info.created)
       .withLabel("org.opencontainers.image.source", BuildEnv.SOURCE_URL)
-      .withLabel("wud.watch", "true")
-      .withLabel("wud.tag.include", "^\\d+\\.\\d+\\.\\d+$")
   );
 }

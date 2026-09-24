@@ -9,3 +9,23 @@ export function deriveVersion(gitDescribe: string): string {
   if (trimmed === "") return "0.0.0-unknown";
   return trimmed.startsWith("v") ? trimmed.slice(1) : trimmed;
 }
+
+export function releaseVersion(now: Date): string {
+  const day = [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate()].join(".");
+  const hour = String(now.getUTCHours()).padStart(2, "0");
+  const minute = String(now.getUTCMinutes()).padStart(2, "0");
+  const second = String(now.getUTCSeconds()).padStart(2, "0");
+  return `${day}-T${hour}${minute}${second}`;
+}
+
+export function assertReleaseVersion(tag: string): void {
+  const match =
+    /^(\d{4})\.([1-9]|1[0-2])\.([1-9]|[12]\d|3[01])-T(?:[01]\d|2[0-3])[0-5]\d[0-5]\d$/.exec(tag);
+  if (
+    match === null ||
+    new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDate() !==
+      Number(match[3])
+  ) {
+    throw new Error(`invalid release version: ${tag}`);
+  }
+}

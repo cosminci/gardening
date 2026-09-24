@@ -8,7 +8,7 @@ import { frontendCheck } from "./hooks/frontend";
 import { runtimeImage } from "./hooks/image";
 import { pipelineCheck } from "./hooks/pipeline";
 import * as Selection from "./selection";
-import { deriveVersion } from "./version";
+import { assertReleaseVersion, deriveVersion, releaseVersion } from "./version";
 
 /** CI pipeline for the plant-journal app. One composable module over three components — backend,
  * frontend, and the pipeline itself — plus the contract that binds the app halves. Verifying and
@@ -110,38 +110,26 @@ export class Gardening {
     });
   }
 
-  /** Refuses to proceed unless the working tree is clean and HEAD sits exactly on a tag. */
-  @func()
-  async releaseGuard(
-    @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
-  ): Promise<string> {
-    if (!(await Git.isClean(source))) throw new Error("release refused: working tree is dirty");
-    const tag = (await Git.headExactTag(source)).trim();
-    if (tag === "") throw new Error("release refused: HEAD is not on a tag");
-    return `release ok: ${tag}`;
+  /** Creates a UTC release version, once per manually dispatched publish. */
+  @func({ cache: "never" })
+  releaseVersion(): string {
+    return releaseVersion(new Date());
   }
 
-  /** Builds a guarded release image and pushes it to the private GHCR package. */
-  @func()
+  /** Publishes the selected version; the manual release check verifies first and refuses existing tags. */
+  @func({ cache: "never" })
   async publish(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
+    tag: string,
     token: Dagger.Secret,
+    registryUser = GHCR_USER,
   ): Promise<string> {
-    await this.releaseGuard(source);
-    const version = deriveVersion(await Git.gitDescribe(source));
-    const image = (await this.buildImage(source)).withRegistryAuth("ghcr.io", GHCR_USER, token);
-    const versioned = await image.publish(`${GHCR_REPOSITORY}:${version}`);
-    const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
-    return `published ${versioned} and ${latest}`;
-  }
-
-  /** Prints how the NAS pulls a given version (WUD auto-update is preferred). */
-  @func()
-  deploy(version: string): string {
-    return [
-      "# Preferred: WUD auto-updates the container (image is labelled wud.watch=true).",
-      "# Manual pull + recreate on the NAS:",
-      `ssh nas 'docker pull ${GHCR_REPOSITORY}:${version} && docker compose up -d plant-journal'`,
-    ].join("\n");
+    assertReleaseVersion(tag);
+    const image = runtimeImage(source, {
+      version: tag,
+      revision: (await Git.headSha(source)).trim(),
+      created: new Date().toISOString(),
+    }).withRegistryAuth("ghcr.io", registryUser, token);
+    return image.publish(`${GHCR_REPOSITORY}:${tag}`);
   }
 }
