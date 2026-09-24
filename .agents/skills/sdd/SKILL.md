@@ -192,7 +192,9 @@ when the checklist records why.
   combinations.
 - [ ] Use coverage exclusions only for `app.*`, OpenAPI document generation, documented
   scoverage bugs, or genuinely nonsensical adapter implementation paths. Domain use cases must
-  make impossible states unrepresentable rather than excluding them.
+  make impossible states unrepresentable rather than excluding them. Put the reason immediately
+  above each standalone `$COVERAGE-OFF$` marker (required by Scala's coverage compiler), and
+  exclude only the unreachable expression or branch.
 - [ ] Name values for the meaning they establish, not merely the helper call that produced them.
   Prefer `wateredPlantOperations` over `watered` when the value describes a vector of watered
   care operations; make construction arguments equally self-describing.

@@ -10,6 +10,9 @@ import {
 } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import type { PesticideClient } from "../domain/PesticideCatalog";
+import type { PlantAttentionClient } from "../domain/PlantAttention";
+import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
@@ -21,6 +24,9 @@ import "./app.css";
 
 interface AppProps {
   readonly journal: Journal.JournalClient;
+  readonly attention: PlantAttentionClient;
+  readonly substrates: SubstrateComponentClient;
+  readonly pesticideCatalog: PesticideClient;
 }
 
 interface GardenHistory {
@@ -71,9 +77,9 @@ export const App: Component<AppProps> = (props) => {
       await Promise.all([
         journal.getPlants(),
         journal.getArchivedCount(),
-        journal.getAttention(),
-        journal.getSubstrateComponents(),
-        journal.getPesticides(),
+        props.attention.getAttention(),
+        props.substrates.getSubstrateComponents(),
+        props.pesticideCatalog.getPesticides(),
       ]);
     if (version !== loadVersion) return;
     if (
@@ -272,16 +278,16 @@ export const App: Component<AppProps> = (props) => {
   };
 
   const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
-    const result = await props.journal.addSubstrateComponent(data);
+    const result = await props.substrates.addSubstrateComponent(data);
     if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
     return result;
   };
 
-  const editSubstrateComponent: Journal.JournalClient["editSubstrateComponent"] = async (
+  const editSubstrateComponent: SubstrateComponentClient["editSubstrateComponent"] = async (
     id,
     data,
   ) => {
-    const result = await props.journal.editSubstrateComponent(id, data);
+    const result = await props.substrates.editSubstrateComponent(id, data);
     if (result.kind === "edited")
       setSubstrateComponents((current) =>
         current.map((component) => (component.id === id ? result.entry : component)),
@@ -290,13 +296,13 @@ export const App: Component<AppProps> = (props) => {
   };
 
   const addPesticide = async (data: Journal.PesticideData) => {
-    const result = await props.journal.addPesticide(data);
+    const result = await props.pesticideCatalog.addPesticide(data);
     if (result.kind === "added") setPesticides((current) => [...current, result.entry]);
     return result;
   };
 
-  const editPesticide: Journal.JournalClient["editPesticide"] = async (id, data) => {
-    const result = await props.journal.editPesticide(id, data);
+  const editPesticide: PesticideClient["editPesticide"] = async (id, data) => {
+    const result = await props.pesticideCatalog.editPesticide(id, data);
     if (result.kind === "edited")
       setPesticides((current) =>
         current.map((pesticide) => (pesticide.id === id ? result.entry : pesticide)),

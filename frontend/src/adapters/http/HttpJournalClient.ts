@@ -76,17 +76,6 @@ export const makeHttpJournalClient = (
       }
     },
 
-    async getAttention(): Promise<Journal.GetAttentionResult> {
-      try {
-        const { data, error } = await client.GET("/attention");
-        return data === undefined
-          ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", projection: toAttentionProjection(data) };
-      } catch (error) {
-        return { kind: "readFailed", reason: requestFailure(error) };
-      }
-    },
-
     async getOperations(id, window): Promise<Journal.GetOperationsResult> {
       try {
         const { data, error } = await client.GET("/plants/{plantId}/operations", {
@@ -138,89 +127,6 @@ export const makeHttpJournalClient = (
         return { kind: "editFailed", reason: requestFailure(error) };
       }
     },
-
-    async getSubstrateComponents(): Promise<Journal.CatalogReadResult<Journal.SubstrateComponent>> {
-      try {
-        const { data, error } = await client.GET("/substrate-components");
-        return data === undefined
-          ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", entries: data.map(toSubstrateComponent) };
-      } catch (error) {
-        return { kind: "readFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async addSubstrateComponent(
-      value: Journal.SubstrateComponentData,
-    ): Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>> {
-      try {
-        const { data, error } = await client.POST("/substrate-components", {
-          body: toWireSubstrateComponentData(value),
-        });
-        return data === undefined
-          ? { kind: "addFailed", reason: requestFailure(error) }
-          : { kind: "added", entry: toSubstrateComponent(data) };
-      } catch (error) {
-        return { kind: "addFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async editSubstrateComponent(
-      id,
-      value,
-    ): Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>> {
-      try {
-        const { data, error, response } = await client.PUT("/substrate-components/{componentId}", {
-          params: { path: { componentId: id } },
-          body: toWireSubstrateComponentData(value),
-        });
-        if (data !== undefined) return { kind: "edited", entry: toSubstrateComponent(data) };
-        if (response.status === 404) return { kind: "recordMissing" };
-        return { kind: "editFailed", reason: requestFailure(error) };
-      } catch (error) {
-        return { kind: "editFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async getPesticides(): Promise<Journal.CatalogReadResult<Journal.Pesticide>> {
-      try {
-        const { data, error } = await client.GET("/pesticides");
-        return data === undefined
-          ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", entries: data.map(toPesticide) };
-      } catch (error) {
-        return { kind: "readFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async addPesticide(
-      value: Journal.PesticideData,
-    ): Promise<Journal.CatalogAddResult<Journal.Pesticide>> {
-      try {
-        const { data, error } = await client.POST("/pesticides", {
-          body: toWirePesticideData(value),
-        });
-        return data === undefined
-          ? { kind: "addFailed", reason: requestFailure(error) }
-          : { kind: "added", entry: toPesticide(data) };
-      } catch (error) {
-        return { kind: "addFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async editPesticide(id, value): Promise<Journal.CatalogEditResult<Journal.Pesticide>> {
-      try {
-        const { data, error, response } = await client.PUT("/pesticides/{pesticideId}", {
-          params: { path: { pesticideId: id } },
-          body: toWirePesticideData(value),
-        });
-        if (data !== undefined) return { kind: "edited", entry: toPesticide(data) };
-        if (response.status === 404) return { kind: "recordMissing" };
-        return { kind: "editFailed", reason: requestFailure(error) };
-      } catch (error) {
-        return { kind: "editFailed", reason: requestFailure(error) };
-      }
-    },
   };
 };
 
@@ -240,43 +146,6 @@ const toPlant = (value: Wire["Plant"]): Journal.Plant => ({
     status: value.details.status,
   },
 });
-
-const toAttentionProjection = (value: Wire["AttentionProjection"]): Journal.AttentionProjection => {
-  return {
-    measuredAt: Journal.instant(value.measuredAt),
-    plants: value.plants.map(toPlantAttention),
-  };
-};
-
-const toPlantAttention = (value: Wire["PlantAttention"]): Journal.AttentionSample => {
-  const watering = value.watering;
-  switch (watering.kind) {
-    case "unavailable":
-      return {
-        plantId: Journal.plantId(value.plantId),
-        watering: {
-          kind: "unavailable",
-          sampleCount: watering.sampleCount,
-          maybeElapsed:
-            watering.elapsedMillis === null ? null : Journal.milliseconds(watering.elapsedMillis),
-        },
-      };
-    case "current":
-    case "overdue":
-    case "redAlert":
-      return {
-        plantId: Journal.plantId(value.plantId),
-        watering: {
-          kind: watering.kind,
-          sampleCount: watering.sampleCount,
-          averageInterval: Journal.milliseconds(watering.averageIntervalMillis),
-          elapsed: Journal.milliseconds(watering.elapsedMillis),
-        },
-      };
-    default:
-      throw new Error(`invalid watering attention: ${JSON.stringify(watering)}`);
-  }
-};
 
 const toOperation = (value: Wire["Operation"]): Journal.Operation => ({
   id: Journal.operationId(value.id),
@@ -320,36 +189,6 @@ const toWireDetails = (details: Journal.OperationDetails): Wire["OperationDetail
         })),
         notes: details.maybeNote,
       };
-
-const toSubstrateComponent = (value: Wire["SubstrateComponent"]): Journal.SubstrateComponent => ({
-  id: Journal.substrateComponentId(value.id),
-  data: {
-    name: Journal.nomenclatureName(value.data.name),
-    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
-  },
-});
-
-const toWireSubstrateComponentData = (
-  value: Journal.SubstrateComponentData,
-): Wire["SubstrateComponentData"] => ({
-  name: value.name,
-  info: value.maybeInfo,
-});
-
-const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
-  id: Journal.pesticideId(value.id),
-  data: {
-    name: Journal.nomenclatureName(value.data.name),
-    pesticideType: value.data.type,
-    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
-  },
-});
-
-const toWirePesticideData = (value: Journal.PesticideData): Wire["PesticideData"] => ({
-  name: value.name,
-  type: value.pesticideType,
-  info: value.maybeInfo,
-});
 
 const requestFailure = (error: unknown): Error =>
   error instanceof Error ? error : new Error("journal request failed");

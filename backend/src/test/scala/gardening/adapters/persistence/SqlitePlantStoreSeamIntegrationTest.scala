@@ -18,15 +18,13 @@ import scala.util.Using
 
 class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
 
-  private val date        = Instant.parse("2026-01-01T00:00:00Z")
-  private val componentId = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
-  private val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-  private val perliteId   = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
-  private val sand3to5Id  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
-  private val lecaId      = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
-  private val vertabId    = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
-  private val neemOilId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
-  private val fullWindow  = OperationWindow(offset = 0, size = 10)
+  private val date       = Instant.parse("2026-01-01T00:00:00Z")
+  private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val sand3to5Id = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
+  private val lecaId     = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
+  private val vertabId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
+  private val neemOilId  = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
+  private val fullWindow = OperationWindow(offset = 0, size = 10)
 
   private val perliteSubstrate    = Substrate.of(List(SubstratePart(perliteId, share = 100))).getOrElse(fail("invalid perlite substrate"))
   private val sand3to5Substrate   = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid sand substrate"))
@@ -570,84 +568,12 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
       assertEquals(store.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
-  test("should seed, add, and edit substrate components"):
-    Using.resource(storeResource): resource =>
-      val store              = resource.store
-      val expectedComponents =
-        Vector("Kekkila universal peat", "Kekkila ericaceous peat", "Perlite", "Pine bark", "Sand 3-5 mm", "Sand 4-8 mm", "LECA")
-      store.getSubstrateComponents match
-        case CatalogReadResult.Read(components) => assertEquals(components.map(_.data.name.value), expectedComponents)
-        case other                              => fail(s"expected Read, got $other")
-
-      val added = SubstrateComponent(componentId, SubstrateComponentData(NomenclatureName("Pumice"), NomenclatureInfo("porous").some))
-      assertEquals(store.addSubstrateComponent(added), CatalogAddResult.Added(added))
-      store.getSubstrateComponents match
-        case CatalogReadResult.Read(components) => assertEquals(components.lastOption.map(_.data), added.data.some)
-        case other                              => fail(s"expected Read, got $other")
-
-      val editedData = SubstrateComponentData(NomenclatureName("Fine pumice"), none)
-      assertEquals(store.editSubstrateComponent(componentId, editedData), CatalogEditResult.Edited(added.copy(data = editedData)))
-      assertEquals(store.editSubstrateComponent(SubstrateComponentId(UUID.randomUUID()), editedData), CatalogEditResult.RecordMissing)
-      store.getSubstrateComponents match
-        case CatalogReadResult.Read(components) => assertEquals(components.lastOption.map(_.data), editedData.some)
-        case other                              => fail(s"expected Read, got $other")
-
-  test("should seed, add, and edit pesticides"):
-    Using.resource(storeResource): resource =>
-      val store  = resource.store
-      val seeded = store.getPesticides
-
-      val added         = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
-      val editedData    = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType.Treatment, NomenclatureInfo("2g/L").some)
-      val addedResult   = store.addPesticide(added)
-      val editedResult  = store.editPesticide(pesticideId, editedData)
-      val missingResult = store.editPesticide(PesticideId(UUID.randomUUID()), editedData)
-
-      val expectedSeeded = Vector(
-        ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some),
-        ("SWITCH 62.5 WG", PesticideType.Fungicide, none),
-        ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some),
-        ("SIMFONIA", PesticideType.Insecticide, "organic".some),
-        ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none),
-        ("MOSPILAN 20SG", PesticideType.Insecticide, none),
-        ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some),
-        ("H2O2", PesticideType.Treatment, none)
-      )
-      seeded match
-        case CatalogReadResult.Read(pesticides) =>
-          val actualSeeded =
-            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value)))
-          assertEquals(actualSeeded, expectedSeeded)
-        case other => fail(s"expected Read, got $other")
-      assertEquals(addedResult, CatalogAddResult.Added(added))
-      assertEquals(editedResult, CatalogEditResult.Edited(added.copy(data = editedData)))
-      assertEquals(missingResult, CatalogEditResult.RecordMissing)
-
-  test("should reject corrupt catalog values"):
-    Using.resource(storeResource): resource =>
-      val dataSource = resource.dataSource
-      val store      = resource.store
-      execute(dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Perlite'")
-      execute(dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'H2O2'")
-
-      val actualError = intercept[DatabaseCorruption](store.getSubstrateComponents).err.getMessage
-      assertEquals(actualError, "invalid substrate component id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-      assertEquals(intercept[DatabaseCorruption](store.getPesticides).err.getMessage, "invalid pesticide id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-
-    Using.resource(storeResource): resource =>
-      val dataSource = resource.dataSource
-      val rejected   = intercept[java.sql.SQLException]:
-        execute(dataSource, "update pesticide set type = 'Unknown' where name = 'H2O2'")
-      assert(rejected.getMessage.contains("CHECK constraint failed"))
-
   test("should report write failures when the database is read-only"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
       val store      = resource.store
       seedPlant(dataSource, id = "p1")
       val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
-      val component = SubstrateComponent(componentId, SubstrateComponentData(NomenclatureName("Pumice"), none))
-      val pesticide = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
       assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
       val readOnlyStore = SqlitePlantStore.make(Transactor(dataSource, connectionConfig = makeReadOnly))
 
@@ -660,18 +586,6 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       readOnlyStore.updatePlant(Plant(PlantId("p1"), defaultPlantDetails)) match
         case UpdatePlantResult.UpdateFailed(_) => ()
         case other                             => fail(s"expected UpdateFailed, got $other")
-      readOnlyStore.addSubstrateComponent(component) match
-        case CatalogAddResult.AddFailed(_) => ()
-        case other                         => fail(s"expected AddFailed, got $other")
-      readOnlyStore.editSubstrateComponent(perliteId, component.data) match
-        case CatalogEditResult.EditFailed(_) => ()
-        case other                           => fail(s"expected EditFailed, got $other")
-      readOnlyStore.addPesticide(pesticide) match
-        case CatalogAddResult.AddFailed(_) => ()
-        case other                         => fail(s"expected AddFailed, got $other")
-      readOnlyStore.editPesticide(pesticideId, pesticide.data) match
-        case CatalogEditResult.EditFailed(_) => ()
-        case other                           => fail(s"expected EditFailed, got $other")
 
   test("should report an archive failure when the database is read-only"):
     Using.resource(storeResource): resource =>
@@ -703,12 +617,6 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       store.getAttentionSamples(size = 20) match
         case GetAttentionSamplesResult.ReadFailed(_) => ()
         case other                                   => fail(s"expected ReadFailed, got $other")
-      store.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(_) => ()
-        case other                           => fail(s"expected ReadFailed, got $other")
-      store.getPesticides match
-        case CatalogReadResult.ReadFailed(_) => ()
-        case other                           => fail(s"expected ReadFailed, got $other")
 
   test("should report archived count, date-range, and archive errors when the schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>

@@ -66,18 +66,27 @@ object SqlitePlantStore:
           case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
       catch case error: SqlException => GetPlantResult.ReadFailed(error)
 
+    override def updatePlant(plant: Plant): UpdatePlantResult =
+      try
+        transact(transactor)(updatePlantRow(plant).update.run()) match
+          case 1 => UpdatePlantResult.Updated
+          case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
+      catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
+
     private def selectPlant(id: String) =
       sql"select id, species, nickname, location, substrate, status from plant where id = $id"
 
     private def toPlant(row: PlantRow) =
       for
         substrate <- decode[Substrate](row.substrate).leftMap(invalidSubstrate)
-        // The schema check constrains every stored status to a PlantStatus name.
-        // $COVERAGE-OFF$
-        status <- PlantStatus.values
+        status    <- PlantStatus.values
           .find(_.toString.equals(row.status))
-          .toRight(RuntimeException(s"invalid stored plant status: ${row.status}"))
-      // $COVERAGE-ON$
+          .toRight(
+            // The schema check constrains every stored status to a PlantStatus name.
+            // $COVERAGE-OFF$
+            RuntimeException(s"invalid stored plant status: ${row.status}")
+            // $COVERAGE-ON$
+          )
       yield
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
@@ -143,13 +152,15 @@ object SqlitePlantStore:
     private def toAttentionSample(row: AttentionSampleRow) =
       val storedDates = decodeWateringDates(row.wateringDates)
       for
-        wateringDates <- storedDates.traverse(parseOperationDate)
-        // The SQL query limits each history to the maximum representable length.
-        // $COVERAGE-OFF$
+        wateringDates   <- storedDates.traverse(parseOperationDate)
         wateringHistory <- WateringHistory
           .from(wateringDates)
-          .leftMap(message => DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message")))
-      // $COVERAGE-ON$
+          .leftMap:
+            message =>
+              // The SQL query limits each history to the maximum representable length.
+              // $COVERAGE-OFF$
+              DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message"))
+              // $COVERAGE-ON$
       yield PlantAttentionSample(PlantId(row.id), wateringHistory)
 
     private def decodeWateringDates(value: String) =
@@ -225,90 +236,6 @@ object SqlitePlantStore:
           case 1 => OperationCompensationResult.Compensated
           case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
-
-    override def updatePlant(plant: Plant): UpdatePlantResult =
-      try
-        transact(transactor)(updatePlantRow(plant).update.run()) match
-          case 1 => UpdatePlantResult.Updated
-          case _ => UpdatePlantResult.UpdateFailed(RuntimeException(s"plant not found while updating: ${plant.id.value}"))
-      catch case error: SqlException => UpdatePlantResult.UpdateFailed(error)
-
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
-      try
-        CatalogReadResult.Read(
-          trust(
-            connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run()).traverse(toComponent)
-          )
-        )
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
-
-    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
-      try
-        val row = ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value))
-        transact(transactor):
-          sql"insert into substrate_component (id, name, info) values (${row.id}, ${row.name}, ${row.info})".update.run()
-        CatalogAddResult.Added(component)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
-
-    override def editSubstrateComponent(
-        id: SubstrateComponentId,
-        data: SubstrateComponentData
-    ): CatalogEditResult[SubstrateComponent] =
-      try
-        transact(transactor):
-          sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)}
-               where id = ${id.value.toString}""".update.run()
-        match
-          case 1 => CatalogEditResult.Edited(SubstrateComponent(id, data))
-          case _ => CatalogEditResult.RecordMissing
-      catch case error: SqlException => CatalogEditResult.EditFailed(error)
-
-    override def getPesticides: CatalogReadResult[Pesticide] =
-      try
-        CatalogReadResult.Read(
-          trust(connect(transactor)(sql"select id, name, type, info from pesticide order by rowid".query[PesticideRow].run()).traverse(toPesticide))
-        )
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
-
-    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
-      try
-        val data = pesticide.data
-        transact(transactor):
-          sql"""insert into pesticide (id, name, type, info)
-               values (${pesticide.id.value.toString}, ${data.name.value}, ${data.pesticideType.toString}, ${data.maybeInfo.map(
-              _.value
-            )})""".update.run()
-        CatalogAddResult.Added(pesticide)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
-
-    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-      try
-        transact(transactor):
-          sql"""update pesticide set name = ${data.name.value}, type = ${data.pesticideType.toString}, info = ${data.maybeInfo.map(_.value)}
-               where id = ${id.value.toString}""".update.run()
-        match
-          case 1 => CatalogEditResult.Edited(Pesticide(id, data))
-          case _ => CatalogEditResult.RecordMissing
-      catch case error: SqlException => CatalogEditResult.EditFailed(error)
-
-    private def toComponent(row: ComponentRow) =
-      SubstrateComponentId
-        .parse(row.id)
-        .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
-        .map: id =>
-          SubstrateComponent(id, SubstrateComponentData(NomenclatureName(row.name), row.info.map(NomenclatureInfo.apply)))
-
-    private def toPesticide(row: PesticideRow) =
-      for
-        id <- PesticideId
-          .parse(row.id)
-          .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
-        // The schema check mirrors PesticideType; extending it requires a migration before persistence.
-        // $COVERAGE-OFF$
-        pesticideType <- Try(PesticideType.valueOf(row.pesticideType)).toEither.left.map: error =>
-          RuntimeException(s"invalid pesticide type: ${row.pesticideType}", error)
-      // $COVERAGE-ON$
-      yield Pesticide(id, PesticideData(NomenclatureName(row.name), pesticideType, row.info.map(NomenclatureInfo.apply)))
 
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
     private def trust[A](decoded: Either[Throwable, A]) =
@@ -424,5 +351,3 @@ object SqlitePlantStore:
       id: String,
       wateringDates: String
   ) derives DbCodec
-  private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec
-  private case class PesticideRow(id: String, name: String, pesticideType: String, info: Option[String]) derives DbCodec

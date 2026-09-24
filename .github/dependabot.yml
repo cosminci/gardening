@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/contract"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/.dagger"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "sbt"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      
