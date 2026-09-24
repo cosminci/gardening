@@ -1,7 +1,7 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{AttentionApi, HealthApi, JournalApi, PesticideApi, StaticSite, SubstrateComponentApi}
+import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PlantApi, StaticSite, SubstrateComponentApi}
 import gardening.adapters.persistence.SqliteLocation
 import gardening.domain.attention.PlantAttentionMonitor
 import org.flywaydb.core.Flyway
@@ -27,8 +27,9 @@ object Main:
       Programs.make(resources).flatMap: programs =>
         val endpoints =
           List(HealthApi.serverEndpoint(version)) ++
-            JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
+            PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
             AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
+            OperationApi.serverEndpoints(using programs.plantJournal) ++
             SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
             PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
             StaticSite.endpoint(staticDir)

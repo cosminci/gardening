@@ -1,7 +1,8 @@
 import { render } from "solid-js/web";
-import { makeHttpJournalClient } from "./adapters/http/HttpJournalClient";
+import { makeHttpOperationClient } from "./adapters/http/HttpOperationClient";
 import { makeHttpPesticideClient } from "./adapters/http/HttpPesticideClient";
 import { makeHttpPlantAttentionClient } from "./adapters/http/HttpPlantAttentionClient";
+import { makeHttpPlantClient } from "./adapters/http/HttpPlantClient";
 import { makeHttpSubstrateComponentClient } from "./adapters/http/HttpSubstrateComponentClient";
 import { App } from "./app/App";
 import "./app/controls.css";
@@ -11,7 +12,8 @@ if (root !== null) {
   render(
     () => (
       <App
-        journal={makeHttpJournalClient()}
+        plants={makeHttpPlantClient()}
+        operations={makeHttpOperationClient()}
         attention={makeHttpPlantAttentionClient()}
         substrates={makeHttpSubstrateComponentClient()}
         pesticideCatalog={makeHttpPesticideClient()}

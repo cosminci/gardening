@@ -26,7 +26,13 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "operationMissing" },
     });
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByText("3rd of March");
 
@@ -46,7 +52,13 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "operationTypeMismatch" },
     });
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByText("3rd of March");
 
@@ -69,7 +81,13 @@ describe("operation edit failures", () => {
       editOperationResult: { kind: "editFailed", reason },
     });
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByText("3rd of March");
 

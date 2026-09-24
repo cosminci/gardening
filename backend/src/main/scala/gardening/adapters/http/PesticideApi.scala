@@ -16,15 +16,22 @@ import sttp.tapir.server.ServerEndpoint
 
 object PesticideApi:
 
-  private val catalogEndpoint       = endpoint.errorOut(JournalError.generic)
-  private val getPesticidesEndpoint =
-    catalogEndpoint.get.in("pesticides").out(jsonBody[Vector[Pesticide]]).summary("List pesticides")
-  private val addPesticideEndpoint =
-    catalogEndpoint.post.in("pesticides").in(jsonBody[PesticideData])
-      .out(statusCode(StatusCode.Created)).out(jsonBody[Pesticide]).summary("Add a pesticide")
-  private val editPesticideEndpoint =
-    endpoint.put.in("pesticides" / path[String]("pesticideId")).in(jsonBody[PesticideData])
-      .errorOut(JournalError.catalogEdit).out(jsonBody[Pesticide]).summary("Edit a pesticide")
+  private val recordMissing = ApiError("nomenclature not found")
+  private val invalidId     = ApiError("invalid nomenclature id")
+  private val readFailed    = ApiError("nomenclatures could not be read")
+  private val writeFailed   = ApiError("nomenclature could not be saved")
+  private val editErrors    = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidId),
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(recordMissing),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
+
+  private val catalogEndpoint       = endpoint.errorOut(ApiError.generic)
+  private val getPesticidesEndpoint = catalogEndpoint.get.in("pesticides").out(jsonBody[Vector[Pesticide]]).summary("List pesticides")
+  private val addPesticideEndpoint  = catalogEndpoint.post.in("pesticides").in(jsonBody[PesticideData])
+    .out(statusCode(StatusCode.Created)).out(jsonBody[Pesticide]).summary("Add a pesticide")
+  private val editPesticideEndpoint = endpoint.put.in("pesticides" / path[String]("pesticideId")).in(jsonBody[PesticideData])
+    .errorOut(editErrors).out(jsonBody[Pesticide]).summary("Edit a pesticide")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(getPesticidesEndpoint, addPesticideEndpoint, editPesticideEndpoint)
@@ -34,17 +41,17 @@ object PesticideApi:
       getPesticidesEndpoint.handle: _ =>
         catalog.getPesticides match
           case CatalogReadResult.Read(pesticides) => pesticides.asRight
-          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
+          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, readFailed).asLeft,
       addPesticideEndpoint.handle: data =>
         catalog.addPesticide(data) match
           case CatalogAddResult.Added(pesticide) => pesticide.asRight
-          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
+          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, writeFailed).asLeft,
       editPesticideEndpoint.handle: (encodedId, data) =>
-        PesticideId.parse(encodedId).fold(JournalError.catalogInvalidId.asLeft): id =>
+        PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editPesticide(id, data) match
             case CatalogEditResult.Edited(pesticide) => pesticide.asRight
-            case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
-            case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft
+            case CatalogEditResult.RecordMissing     => recordMissing.asLeft
+            case CatalogEditResult.EditFailed(_)     => writeFailed.asLeft
     )
 
   private given CirceConfiguration = CirceConfiguration.default
@@ -60,15 +67,9 @@ object PesticideApi:
     case name            => name
   })
 
-  private given Codec[NomenclatureName] = Codec.from(
-    Decoder.decodeString.map(NomenclatureName.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[NomenclatureInfo] = Codec.from(
-    Decoder.decodeString.map(NomenclatureInfo.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[PesticideId] = Codec.from(
+  private given Codec[NomenclatureName] = Codec.from(Decoder.decodeString.map(NomenclatureName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[NomenclatureInfo] = Codec.from(Decoder.decodeString.map(NomenclatureInfo.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[PesticideId]      = Codec.from(
     // Pesticide identifiers appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
@@ -79,19 +80,14 @@ object PesticideApi:
   private given Codec.AsObject[PesticideData] = ConfiguredCodec.derived
   private given Codec.AsObject[Pesticide]     = ConfiguredCodec.derived
 
-  private given Schema[PesticideId] = Schema.string
-    // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
-    // $COVERAGE-OFF$
-    .map(PesticideId.parse)(_.value.toString).format("uuid")
+  // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+  // $COVERAGE-OFF$
+  private given Schema[PesticideId]   = Schema.string.map(PesticideId.parse)(_.value.toString).format("uuid")
+  private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType].apply(encode = Some(value => lowerCamel(value.productPrefix)))
   // $COVERAGE-ON$
-  private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType]
-    // OpenAPI uses this pesticide-type schema encoder; JSON responses use Circe.
-    // $COVERAGE-OFF$
-    .apply(encode = Some(value => lowerCamel(value.productPrefix)))
   private given Schema[NomenclatureName] = Schema.string
   private given Schema[NomenclatureInfo] = Schema.string
-  private given Schema[PesticideData]    = Schema.derived[PesticideData]
-    .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
+  private given Schema[PesticideData]    = Schema.derived[PesticideData].modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
   private def lowerCamel(name: String) =
     name.substring(0, 1).toLowerCase + name.substring(1)

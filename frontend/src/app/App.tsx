@@ -10,7 +10,9 @@ import {
 } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
+import type { PlantClient } from "../domain/Plant";
 import type { PlantAttentionClient } from "../domain/PlantAttention";
 import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
@@ -23,7 +25,8 @@ import { PlantCard } from "./PlantCard";
 import "./app.css";
 
 interface AppProps {
-  readonly journal: Journal.JournalClient;
+  readonly plants: PlantClient;
+  readonly operations: OperationClient;
   readonly attention: PlantAttentionClient;
   readonly substrates: SubstrateComponentClient;
   readonly pesticideCatalog: PesticideClient;
@@ -72,11 +75,12 @@ export const App: Component<AppProps> = (props) => {
 
   const loadJournal = async (animate = false) => {
     const version = ++loadVersion;
-    const journal = props.journal;
+    const plants = props.plants;
+    const operations = props.operations;
     const [plantsResult, countResult, attentionResult, componentsResult, pesticidesResult] =
       await Promise.all([
-        journal.getPlants(),
-        journal.getArchivedCount(),
+        plants.getPlants(),
+        plants.getArchivedCount(),
         props.attention.getAttention(),
         props.substrates.getSubstrateComponents(),
         props.pesticideCatalog.getPesticides(),
@@ -103,11 +107,13 @@ export const App: Component<AppProps> = (props) => {
         .filter((sample) => !recentlyArchived.has(sample.plantId))
         .map((sample) => [sample.plantId, sample]),
     );
-    const plants = plantsResult.plants.map((plant) => {
+    const plantsWithSamples = plantsResult.plants.map((plant) => {
       const sample = attentionById.get(plant.id);
       return sample === undefined ? undefined : { plant, watering: sample.watering };
     });
-    const joined = plants.filter((plant): plant is Journal.PlantAttention => plant !== undefined);
+    const joined = plantsWithSamples.filter(
+      (plant): plant is Journal.PlantAttention => plant !== undefined,
+    );
     if (
       joined.length !== plantsResult.plants.length ||
       joined.length !== attentionById.size ||
@@ -120,7 +126,7 @@ export const App: Component<AppProps> = (props) => {
       orderPlantAttention(joined).map(async (attention) => ({
         attention,
         measuredAt: attentionResult.projection.measuredAt,
-        operationsResult: await journal.getOperations(attention.plant.id, {
+        operationsResult: await operations.getOperations(attention.plant.id, {
           offset: 0,
           size: recentOperationCount,
         }),
@@ -147,9 +153,10 @@ export const App: Component<AppProps> = (props) => {
 
   const loadCemetery = async (preserveView = false) => {
     const version = ++loadVersion;
-    const journal = props.journal;
+    const plants = props.plants;
+    const operations = props.operations;
     if (!preserveView) setView("loading");
-    const result = await journal.getPlants("archived");
+    const result = await plants.getPlants("archived");
     if (version !== loadVersion) return;
     if (result.kind !== "read") {
       setView("failed");
@@ -158,8 +165,8 @@ export const App: Component<AppProps> = (props) => {
     const records = await Promise.all(
       result.plants.map(async (plant) => ({
         plant,
-        datesResult: await journal.getOperationDates(plant.id),
-        operationsResult: await journal.getOperations(plant.id, {
+        datesResult: await operations.getOperationDates(plant.id),
+        operationsResult: await operations.getOperations(plant.id, {
           offset: 0,
           size: recentOperationCount,
         }),
@@ -209,7 +216,7 @@ export const App: Component<AppProps> = (props) => {
   const confirmArchive = async (plant: Journal.Plant) => {
     let result: Journal.ArchivePlantResult;
     try {
-      result = await props.journal.archivePlant(plant.id);
+      result = await props.plants.archivePlant(plant.id);
     } catch {
       return "The plant could not be archived.";
     }
@@ -232,7 +239,7 @@ export const App: Component<AppProps> = (props) => {
     let editedOperation: Journal.Operation | undefined;
     try {
       if (target.kind === "log") {
-        const result = await props.journal.logOperation(target.plantId, date, details);
+        const result = await props.operations.logOperation(target.plantId, date, details);
         if (result.kind !== "logged") {
           setTargetError(
             result.kind === "plantArchived"
@@ -242,7 +249,7 @@ export const App: Component<AppProps> = (props) => {
           return;
         }
       } else {
-        const result = await props.journal.editOperation(target.operation.id, details);
+        const result = await props.operations.editOperation(target.operation.id, details);
         if (result.kind !== "edited") {
           setTargetError(
             result.kind === "operationMissing"
@@ -376,7 +383,7 @@ export const App: Component<AppProps> = (props) => {
                           substrateComponents={substrateComponents()}
                           pesticides={pesticides()}
                           getOperations={(window) =>
-                            props.journal.getOperations(entry().attention.plant.id, window)
+                            props.operations.getOperations(entry().attention.plant.id, window)
                           }
                           operationChange={operationChange()}
                           onLog={() => {
@@ -404,7 +411,7 @@ export const App: Component<AppProps> = (props) => {
                           substrateComponents={substrateComponents()}
                           pesticides={pesticides()}
                           getOperations={(window) =>
-                            props.journal.getOperations(entry().plant.id, window)
+                            props.operations.getOperations(entry().plant.id, window)
                           }
                           operationChange={operationChange()}
                           onEdit={(operation) => {
