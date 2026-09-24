@@ -11,7 +11,12 @@ Publish the first versioned plant-journal image and make its NAS rollout and rec
 
 - The pipeline can build and publish a private image from a guarded tag, but there is no completed release or repeatable first-deploy and recovery path for the household NAS.
 - A release has an explicit SemVer identity tied to a specific commit and image. The already-published trial candidate proved the registry-to-NAS path; subsequent releases use stable tags from merged main, starting with `v1.0.0`.
-- The NAS runs the same image on Unraid and retains the journal across container replacement. WUD shows available stable releases without installing them; deterministic commands prepare a selected release, and the operator applies the saved Unraid configuration to deploy or recover without an agent.
+- The NAS retains the journal across operator-led replacements. WUD reports stable releases so an operator can choose when to move to a newer version.
+
+## Domain / Design Notes
+
+- Release preparation selects an immutable published image and updates saved NAS configuration; Unraid owns container lifecycle when the operator applies that configuration.
+- Recovery preparation owns data restoration while the service is stopped; update discovery owns availability reporting, not rollout.
 
 ## Invariants
 
