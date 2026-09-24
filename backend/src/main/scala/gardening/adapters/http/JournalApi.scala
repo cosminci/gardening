@@ -119,15 +119,22 @@ object JournalApi:
       toDiscriminatorValue = name => lowerCamel(name.fullName.split('.').last.stripSuffix("$"))
     )
 
-  // Tapir only reads these inverse mappings while generating the OpenAPI contract.
-  // $COVERAGE-OFF$
   private lazy val operationOffsetSchema = Schema.schemaForInt
     .validate(Validator.min(0))
-    .map(_.refineOption[GreaterEqual[0]])(value => value)
+    .map(
+      // Tapir validates query offsets with the plain codec, not this schema's inverse mapping.
+      // $COVERAGE-OFF$
+      _.refineOption[GreaterEqual[0]]
+      // $COVERAGE-ON$
+    )(value => value)
   private lazy val operationPageSizeSchema = Schema.schemaForInt
     .validate(Validator.min(1).and(Validator.max(10)))
-    .map(_.refineOption[Interval.Closed[1, 10]])(value => value)
-  // $COVERAGE-ON$
+    .map(
+      // Tapir validates query page sizes with the plain codec, not this schema's inverse mapping.
+      // $COVERAGE-OFF$
+      _.refineOption[Interval.Closed[1, 10]]
+      // $COVERAGE-ON$
+    )(value => value)
 
   private given TapirCodec.PlainCodec[OperationOffset] = TapirCodec.int
     .mapDecode(value =>
@@ -153,14 +160,41 @@ object JournalApi:
     )(status => lowerCamel(status.toString))
     .schema(enumSchema[PlantStatus])
 
-  // Tapir requires bidirectional codecs for output bodies even though these values are never decoded by the server.
-  // $COVERAGE-OFF$
-  private given Codec[PlantId]     = stringCodec(PlantId.apply, _.value)
-  private given Codec[OperationId] = stringCodec(OperationId.apply, _.value)
-  private given Codec[Species]     = stringCodec(Species.apply, _.value)
-  private given Codec[Nickname]    = stringCodec(Nickname.apply, _.value)
-  private given Codec[Location]    = stringCodec(Location.apply, _.value)
-  // $COVERAGE-ON$
+  private given Codec[PlantId] = Codec.from(
+    // Plant identifiers are output-only in JSON bodies.
+    // $COVERAGE-OFF$
+    Decoder.decodeString.map(PlantId.apply),
+    // $COVERAGE-ON$
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[OperationId] = Codec.from(
+    // Operation identifiers are output-only in JSON bodies.
+    // $COVERAGE-OFF$
+    Decoder.decodeString.map(OperationId.apply),
+    // $COVERAGE-ON$
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[Species] = Codec.from(
+    // Plant species are output-only in JSON bodies.
+    // $COVERAGE-OFF$
+    Decoder.decodeString.map(Species.apply),
+    // $COVERAGE-ON$
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[Nickname] = Codec.from(
+    // Plant nicknames are output-only in JSON bodies.
+    // $COVERAGE-OFF$
+    Decoder.decodeString.map(Nickname.apply),
+    // $COVERAGE-ON$
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[Location] = Codec.from(
+    // Plant locations are output-only in JSON bodies.
+    // $COVERAGE-OFF$
+    Decoder.decodeString.map(Location.apply),
+    // $COVERAGE-ON$
+    Encoder.encodeString.contramap(_.value)
+  )
   private given Codec[Instant] =
     Codec.from(Decoder.decodeString.emapTry(value => Try(Instant.parse(value))), Encoder.encodeString.contramap(_.toString))
   private given Codec[Note]                 = stringCodec(Note.apply, _.value)
@@ -191,22 +225,44 @@ object JournalApi:
   private given Codec.AsObject[Plant]               = ConfiguredCodec.derived
 
   private type WireText = PlantId | OperationId | Species | Nickname | Location | Note
-  private given [A <: WireText]: Schema[A] = Schema.string
-  // Tapir requires inverse mappings for opaque schemas; OpenAPI generation only reads their constraints.
-  // $COVERAGE-OFF$
+  private given [A <: WireText]: Schema[A]   = Schema.string
   private given Schema[SubstrateComponentId] = Schema.string
-    .map(SubstrateComponentId.parse)(_.value.toString)
+    .map(
+      // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+      // $COVERAGE-OFF$
+      SubstrateComponentId.parse
+    )(
+      _.value.toString
+        // $COVERAGE-ON$
+    )
     .format("uuid")
   private given Schema[PesticideId] = Schema.string
-    .map(PesticideId.parse)(_.value.toString)
+    .map(
+      // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+      // $COVERAGE-OFF$
+      PesticideId.parse
+    )(
+      _.value.toString
+        // $COVERAGE-ON$
+    )
     .format("uuid")
   private given Schema[Percentage] = Schema.schemaForInt
     .validate(Validator.min(1).and(Validator.max(100)))
-    .map(_.refineOption[Interval.Closed[1, 100]])(value => value)
+    .map(
+      // JSON bodies use Circe rather than this percentage schema's inverse mapping.
+      // $COVERAGE-OFF$
+      _.refineOption[Interval.Closed[1, 100]]
+      // $COVERAGE-ON$
+    )(value => value)
   private given Schema[Substrate] = summon[Schema[List[SubstratePart]]]
     .validate(Validator.minSize(1))
-    .map(parts => Substrate.of(parts).toOption)(_.parts)
-  // $COVERAGE-ON$
+    .map(
+      // JSON bodies use Circe rather than this substrate schema's inverse mapping.
+      // $COVERAGE-OFF$
+      parts =>
+        Substrate.of(parts).toOption
+        // $COVERAGE-ON$
+    )(_.parts)
   private inline given [A <: JournalEnum & Product](using Mirror.SumOf[A]): Schema[A] = enumSchema[A]
   private given Schema[PlantDetails]                                                  = Schema
     .derived[PlantDetails]

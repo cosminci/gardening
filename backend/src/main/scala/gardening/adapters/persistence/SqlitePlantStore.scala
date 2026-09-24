@@ -79,12 +79,14 @@ object SqlitePlantStore:
     private def toPlant(row: PlantRow) =
       for
         substrate <- decode[Substrate](row.substrate).leftMap(invalidSubstrate)
-        // The schema check constrains every stored status to a PlantStatus name.
-        // $COVERAGE-OFF$
-        status <- PlantStatus.values
+        status    <- PlantStatus.values
           .find(_.toString.equals(row.status))
-          .toRight(RuntimeException(s"invalid stored plant status: ${row.status}"))
-      // $COVERAGE-ON$
+          .toRight(
+            // The schema check constrains every stored status to a PlantStatus name.
+            // $COVERAGE-OFF$
+            RuntimeException(s"invalid stored plant status: ${row.status}")
+            // $COVERAGE-ON$
+          )
       yield
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
@@ -150,13 +152,15 @@ object SqlitePlantStore:
     private def toAttentionSample(row: AttentionSampleRow) =
       val storedDates = decodeWateringDates(row.wateringDates)
       for
-        wateringDates <- storedDates.traverse(parseOperationDate)
-        // The SQL query limits each history to the maximum representable length.
-        // $COVERAGE-OFF$
+        wateringDates   <- storedDates.traverse(parseOperationDate)
         wateringHistory <- WateringHistory
           .from(wateringDates)
-          .leftMap(message => DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message")))
-      // $COVERAGE-ON$
+          .leftMap:
+            message =>
+              // The SQL query limits each history to the maximum representable length.
+              // $COVERAGE-OFF$
+              DatabaseCorruption(RuntimeException(s"invalid stored watering history: $message"))
+              // $COVERAGE-ON$
       yield PlantAttentionSample(PlantId(row.id), wateringHistory)
 
     private def decodeWateringDates(value: String) =

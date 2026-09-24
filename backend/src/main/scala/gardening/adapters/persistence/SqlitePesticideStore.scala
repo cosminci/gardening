@@ -46,11 +46,12 @@ object SqlitePesticideStore:
         id <- PesticideId
           .parse(row.id)
           .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
-        // The schema check mirrors PesticideType; extending it requires a migration before persistence.
-        // $COVERAGE-OFF$
-        pesticideType <- Try(PesticideType.valueOf(row.pesticideType)).toEither.left.map: error =>
-          RuntimeException(s"invalid pesticide type: ${row.pesticideType}", error)
-      // $COVERAGE-ON$
+        pesticideType <- Try(PesticideType.valueOf(row.pesticideType)).toEither.left.map:
+          error =>
+            // The schema check mirrors PesticideType; extending it requires a migration first.
+            // $COVERAGE-OFF$
+            RuntimeException(s"invalid pesticide type: ${row.pesticideType}", error)
+            // $COVERAGE-ON$
       yield Pesticide(id, PesticideData(NomenclatureName(row.name), pesticideType, row.info.map(NomenclatureInfo.apply)))
 
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))

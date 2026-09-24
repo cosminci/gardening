@@ -20,7 +20,7 @@ import scala.util.Try
 object AttentionApi:
 
   extension (attention: WateringAttention)
-    // OpenAPI generation uses this discriminator; the server only encodes projections.
+    // Only OpenAPI schema generation uses this discriminator; responses use Circe's discriminator.
     // $COVERAGE-OFF$
     private def kind =
       attention match
@@ -47,31 +47,35 @@ object AttentionApi:
     TapirConfiguration.default.copy(
       toEncodedName = encodedFieldName,
       discriminator = Some("kind"),
+      // Only OpenAPI generation translates Tapir's discriminator names.
       // $COVERAGE-OFF$
       toDiscriminatorValue = name => lowerCamel(name.fullName.split('.').last.stripSuffix("$"))
       // $COVERAGE-ON$
     )
 
-  // Output bodies need bidirectional codecs, but no request decodes these values.
   private given Codec[PlantId] = Codec.from(
+    // Plant identifiers appear only in response bodies; no request decodes them here.
     // $COVERAGE-OFF$
     Decoder.decodeString.map(PlantId.apply),
     // $COVERAGE-ON$
     Encoder.encodeString.contramap(_.value)
   )
   private given Codec[Instant] = Codec.from(
+    // Attention timestamps appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emapTry(value => Try(Instant.parse(value))),
     // $COVERAGE-ON$
     Encoder.encodeString.contramap(_.toString)
   )
   private given Codec[WateringSampleCount] = Codec.from(
+    // Attention sample counts appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.failedWithMessage("watering attention is output-only"),
     // $COVERAGE-ON$
     Encoder.encodeInt.contramap(value => value)
   )
   private given Codec[FiniteDuration] = Codec.from(
+    // Attention durations appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.failedWithMessage("watering duration is output-only"),
     // $COVERAGE-ON$
@@ -81,14 +85,24 @@ object AttentionApi:
   private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
 
-  private given Schema[PlantId] = Schema.string
-  // Tapir uses inverse mappings and these schemas only while generating OpenAPI.
-  // $COVERAGE-OFF$
+  private given Schema[PlantId]             = Schema.string
   private given Schema[WateringSampleCount] = Schema.schemaForInt
     .validate(Validator.min(0).and(Validator.max(20)))
-    .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
+    .map(
+      // Tapir never decodes output-only attention sample counts through their schema.
+      // $COVERAGE-OFF$
+      _.refineOption[Interval.Closed[0, 20]]
+      // $COVERAGE-ON$
+    )(value => value)
   private given Schema[FiniteDuration] = Schema.schemaForString
-    .map(value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption)(_.toMillis.toString)
+    .map(
+      // Tapir only invokes duration schema mappings while generating OpenAPI.
+      // $COVERAGE-OFF$
+      value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption
+    )(
+      _.toMillis.toString
+        // $COVERAGE-ON$
+    )
   private given Schema[WateringAttention.Current]     = Schema.derived[WateringAttention.Current].name(Schema.SName("WateringCurrent"))
   private given Schema[WateringAttention.Overdue]     = Schema.derived[WateringAttention.Overdue].name(Schema.SName("WateringOverdue"))
   private given Schema[WateringAttention.RedAlert]    = Schema.derived[WateringAttention.RedAlert].name(Schema.SName("WateringRedAlert"))
@@ -106,7 +120,6 @@ object AttentionApi:
     .name(Schema.SName("WateringAttention"))
   private given Schema[PlantAttention]      = Schema.derived
   private given Schema[AttentionProjection] = Schema.derived[AttentionProjection].modify(_.plants)(_.copy(isOptional = false))
-  // $COVERAGE-ON$
 
   private def encodedFieldName(name: String) =
     name match

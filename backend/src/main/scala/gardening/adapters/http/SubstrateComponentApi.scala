@@ -63,8 +63,8 @@ object SubstrateComponentApi:
     Decoder.decodeString.map(NomenclatureInfo.apply),
     Encoder.encodeString.contramap(_.value)
   )
-  // Tapir requires a bidirectional codec for the output-only component identifier.
   private given Codec[SubstrateComponentId] = Codec.from(
+    // Component identifiers appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value")),
     // $COVERAGE-ON$
@@ -73,12 +73,16 @@ object SubstrateComponentApi:
   private given Codec.AsObject[SubstrateComponentData] = ConfiguredCodec.derived
   private given Codec.AsObject[SubstrateComponent]     = ConfiguredCodec.derived
 
-  // OpenAPI generation reads the schema; the server never decodes component identifiers in bodies.
-  // $COVERAGE-OFF$
   private given Schema[SubstrateComponentId] = Schema.string
-    .map(SubstrateComponentId.parse)(_.value.toString)
+    .map(
+      // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+      // $COVERAGE-OFF$
+      SubstrateComponentId.parse
+    )(
+      _.value.toString
+        // $COVERAGE-ON$
+    )
     .format("uuid")
-  // $COVERAGE-ON$
   private given Schema[NomenclatureName]       = Schema.string
   private given Schema[NomenclatureInfo]       = Schema.string
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
