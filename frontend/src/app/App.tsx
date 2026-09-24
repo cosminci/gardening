@@ -11,6 +11,7 @@ import {
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import type { PesticideClient } from "../domain/PesticideCatalog";
+import type { PlantAttentionClient } from "../domain/PlantAttention";
 import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { JournalHeader } from "./JournalHeader";
@@ -23,6 +24,7 @@ import "./app.css";
 
 interface AppProps {
   readonly journal: Journal.JournalClient;
+  readonly attention: PlantAttentionClient;
   readonly substrates: SubstrateComponentClient;
   readonly pesticideCatalog: PesticideClient;
 }
@@ -75,7 +77,7 @@ export const App: Component<AppProps> = (props) => {
       await Promise.all([
         journal.getPlants(),
         journal.getArchivedCount(),
-        journal.getAttention(),
+        props.attention.getAttention(),
         props.substrates.getSubstrateComponents(),
         props.pesticideCatalog.getPesticides(),
       ]);

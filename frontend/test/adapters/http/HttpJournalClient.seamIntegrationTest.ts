@@ -195,188 +195,6 @@ describe("HttpJournalClient", () => {
     expect(result).toEqual({ kind: "plantArchived" });
   });
 
-  it("should translate the attention projection into domain values", async () => {
-    const noSamples = plant("no-samples");
-    const unknown = plant("unknown");
-    const finite = plant("finite", "Fern");
-    const unbounded = plant("unbounded");
-    const current = plant("current");
-    const redAlert = plant("red-alert");
-    const requests: Request[] = [];
-    const journal = makeHttpJournalClient(
-      respondingWith(
-        [
-          jsonResponse({
-            measuredAt: "2026-01-10T00:00:00Z",
-            plants: [
-              {
-                plantId: noSamples.id,
-                watering: { kind: "unavailable", sampleCount: 0, elapsedMillis: null },
-              },
-              {
-                plantId: unknown.id,
-                watering: { kind: "unavailable", sampleCount: 4, elapsedMillis: "86400000" },
-              },
-              {
-                plantId: finite.id,
-                watering: {
-                  kind: "overdue",
-                  sampleCount: 5,
-                  averageIntervalMillis: "86400000",
-                  elapsedMillis: "90000000",
-                },
-              },
-              {
-                plantId: unbounded.id,
-                watering: {
-                  kind: "overdue",
-                  sampleCount: 5,
-                  averageIntervalMillis: "0",
-                  elapsedMillis: "1000",
-                },
-              },
-              {
-                plantId: current.id,
-                watering: {
-                  kind: "current",
-                  sampleCount: 5,
-                  averageIntervalMillis: "86400000",
-                  elapsedMillis: "43200000",
-                },
-              },
-              {
-                plantId: redAlert.id,
-                watering: {
-                  kind: "redAlert",
-                  sampleCount: 5,
-                  averageIntervalMillis: "86400000",
-                  elapsedMillis: "176400000",
-                },
-              },
-            ],
-          }),
-        ],
-        requests,
-      ),
-    );
-
-    await expect(journal.getAttention()).resolves.toEqual({
-      kind: "read",
-      projection: {
-        measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
-        plants: [
-          {
-            plantId: noSamples.id,
-            watering: {
-              kind: "unavailable",
-              sampleCount: 0,
-              maybeElapsed: null,
-            },
-          },
-          {
-            plantId: unknown.id,
-            watering: {
-              kind: "unavailable",
-              sampleCount: 4,
-              maybeElapsed: Journal.milliseconds("86400000"),
-            },
-          },
-          {
-            plantId: finite.id,
-            watering: {
-              kind: "overdue",
-              sampleCount: 5,
-              averageInterval: Journal.milliseconds("86400000"),
-              elapsed: Journal.milliseconds("90000000"),
-            },
-          },
-          {
-            plantId: unbounded.id,
-            watering: {
-              kind: "overdue",
-              sampleCount: 5,
-              averageInterval: Journal.milliseconds("0"),
-              elapsed: Journal.milliseconds("1000"),
-            },
-          },
-          {
-            plantId: current.id,
-            watering: {
-              kind: "current",
-              sampleCount: 5,
-              averageInterval: Journal.milliseconds("86400000"),
-              elapsed: Journal.milliseconds("43200000"),
-            },
-          },
-          {
-            plantId: redAlert.id,
-            watering: {
-              kind: "redAlert",
-              sampleCount: 5,
-              averageInterval: Journal.milliseconds("86400000"),
-              elapsed: Journal.milliseconds("176400000"),
-            },
-          },
-        ],
-      },
-    });
-    expect(new URL(requests.at(0)?.url ?? "").pathname).toBe("/attention");
-  });
-
-  it("should reject malformed watering-attention measurements", async () => {
-    const journal = makeHttpJournalClient(
-      respondingWith([
-        jsonResponse({
-          measuredAt: "2026-01-10T00:00:00Z",
-          plants: [
-            {
-              plantId: plant("p1").id,
-              watering: {
-                kind: "overdue",
-                sampleCount: 5,
-                averageIntervalMillis: "86400000",
-                elapsedMillis: "soon",
-              },
-            },
-          ],
-        }),
-      ]),
-    );
-
-    await expect(journal.getAttention()).resolves.toEqual({
-      kind: "readFailed",
-      reason: new RangeError("invalid milliseconds: soon"),
-    });
-  });
-
-  it("should reject an unknown watering-attention classification", async () => {
-    const journal = makeHttpJournalClient(
-      respondingWith([
-        jsonResponse({
-          measuredAt: "2026-01-10T00:00:00Z",
-          plants: [
-            {
-              plantId: plant("p1").id,
-              watering: {
-                kind: "futureState",
-                sampleCount: 5,
-                averageIntervalMillis: "86400000",
-                elapsedMillis: "90000000",
-              },
-            },
-          ],
-        }),
-      ]),
-    );
-
-    await expect(journal.getAttention()).resolves.toEqual({
-      kind: "readFailed",
-      reason: new Error(
-        'invalid watering attention: {"kind":"futureState","sampleCount":5,"averageIntervalMillis":"86400000","elapsedMillis":"90000000"}',
-      ),
-    });
-  });
-
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const requests: Request[] = [];
@@ -563,14 +381,12 @@ describe("HttpJournalClient", () => {
     };
     const httpFailures = makeHttpJournalClient(
       respondingWith([
-        jsonResponse({ message: "attention unavailable" }, 503),
         jsonResponse({ message: "journal could not be read" }, 500),
         jsonResponse("invalid body", 400),
         jsonResponse({ message: "operation not found" }, 404),
         jsonResponse({ message: "journal could not be changed" }, 500),
       ]),
     );
-    await expectKind(httpFailures.getAttention(), "readFailed");
     await expectKind(
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",
@@ -588,10 +404,9 @@ describe("HttpJournalClient", () => {
     });
     await expectKind(httpFailures.editOperation(Journal.operationId("o1"), details), "editFailed");
     const reason = new Error("offline");
-    const networkFailures = makeHttpJournalClient(respondingWith(new Array<Error>(4).fill(reason)));
+    const networkFailures = makeHttpJournalClient(respondingWith(new Array<Error>(3).fill(reason)));
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
-    await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
     await expectNetworkFailure(
       networkFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
       "readFailed",

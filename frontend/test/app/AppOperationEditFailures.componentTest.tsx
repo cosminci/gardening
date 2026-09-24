@@ -25,7 +25,9 @@ describe("operation edit failures", () => {
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationMissing" },
     });
-    render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await screen.findByText("3rd of March");
 
     fireEvent.click(
@@ -43,7 +45,9 @@ describe("operation edit failures", () => {
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "operationTypeMismatch" },
     });
-    render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await screen.findByText("3rd of March");
 
     fireEvent.click(
@@ -64,7 +68,9 @@ describe("operation edit failures", () => {
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       editOperationResult: { kind: "editFailed", reason },
     });
-    render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
+    render(() => (
+      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+    ));
     await screen.findByText("3rd of March");
 
     fireEvent.click(

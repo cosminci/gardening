@@ -218,7 +218,6 @@ export interface JournalClient {
   getArchivedCount(): Promise<GetArchivedCountResult>;
   getOperationDates(plantId: PlantId): Promise<GetOperationDatesResult>;
   archivePlant(plantId: PlantId): Promise<ArchivePlantResult>;
-  getAttention(): Promise<GetAttentionResult>;
   getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
   logOperation(
     plantId: PlantId,
