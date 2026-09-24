@@ -52,11 +52,12 @@ trait AttentionFeed:
 - The garden/cemetery view, the active/archived toggle, and the add-plant control render as soon as plant, operation, substrate, and pesticide data load successfully, independent of attention state.
 - An active plant with no entry yet in the current state shows an animated, accessibly labeled pending indicator in its leftmost column in place of a status icon; the indicator is replaced in place by the plant's status icon the moment its entry arrives, and it honors the reduced-motion preference like other card animations.
 - The journal load fails only for a plant, operation, substrate, or pesticide read failure, or for a measured attention state with a duplicated plant identifier or a plant outside the active set; a missing or not-yet-arrived attention entry never fails the load.
+- The browser shows a small, accessibly labeled connection indicator near the journal header reflecting whether its live attention feed is currently connected to the backend — one state while connected, a distinct state while disconnected or reconnecting — independent of and in addition to each plant's pending indicator.
 
 ## Doc Sync
 
 - `GLOSSARY.md` — define "Pending attention": the state of an active plant with no entry in the current attention state, shown as a pending indicator rather than a status icon.
-- `specs/design.md` — Overview and Domain model: attention is asynchronously computed and pushed rather than periodically pulled, and startup no longer blocks on or aborts for it. Use cases and workflows: replace "an initial attention read must succeed to serve the app" with the async/pending/live-feed behavior and garden rendering that no longer depends on attention.
+- `specs/design.md` — Overview and Domain model: attention is asynchronously computed and pushed rather than periodically pulled, and startup no longer blocks on or aborts for it. Use cases and workflows: replace "an initial attention read must succeed to serve the app" with the async/pending/live-feed behavior, the browser's live-feed connection indicator, and garden rendering that no longer depends on attention.
 - `specs/operational.md` — Scaling characteristics: state the 30-second recomputation cadence and that each connected browser holds one open live-feed connection.
 - `specs/testing.md` — Strategy: extend the existing browser-reconciliation bullet to cover independently-arriving pending and measured attention snapshots via the live feed, decoupled from journal load success or failure.
 
