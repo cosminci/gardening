@@ -1043,6 +1043,9 @@ describe("browsing the journal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
     fireEvent.click(screen.getByRole("button", { name: "Collapse plant editor" }));
 
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
     expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
     expect(createPlant).not.toHaveBeenCalled();
   });

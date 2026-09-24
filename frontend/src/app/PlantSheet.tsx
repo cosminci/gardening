@@ -41,21 +41,36 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     component: Journal.SubstrateComponent | undefined;
     returnFocusId: string;
   }>();
+  const [closingSheet, setClosingSheet] = createSignal<"editor" | "plant">();
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
 
-  const closeEditor = () => {
-    const controlId = editor()?.returnFocusId;
-    setEditor(undefined);
-    queueMicrotask(() => {
-      if (controlId !== undefined) document.getElementById(controlId)?.focus();
+  const waitForSheetTransition = () =>
+    new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 180);
     });
+
+  const closeSheets = async (target: "editor" | "plant") => {
+    if (closingSheet() !== undefined) return;
+    const currentEditor = editor();
+    if (currentEditor !== undefined) {
+      setClosingSheet("editor");
+      await waitForSheetTransition();
+      setEditor(undefined);
+      if (target === "editor") {
+        setClosingSheet(undefined);
+        queueMicrotask(() => document.getElementById(currentEditor.returnFocusId)?.focus());
+        return;
+      }
+    }
+    setClosingSheet("plant");
+    await waitForSheetTransition();
+    props.onCancel();
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && !submitting()) {
       event.preventDefault();
-      if (editor() === undefined) props.onCancel();
-      else closeEditor();
+      void closeSheets(editor() === undefined ? "plant" : "editor");
     }
     if (event.key !== "Tab" || editor() !== undefined) return;
     if (
@@ -134,18 +149,22 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   });
 
   return (
-    <div class="sheet-layer" classList={{ "sheet-layer--editing": editor() !== undefined }}>
+    <div
+      class="sheet-layer"
+      classList={{ "sheet-layer--editing": editor() !== undefined && closingSheet() !== "editor" }}
+    >
       <div class="sheet-layer__scrim" aria-hidden="true" />
       <aside
         ref={(element) => {
           dialog = element;
         }}
         class="sheet sheet--operation sheet--plant sheet--entering"
+        classList={{ "sheet--closing": closingSheet() === "plant" }}
         role="dialog"
         aria-label="Plant editor"
         aria-modal={editor() === undefined ? "true" : undefined}
         tabIndex="-1"
-        inert={editor() !== undefined}
+        inert={closingSheet() === "plant"}
       >
         <form
           class="operation-form"
@@ -164,13 +183,13 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
               aria-label="Collapse plant editor"
               disabled={submitting()}
               onClick={() => {
-                props.onCancel();
+                void closeSheets("plant");
               }}
             >
               <span class="sheet-collapse__icon" aria-hidden="true" />
             </button>
           </header>
-          <div class="operation-form__body">
+          <div class="operation-form__body" inert={editor() !== undefined}>
             <label class="field">
               <span>Species</span>
               <input
@@ -234,7 +253,9 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
       <Show keyed when={editor()}>
         {(current) => (
           <aside
-            class="sheet sheet--nomenclature-editor"
+            class="sheet sheet--nomenclature-editor sheet--entering"
+            classList={{ "sheet--closing": closingSheet() === "editor" }}
+            inert={closingSheet() === "editor"}
             role="dialog"
             aria-modal="true"
             aria-label="Substrate component editor"
@@ -243,7 +264,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
               component={current.component}
               onAdd={addComponent}
               onEdit={editComponent}
-              onClose={closeEditor}
+              onClose={() => void closeSheets("editor")}
             />
           </aside>
         )}

@@ -39,4 +39,5 @@ flowchart LR
 
 - Operation mutations are serialized. A latest-repot change that fails to update the plant compensates the operation write and preserves both failures if compensation also fails.
 - The garden loads active plants and an archived count; the cemetery loads archived histories only when opened. After creation, the garden joins the new plant to the last complete attention projection and shows unavailable cadence until it has enough watering history. Unrelated attention identity mismatches fail the garden load; a recently archived plant may still appear in the last measurement.
+- Garden plants without a measured cadence appear first in their existing order; the rest are ordered by time remaining until their next expected watering, most overdue first. A plant editor can close its nested substrate editor before closing itself, with each sheet sliding independently.
 - An initial attention read must succeed to serve the app. Later refresh failures keep the last complete projection; insufficient watering history leaves cadence unavailable.
