@@ -15,6 +15,8 @@ node_modules/
 *.db
 *.db-journal
 /data/
+/.local/
+__pycache__/
 
 # Agent working directory (checklists, investigation trails)
 .agent-work/
