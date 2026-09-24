@@ -26,6 +26,12 @@ lazy val root = (project in file("."))
     // classpath (non-modular) app on Netty otherwise trips.
     jlinkIgnoreMissingDependency := JlinkIgnore.everything,
     jlinkOptions ++= Seq("--no-header-files", "--no-man-pages", "--strip-debug", "--compress=zip-6"),
+    // This app is never published as a library, so no one consumes its Scaladoc. `stage` (run for
+    // the packaged image) otherwise triggers it regardless, and Scala 3's doc compiler front-end
+    // silently drops the semanticdb/wartremover/-Werror flags it doesn't support, spamming
+    // "Skipping unused scalacOptions" and "currently not supported" noise into every publish build.
+    Compile / doc / sources          := Seq.empty,
+    Compile / packageDoc / publishArtifact := false,
     scalacOptions ++= Seq(
       "-encoding",
       "utf8",
@@ -60,6 +66,13 @@ lazy val root = (project in file("."))
       "gardening\\.adapters\\.http\\.OpenApiDocs" // build-time OpenAPI projection
     ).mkString(";"),
     Test / fork := true,
+    // Match the packaged runtime's JVM flags (see image.ts) so the forked test JVM doesn't print the
+    // same JDK 24+ "restricted method" / "terminally deprecated" warnings on every run: SQLite JDBC
+    // loads a native library, and Scala 3's LazyVals runtime still uses sun.misc.Unsafe.
+    Test / javaOptions ++= Seq(
+      "--enable-native-access=ALL-UNNAMED",
+      "--sun-misc-unsafe-memory-access=allow"
+    ),
     // tapir pulls Netty's `netty-all` aggregate, which drags in codecs this app never uses (and
     // whose jdeps analysis breaks jlink on a missing optional aalto module). Dropping them fixes
     // the jlink build and trims the runtime jars.
