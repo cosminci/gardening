@@ -183,6 +183,61 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(archivedRefs.updatedPlants.get(), Vector.empty)
     assertEquals(unreadable.updatedPlants.get(), Vector.empty)
 
+  test("should edit an active plant's details independently of operations"):
+    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val refs         = Refs()
+
+    val result = buildJournal(refs).editPlant(plant.id, Species("Monstera deliciosa"), none, Location("Living room"), newSubstrate)
+
+    val expectedPlant = plant.copy(details =
+      plant.details.copy(species = Species("Monstera deliciosa"), maybeNickname = none, location = Location("Living room"), substrate = newSubstrate)
+    )
+    assertEquals(result, EditPlantResult.Edited(expectedPlant))
+    assertEquals(refs.updatedPlants.get(), Vector(expectedPlant))
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
+
+  test("should reject editing an archived plant and preserve distinct failure results"):
+    val failure       = RuntimeException("write unavailable")
+    val archivedPlant = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
+    val readFailure   = RuntimeException("read unavailable")
+
+    val archivedRefs = Refs()
+    val missingRefs  = Refs()
+    val unreadable   = Refs()
+
+    val archivedResult = buildJournal(archivedRefs, getPlantResult = GetPlantResult.Read(archivedPlant))
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val missingResult = buildJournal(missingRefs, getPlantResult = GetPlantResult.RecordMissing)
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val readResult = buildJournal(unreadable, getPlantResult = GetPlantResult.ReadFailed(readFailure))
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val writeFailedResult = buildJournal(updatePlantResult = UpdatePlantResult.UpdateFailed(failure))
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+
+    assertEquals(archivedResult, EditPlantResult.PlantArchived)
+    assertEquals(missingResult, EditPlantResult.PlantMissing)
+    assertEquals(readResult, EditPlantResult.EditFailed(readFailure))
+    assertEquals(writeFailedResult, EditPlantResult.EditFailed(failure))
+    assertEquals(archivedRefs.updatedPlants.get(), Vector.empty)
+    assertEquals(missingRefs.updatedPlants.get(), Vector.empty)
+    assertEquals(unreadable.updatedPlants.get(), Vector.empty)
+
+  test("should distinguish unknown substrate components and catalog read failures when editing"):
+    val failure = RuntimeException("unavailable")
+
+    val unknownRefs    = Refs()
+    val readFailedRefs = Refs()
+
+    val unknownResult = buildJournal(unknownRefs, componentReadResult = CatalogReadResult.Read(Vector.empty))
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val readFailedResult = buildJournal(readFailedRefs, componentReadResult = CatalogReadResult.ReadFailed(failure))
+      .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+
+    assertEquals(unknownResult, EditPlantResult.UnknownComponent)
+    assertEquals(readFailedResult, EditPlantResult.CatalogReadFailed(failure))
+    assertEquals(unknownRefs.updatedPlants.get(), Vector.empty)
+    assertEquals(readFailedRefs.updatedPlants.get(), Vector.empty)
+
   test("should validate catalog references before writing operations"):
     val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
     val pesticides   = Vector(

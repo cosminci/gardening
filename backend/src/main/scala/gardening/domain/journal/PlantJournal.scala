@@ -24,6 +24,7 @@ trait PlantJournal:
   def getPlants(status: PlantStatus): GetPlantsResult
   def getArchivedCount: ArchivedCountResult
   def archivePlant(id: PlantId): ArchivePlantResult
+  def editPlant(id: PlantId, species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): EditPlantResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
@@ -74,6 +75,31 @@ object PlantJournal:
           store.updatePlant(archived) match
             case UpdatePlantResult.Updated              => ArchivePlantResult.Archived
             case UpdatePlantResult.UpdateFailed(reason) => ArchivePlantResult.ArchiveFailed(reason)
+
+    override def editPlant(
+        id: PlantId,
+        species: Species,
+        maybeNickname: Option[Nickname],
+        location: Location,
+        substrate: Substrate
+    ): EditPlantResult = operationMutex.exclusively:
+      substrateStore.getSubstrateComponents match
+        case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason)
+        case CatalogReadResult.Read(components)   =>
+          val known = components.map(_.id).toSet
+          if !substrate.parts.forall(part => known.contains(part.componentId)) then EditPlantResult.UnknownComponent
+          else
+            store.getPlant(id) match
+              case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing
+              case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason)
+              case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived
+              case GetPlantResult.Read(plant)                                                  =>
+                val edited = plant.copy(details =
+                  plant.details.copy(species = species, maybeNickname = maybeNickname, location = location, substrate = substrate)
+                )
+                store.updatePlant(edited) match
+                  case UpdatePlantResult.Updated              => EditPlantResult.Edited(edited)
+                  case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason)
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)

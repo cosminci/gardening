@@ -54,6 +54,14 @@ enum ArchivePlantResult:
   case AlreadyArchived
   case ArchiveFailed(reason: Throwable)
 
+enum EditPlantResult:
+  case Edited(plant: Plant)
+  case PlantMissing
+  case PlantArchived
+  case UnknownComponent
+  case CatalogReadFailed(reason: Throwable)
+  case EditFailed(reason: Throwable)
+
 enum GetOperationResult:
   case Read(operation: Operation)
   case RecordMissing
