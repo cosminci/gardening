@@ -13,6 +13,10 @@ export function deriveVersion(gitDescribe: string): string {
 const STABLE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.([1-9]\d*))?$/;
 
+export function isStableReleaseVersion(version: string): boolean {
+  return STABLE_VERSION.test(version);
+}
+
 export interface PublicationPlan {
   readonly version: string;
   readonly updateLatest: boolean;

@@ -136,20 +136,28 @@ export class Gardening {
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
     tag: string,
     token: Dagger.Secret,
+    registryUser = GHCR_USER,
   ): Promise<string> {
     await this.releaseGuard(source, tag);
-    const plan = planPublication(tag, await publishedTags(source, token));
+    const plan = planPublication(tag, await publishedTags(source, token, registryUser));
     await this.verify(source, "", true);
     const image = runtimeImage(source, {
       version: plan.version,
       revision: (await Git.headSha(source)).trim(),
       created: new Date().toISOString(),
-    }).withRegistryAuth("ghcr.io", GHCR_USER, token);
+    }).withRegistryAuth("ghcr.io", registryUser, token);
     const versioned = await image.publish(`${GHCR_REPOSITORY}:${plan.version}`);
     if (!plan.updateLatest) return `published ${versioned}`;
-    const versionedDigest = await publishedImageDigest(source, token, plan.version);
+    const otherTags = (await publishedTags(source, token, registryUser)).filter(
+      (existing) => existing !== plan.version,
+    );
+    if (!planPublication(tag, otherTags).updateLatest) return `published ${versioned}`;
+    const versionedDigest = await publishedImageDigest(source, token, registryUser, plan.version);
     const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
-    assertSameImage(versionedDigest, await publishedImageDigest(source, token, "latest"));
+    assertSameImage(
+      versionedDigest,
+      await publishedImageDigest(source, token, registryUser, "latest"),
+    );
     return `published ${versioned} and ${latest}`;
   }
 
@@ -159,13 +167,14 @@ export class Gardening {
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
     tag: string,
     token: Dagger.Secret,
+    registryUser = GHCR_USER,
   ): Promise<string> {
     await this.releaseGuard(source, tag);
-    const version = planLatestRepair(tag, await publishedTags(source, token));
+    const version = planLatestRepair(tag, await publishedTags(source, token, registryUser));
     await this.verify(source, "", true);
     const image = dag
       .container({ platform: TARGET_PLATFORM as Dagger.Platform })
-      .withRegistryAuth("ghcr.io", GHCR_USER, token)
+      .withRegistryAuth("ghcr.io", registryUser, token)
       .from(`${GHCR_REPOSITORY}:${version}`);
     const revision = (await Git.headSha(source)).trim();
     if (
@@ -174,19 +183,22 @@ export class Gardening {
     ) {
       throw new Error("release refused: published image provenance differs from selected tag");
     }
-    const versionedDigest = await publishedImageDigest(source, token, version);
+    const versionedDigest = await publishedImageDigest(source, token, registryUser, version);
     const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
-    assertSameImage(versionedDigest, await publishedImageDigest(source, token, "latest"));
+    assertSameImage(
+      versionedDigest,
+      await publishedImageDigest(source, token, registryUser, "latest"),
+    );
     return latest;
   }
 
-  /** Prints how the NAS pulls a given version (WUD auto-update is preferred). */
+  /** Prints the NAS deployment command for an explicitly selected release. */
   @func()
   deploy(version: string): string {
+    planPublication(`v${version}`, []);
     return [
-      "# Preferred: WUD auto-updates the container (image is labelled wud.watch=true).",
-      "# Manual pull + recreate on the NAS:",
-      `ssh nas 'docker pull ${GHCR_REPOSITORY}:${version} && docker compose up -d plant-journal'`,
+      "# WUD reports stable updates without deploying them.",
+      `ssh root@tower 'bash -s -- deploy ${version}' < scripts/nas.sh`,
     ].join("\n");
   }
 }

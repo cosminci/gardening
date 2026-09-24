@@ -25,8 +25,9 @@ process.stdout.write(await registryImageDigest(fetch, image, user, token, versio
 export async function publishedTags(
   source: Dagger.Directory,
   token: Dagger.Secret,
+  user: string,
 ): Promise<string[]> {
-  const output = await registryContainer(source, token)
+  const output = await registryContainer(source, token, user)
     .withExec(["node", "--experimental-strip-types", "--input-type=module", "-e", listTagsScript])
     .stdout();
   const result: unknown = JSON.parse(output);
@@ -39,9 +40,10 @@ export async function publishedTags(
 export async function publishedImageDigest(
   source: Dagger.Directory,
   token: Dagger.Secret,
+  user: string,
   version: string,
 ): Promise<string> {
-  return registryContainer(source, token)
+  return registryContainer(source, token, user)
     .withEnvVariable("GHCR_VERSION", version)
     .withExec([
       "node",
@@ -53,14 +55,14 @@ export async function publishedImageDigest(
     .stdout();
 }
 
-function registryContainer(source: Dagger.Directory, token: Dagger.Secret) {
+function registryContainer(source: Dagger.Directory, token: Dagger.Secret, user: string) {
   return Dagger.dag
     .container()
     .from(BuildEnv.NODE_IMAGE)
     .withFile("/ci/registryClient.ts", source.file(".dagger/src/registryClient.ts"))
     .withFile("/ci/package.json", source.file(".dagger/package.json"))
     .withEnvVariable("GHCR_IMAGE", BuildEnv.GHCR_REPOSITORY.slice("ghcr.io/".length))
-    .withEnvVariable("GHCR_USER", BuildEnv.GHCR_USER)
+    .withEnvVariable("GHCR_USER", user)
     .withSecretVariable("GHCR_TOKEN", token)
     .withEnvVariable("GHCR_REQUEST_ID", randomUUID());
 }

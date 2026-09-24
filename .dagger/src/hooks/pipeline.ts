@@ -11,7 +11,7 @@ export function pipelineCheck(source: Directory): Container {
     .from(NODE_IMAGE)
     .withMountedCache("/root/.npm", dag.cacheVolume("gardening-npm"))
     .withDirectory("/ci", source.directory(".dagger"))
-    .withFile("/scripts/release.sh", source.file("scripts/release.sh"))
+    .withDirectory("/scripts", source.directory("scripts"))
     .withWorkdir("/ci")
     .withExec(["npm", "ci", "--no-audit", "--no-fund"])
     .withExec(["npx", "vitest", "run", "--coverage"]);

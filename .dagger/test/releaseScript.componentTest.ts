@@ -16,7 +16,7 @@ describe("release script", () => {
     const expectedSteps = [
       "dagger call release-guard --tag v1.0.0-rc.1",
       "npm run verify",
-      "dagger call publish --tag v1.0.0-rc.1 --token=env:GITHUB_PERSONAL_PAT",
+      "dagger call publish --tag v1.0.0-rc.1 --token=env:GITHUB_PERSONAL_PAT --registry-user=cosminci",
     ];
     expect(result.status).toBe(0);
     expect(readSteps(workspace)).toEqual(expectedSteps);
@@ -25,9 +25,10 @@ describe("release script", () => {
   it("should publish using the short-lived GitHub Actions token", () => {
     const workspace = buildReleaseWorkspace();
 
-    const result = runRelease(workspace, "v1.0.0-rc.1", "", "none", "ci-token");
+    const result = runRelease(workspace, "v1.0.0-rc.1", "", "none", "ci-token", "release-bot");
 
-    const expectedPublishStep = "dagger call publish --tag v1.0.0-rc.1 --token=env:GITHUB_TOKEN";
+    const expectedPublishStep =
+      "dagger call publish --tag v1.0.0-rc.1 --token=env:GITHUB_TOKEN --registry-user=release-bot";
     expect(result.status).toBe(0);
     expect(readSteps(workspace)).toContain(expectedPublishStep);
   });
@@ -36,6 +37,15 @@ describe("release script", () => {
     const workspace = buildReleaseWorkspace();
 
     const result = runRelease(workspace, "v1.0.0-rc.1", "");
+
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(workspace, "steps"))).toBe(false);
+  });
+
+  it("should refuse an Actions token without its registry username", () => {
+    const workspace = buildReleaseWorkspace();
+
+    const result = runRelease(workspace, "v1.0.0-rc.1", "", "none", "ci-token");
 
     expect(result.status).not.toBe(0);
     expect(existsSync(join(workspace, "steps"))).toBe(false);
@@ -105,6 +115,7 @@ function runRelease(
   token = "test-token",
   fail = "none",
   workflowToken = "",
+  actor = "",
 ) {
   const inheritedPath = process.env.PATH;
   if (!inheritedPath) throw new Error("PATH must be set to run release use cases");
@@ -119,6 +130,7 @@ function runRelease(
       RELEASE_FAIL: fail,
       GITHUB_PERSONAL_PAT: token,
       GITHUB_TOKEN: workflowToken,
+      GITHUB_ACTOR: actor,
     },
   });
 }

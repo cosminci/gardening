@@ -7,7 +7,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: publish-ghcr
   cancel-in-progress: false
 
 jobs:

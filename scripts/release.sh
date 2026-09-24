@@ -7,8 +7,14 @@ if [[ $# -ne 1 ]]; then
 fi
 if [[ -n "${GITHUB_PERSONAL_PAT:-}" ]]; then
   token_source=GITHUB_PERSONAL_PAT
+  registry_user=cosminci
 elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
   token_source=GITHUB_TOKEN
+  if [[ -z "${GITHUB_ACTOR:-}" ]]; then
+    printf 'release refused: GITHUB_ACTOR is required with GITHUB_TOKEN\n' >&2
+    exit 2
+  fi
+  registry_user=$GITHUB_ACTOR
 else
   printf 'release refused: GITHUB_PERSONAL_PAT or GITHUB_TOKEN is required\n' >&2
   exit 2
@@ -24,4 +30,4 @@ fi
 cd "$root"
 dagger call release-guard --tag "$tag"
 (cd .dagger && npm run verify)
-dagger call publish --tag "$tag" --token="env:$token_source"
+dagger call publish --tag "$tag" --token="env:$token_source" --registry-user="$registry_user"

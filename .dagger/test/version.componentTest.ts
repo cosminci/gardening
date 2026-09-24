@@ -3,6 +3,7 @@ import {
   assertReleaseSource,
   compareStableVersions,
   deriveVersion,
+  isStableReleaseVersion,
   planLatestRepair,
   planPublication,
 } from "../src/version";
@@ -17,6 +18,14 @@ describe("deriveVersion", () => {
   it("should pass through a bare sha and fall back when empty", () => {
     expect(deriveVersion("abc1234")).toBe("abc1234");
     expect(deriveVersion("  ")).toBe("0.0.0-unknown");
+  });
+});
+
+describe("isStableReleaseVersion", () => {
+  it("should watch stable releases without enrolling candidates or development images", () => {
+    expect(isStableReleaseVersion("1.0.0")).toBe(true);
+    expect(isStableReleaseVersion("1.0.0-rc.1")).toBe(false);
+    expect(isStableReleaseVersion("abc1234")).toBe(false);
   });
 });
 
