@@ -2,19 +2,15 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template. The API schema has one home — the generated contract/openapi.yaml. Never restate field-level request/response shapes here; link to it. Domain meaning → design.md; error-handling philosophy and conventions → CONTRIBUTING.md.
+> Living-doc template. Enumerate every contract surface this component exposes or consumes. For HTTP, one link to generated contract/openapi.yaml is the entire inventory; never paraphrase its paths, methods, payloads, statuses, or errors. Link other contract sources rather than reprinting their declarations.
 
-## HTTP API
+## Contract inventory
 
-<!-- The endpoints this component exposes, one line each, pointing to contract/openapi.yaml (which is
-single-sourced from the tapir endpoints) for the schema. Do not paste fields here. -->
+<!-- A compact list or table of all contract surfaces, with an authoritative source for
+each: HTTP/OpenAPI, domain service and capability ports, persistence/migrations, pipeline
+functions, runtime image, as applicable. Group related interfaces without omitting one. -->
 
-## Error responses
+## Boundary semantics
 
-<!-- Every error the API returns or propagates: its meaning and the client behaviour expected on it.
-Behaviour, not the code that raises it. Omit if the surface has none beyond standard success. -->
-
-## Versioning & compatibility
-
-<!-- Breaking vs non-breaking expectations for the interface. Note that contract drift is enforced in
-CI (`dagger call contract-drift`), so the committed contract and the served API cannot diverge. -->
+<!-- Cross-boundary interpretation or failure policy that OpenAPI cannot express and design.md
+does not already own. Omit this section if there is no such knowledge. -->

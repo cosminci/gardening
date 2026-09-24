@@ -24,3 +24,4 @@ node_modules/
 
 # Local, un-tracked overrides
 CLAUDE.local.md
+.scout/

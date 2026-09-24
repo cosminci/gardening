@@ -32,6 +32,4 @@ Add active plants directly from the journal.
 
 ## Doc Sync
 
-- `specs/design.md` — Domain model, Processing rules, and Edge cases for creating an active plant with an initial substrate and no history.
-- `specs/contracts.md` — HTTP API and Error responses for plant creation.
-- `specs/testing.md` — Service-specific strategy, Fixtures & data setup, and Integration boundaries for plant creation and initial attention.
+- `specs/design.md` — Domain model and Use cases and workflows: show plant creation without an operation, and show how the garden joins a newly created plant to a measurement that predates it.

@@ -27,9 +27,9 @@ Gate: the classification is written down and the branch is named `feature/<slug>
 
 ## Phase 2 — Spec PR (reviewed and merged before implementation)
 
-Write `specs/changes/<slug>/proposal.md` from the change-spec template. Keep it at the altitude of behaviour, intent, and the domain contract: the observable behaviour, plus the domain types, ports, and service signatures that define the feature — that contract is design, and belongs in the spec. What stays out is implementation: adapter or library choices, file paths, module layout, private wiring, HTTP endpoint shapes (those live in `contracts.md` / `openapi.yaml`), and diff walkthroughs (see the Change Specs checklist in the standards).
+Write `specs/changes/<slug>/proposal.md` from the change-spec template. Keep it at the altitude of behaviour, intent, and the domain contract: the observable behaviour, plus the domain types, ports, and service signatures that define the feature — that contract is design, and belongs in the spec. What stays out is implementation: adapter or library choices, file paths, module layout, private wiring, HTTP endpoint shapes (those live in generated `contract/openapi.yaml`; `contracts.md` links to it), and diff walkthroughs (see the Change Specs checklist in the standards).
 
-- **Feature:** state current → new behaviour explicitly; acceptance criteria (each externally observable); invariants (pre-existing guarantees that must still hold — not the change's own rules); tradeoffs accepted; and **Doc Sync** — the exact living-doc sections the archive phase will update.
+- **Feature:** state current → new behaviour explicitly; acceptance criteria (each externally observable); invariants (pre-existing guarantees that must still hold — not the change's own rules); tradeoffs accepted; and **Doc Sync** — the specific durable knowledge each affected living doc will gain or change.
 - **Investigation:** record hypotheses and the evidence for or against each, narrowing to a proven root cause. The archived spec's "What & Why" must state the proven root cause and the rejected hypotheses that revealed an expectation-vs-reality gap.
 
 The proposal is submitted as its own **Spec PR**. That PR contains the proposal and any
@@ -53,7 +53,7 @@ Write each fact once:
 - **What & Why:** current behaviour → new behaviour; missing capability and intent.
 - **Domain / Design Notes:** changed domain contracts, ports, and boundaries.
 - **Acceptance Criteria:** the smallest externally observable proof set, including relevant failure and accessibility outcomes.
-- **Doc Sync:** only the living-document sections that must change.
+- **Doc Sync:** name the section and the exact new or revised fact, decision, or workflow it will contain. Compare against the current living doc before writing it: "update the domain model" or "add tests for creation" is not a delta. Omit a doc if the change adds nothing beyond what its code, generated contract, or existing docs already say.
 
 Keep the proposal proportional:
 
@@ -125,10 +125,12 @@ rollback, loading, failure, boundary, and accessibility behavior where relevant.
 
 ## Doc Sync
 
-<!-- Required. Name each affected living document and the section or property to update.
-Omit only when no living document changes. -->
+<!-- Required when a living doc gains or changes durable knowledge. For each entry, name
+the doc, section, and the specific new/revised fact or decision; do not merely name a
+topic or repeat this guidance. Do not plan an endpoint/schema recap in contracts.md
+or a test/fixture inventory in testing.md. If none changes, say so in one sentence. -->
 
-- <doc> — <section or property that changes>
+- <doc> — <section>: <specific knowledge to add or revise>
 
 ## Out of Scope
 
@@ -217,14 +219,25 @@ when the checklist records why.
 
 After all Implementation PRs are merged, submit a separate **Archive + Living Docs PR**.
 Apply the spec's Doc Sync to the living docs (`specs/*.md`, and `ci/specs/*.md` if the
-pipeline changed), so they describe the system as it now is. Structure every living doc against
-its template in `specs/templates/<name>.md`: add only the sections that template defines, keep
-each fact in one place (link instead of restating), and omit a section rather than pad it. Move
-the spec to `specs/changes/archive/YYYY-MM-DD-<slug>/` in this PR.
+pipeline changed). Write only durable information that helps a reader understand the core
+domain, use cases, workflows, boundary semantics, test strategy, or operating constraints
+without reconstructing those decisions from code. `design.md` diagrams the overall
+architecture, core domain, use cases, and workflows with brief notes, not implementation
+detail or every operation and edge case.
+`contracts.md` enumerates all contract surfaces, using a single reference to generated
+OpenAPI for the entire HTTP surface instead of reproducing endpoints, fields, status
+codes, or errors defined there. `testing.md` explains component-specific
+testing strategy and why particular boundaries must be real or substituted; it does not
+enumerate tests, fixtures, data values, or covered cases. Put general test conventions in
+`CONTRIBUTING.md`. Structure each living doc against `specs/templates/<name>.md`, link to
+the canonical source instead of restating it, and omit sections or Doc Sync entries with
+no distinct value. Prune obsolete or duplicated content rather than appending to it.
+Move the spec to `specs/changes/archive/YYYY-MM-DD-<slug>/` in this PR.
 
 The Archive + Living Docs PR links the merged Spec PR and all Implementation PRs. It contains no
 new product behavior; it closes the documentation and archival work only.
 
-Gate: every Doc Sync entry is applied; each touched living doc conforms to its template (no
-out-of-template sections, no duplicated facts); the spec is archived; the Archive + Living Docs
-PR is reviewed and merged; and the checklist is satisfied.
+Gate: every Doc Sync entry's specific knowledge delta is applied; each touched living doc
+conforms to its template and adds information not readily inferred from code, OpenAPI, or
+another doc; the spec is archived; the Archive + Living Docs PR is reviewed and merged;
+and the checklist is satisfied.
