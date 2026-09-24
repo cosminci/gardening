@@ -51,7 +51,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       assertEquals(store.getPlant(PlantId("p1")), expectedResult)
       assertEquals(store.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
 
-  test("should list current plants by status without hiding corrupt records"):
+  test("should list plants by status without decoding records in the other view"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
       val store      = resource.store
@@ -61,13 +61,72 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val activePlant   = Plant(PlantId("active"), defaultPlantDetails)
       val archivedPlant = Plant(PlantId("archived"), defaultPlantDetails.copy(status = PlantStatus.Archived))
 
-      assertEquals(store.getPlants(PlantStatus.Active), GetPlantsResult.Read(Vector(activePlant)))
-      assertEquals(store.getPlants(PlantStatus.Archived), GetPlantsResult.Read(Vector(archivedPlant)))
+      val activeBefore   = store.getPlants(PlantStatus.Active)
+      val archivedBefore = store.getPlants(PlantStatus.Archived)
       execute(dataSource, "update plant set substrate = '[]' where id = ?", "archived")
-      store.getPlants(PlantStatus.Active) match
+
+      val activeAfter   = store.getPlants(PlantStatus.Active)
+      val archivedAfter = store.getPlants(PlantStatus.Archived)
+
+      assertEquals(activeBefore, GetPlantsResult.Read(Vector(activePlant)))
+      assertEquals(archivedBefore, GetPlantsResult.Read(Vector(archivedPlant)))
+      assertEquals(activeAfter, GetPlantsResult.Read(Vector(activePlant)))
+      archivedAfter match
         case GetPlantsResult.ReadFailed(DatabaseCorruption(reason)) =>
           assertEquals(reason.getMessage, "invalid stored substrate: DecodingFailure at : Empty")
         case other => fail(s"expected ReadFailed, got $other")
+
+  test("should count zero archived plants in an empty journal"):
+    Using.resource(storeResource): resource =>
+      val store  = resource.store
+      val result = store.getArchivedCount
+
+      assertEquals(result, ArchivedCountResult.Counted(0))
+
+  test("should count archived plants without decoding their details"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "active")
+      seedPlant(dataSource, id = "archived", status = PlantStatus.Archived)
+      execute(dataSource, "update plant set substrate = '[]' where id = ?", "archived")
+
+      val store       = resource.store
+      val countResult = store.getArchivedCount
+      val plantResult = store.getPlants(PlantStatus.Active)
+
+      assertEquals(countResult, ArchivedCountResult.Counted(1))
+      assertEquals(plantResult, GetPlantsResult.Read(Vector(Plant(PlantId("active"), defaultPlantDetails))))
+
+  test("should archive only active plants and retain their operations"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "p1")
+      val plantId    = PlantId("p1")
+      val operation  = Operation(OperationId("o1"), plantId, date, care)
+      val laterCare  = operation.copy(id = OperationId("o2"))
+      val laterRepot = operation.copy(id = OperationId("o3"), details = OperationDetails.Repot(lecaSubstrate, none))
+      val store      = resource.store
+      val firstLog   = store.addOperation(operation)
+
+      val archived      = store.archivePlant(plantId)
+      val repeated      = store.archivePlant(plantId)
+      val missing       = store.archivePlant(PlantId("unknown"))
+      val rejectedCare  = store.addOperation(laterCare)
+      val rejectedRepot = store.addOperation(laterRepot)
+      val archivedCount = store.getArchivedCount
+      val history       = store.getOperations(plantId, fullWindow)
+      val activePlants  = store.getPlants(PlantStatus.Active)
+
+      val expectedHistory = GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false))
+      assertEquals(firstLog, LogOperationResult.Logged(operation.id))
+      assertEquals(archived, ArchivePlantResult.Archived)
+      assertEquals(repeated, ArchivePlantResult.AlreadyArchived)
+      assertEquals(missing, ArchivePlantResult.PlantMissing)
+      assertEquals(rejectedCare, LogOperationResult.PlantArchived)
+      assertEquals(rejectedRepot, LogOperationResult.PlantArchived)
+      assertEquals(archivedCount, ArchivedCountResult.Counted(1))
+      assertEquals(history, expectedHistory)
+      assertEquals(activePlants, GetPlantsResult.Read(Vector.empty))
 
   test("should fail when stored plant data is corrupt"):
     Using.resource(storeResource): resource =>
@@ -101,20 +160,120 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val third      = Operation(OperationId("o3"), PlantId("p1"), date.plusNanos(100_500_000), care)
       val fourth     = Operation(OperationId("o4"), PlantId("p1"), date.plusNanos(100_500_000), care)
       val operations = Vector(first, second, third, fourth)
-      operations.foreach(operation => assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id)))
+      val logged     = operations.map(store.addOperation)
 
-      assertEquals(
-        store.getOperations(PlantId("p1"), OperationWindow(offset = 0, size = 3)),
-        GetOperationsResult.Read(OperationPage(Vector(fourth, third, second), hasNextPage = true))
+      val firstPage  = store.getOperations(PlantId("p1"), OperationWindow(offset = 0, size = 3))
+      val secondPage = store.getOperations(PlantId("p1"), OperationWindow(offset = 3, size = 3))
+      val finalPage  = store.getOperations(PlantId("p1"), OperationWindow(offset = 4, size = 3))
+
+      val expectedFirst  = GetOperationsResult.Read(OperationPage(Vector(fourth, third, second), hasNextPage = true))
+      val expectedSecond = GetOperationsResult.Read(OperationPage(Vector(first), hasNextPage = false))
+      val expectedFinal  = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+      assertEquals(logged, operations.map(operation => LogOperationResult.Logged(operation.id)))
+      assertEquals(firstPage, expectedFirst)
+      assertEquals(secondPage, expectedSecond)
+      assertEquals(finalPage, expectedFinal)
+
+  test("should read earliest and latest dates across all archived operations without decoding history"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "archived")
+      seedPlant(dataSource, id = "other")
+      val archivedId = PlantId("archived")
+      val earliest   = date.minusSeconds(60)
+      val latest     = date.plusSeconds(60)
+      val recorded   = Vector.tabulate(12)(index =>
+        Operation(OperationId(s"a-$index"), archivedId, date.plusSeconds(index.toLong), care)
       )
-      assertEquals(
-        store.getOperations(PlantId("p1"), OperationWindow(offset = 3, size = 3)),
-        GetOperationsResult.Read(OperationPage(Vector(first), hasNextPage = false))
+      val first          = Operation(OperationId("first"), archivedId, earliest, care)
+      val last           = Operation(OperationId("last"), archivedId, latest, care)
+      val otherOperation = Operation(OperationId("other"), PlantId("other"), date.plusSeconds(9999), care)
+      val operations     = recorded :+ first :+ last
+      val store          = resource.store
+      val logged         = operations.map(store.addOperation)
+      val otherLog       = store.addOperation(otherOperation)
+      val archived       = store.archivePlant(archivedId)
+      execute(dataSource, "update operation set payload = '{\"malformed\":true}' where id = ?", "a-5")
+
+      val actual  = store.getOperationDateRange(archivedId)
+      val missing = store.getOperationDateRange(PlantId("missing"))
+
+      val expected = GetOperationDateRangeResult.Read(OperationDateRange.Recorded(earliest, latest))
+      assertEquals(logged, operations.map(operation => LogOperationResult.Logged(operation.id)))
+      assertEquals(otherLog, LogOperationResult.Logged(otherOperation.id))
+      assertEquals(archived, ArchivePlantResult.Archived)
+      assertEquals(actual, expected)
+      assertEquals(missing, GetOperationDateRangeResult.PlantMissing)
+
+  test("should return an empty date range for a plant without operations"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "archived", status = PlantStatus.Archived)
+
+      val result = resource.store.getOperationDateRange(PlantId("archived"))
+
+      assertEquals(result, GetOperationDateRangeResult.Read(OperationDateRange.Empty))
+
+  test("should show the same first and last date for one recorded operation"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "single")
+      val single = Operation(OperationId("single"), PlantId("single"), date, care)
+
+      val store    = resource.store
+      val logged   = store.addOperation(single)
+      val archived = store.archivePlant(single.plantId)
+      val actual   = store.getOperationDateRange(single.plantId)
+
+      val expected = GetOperationDateRangeResult.Read(OperationDateRange.Recorded(date, date))
+      assertEquals(logged, LogOperationResult.Logged(single.id))
+      assertEquals(archived, ArchivePlantResult.Archived)
+      assertEquals(actual, expected)
+
+  test("should order archived care dates by instant across timestamp precisions"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "archived")
+      val plantId = PlantId("archived")
+      val first   = Operation(OperationId("first"), plantId, date, care)
+      val last    = Operation(OperationId("last"), plantId, date, care)
+
+      val store    = resource.store
+      val firstLog = store.addOperation(first)
+      val lastLog  = store.addOperation(last)
+      val archived = store.archivePlant(plantId)
+      execute(dataSource, "update operation set date = '2026-01-01T00:00:00Z' where id = ?", first.id.value)
+      execute(dataSource, "update operation set date = '2026-01-01T00:00:00.001Z' where id = ?", last.id.value)
+      val actual = store.getOperationDateRange(plantId)
+
+      val expected = GetOperationDateRangeResult.Read(
+        OperationDateRange.Recorded(Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00.001Z"))
       )
-      assertEquals(
-        store.getOperations(PlantId("p1"), OperationWindow(offset = 4, size = 3)),
-        GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
-      )
+      assertEquals(firstLog, LogOperationResult.Logged(first.id))
+      assertEquals(lastLog, LogOperationResult.Logged(last.id))
+      assertEquals(archived, ArchivePlantResult.Archived)
+      assertEquals(actual, expected)
+
+  test("should report a malformed operation date instead of presenting a partial range"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val plantId    = PlantId("malformed")
+      val first      = Operation(OperationId("first"), plantId, date.minusSeconds(60), care)
+      val middle     = Operation(OperationId("middle"), plantId, date, care)
+      val last       = Operation(OperationId("last"), plantId, date.plusSeconds(60), care)
+      val operations = Vector(first, middle, last)
+      seedPlant(dataSource, id = plantId.value)
+
+      val store  = resource.store
+      val logged = operations.map(store.addOperation)
+      execute(dataSource, "update operation set date = '2026-01-01T00:00:00BAD' where id = ?", middle.id.value)
+      val actual = store.getOperationDateRange(plantId)
+
+      assertEquals(logged, operations.map(operation => LogOperationResult.Logged(operation.id)))
+      actual match
+        case GetOperationDateRangeResult.ReadFailed(reason) =>
+          assertEquals(reason.getMessage, "invalid stored operation date: 2026-01-01T00:00:00BAD")
+        case other => fail(s"expected ReadFailed, got $other")
 
   test("should read bounded watering dates for every active plant"):
     Using.resource(storeResource): resource =>
@@ -125,7 +284,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val archivedPlantId = PlantId("archived")
       seedPlant(dataSource, id = firstPlantId.value)
       seedPlant(dataSource, id = secondPlantId.value)
-      seedPlant(dataSource, id = archivedPlantId.value, status = PlantStatus.Archived)
+      seedPlant(dataSource, id = archivedPlantId.value)
       seedPlant(dataSource, id = "no-waterings")
 
       val firstWaterings = Vector.tabulate(22): index =>
@@ -134,8 +293,10 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         Operation(OperationId(f"second-$index%02d"), secondPlantId, date, care)
       val archivedWatering = Operation(OperationId("archived-watering"), archivedPlantId, date, care)
       val nonWatering      = Operation(OperationId("care-only"), firstPlantId, date.plusSeconds(30), care.copy(actions = Set(ActionType.Pruned)))
-      (firstWaterings ++ secondWaterings :+ archivedWatering :+ nonWatering).foreach: operation =>
-        assertEquals(store.addOperation(operation), LogOperationResult.Logged(operation.id))
+      val operations       = firstWaterings ++ secondWaterings :+ archivedWatering :+ nonWatering
+      val logged           = operations.map(store.addOperation)
+      val archived         = store.archivePlant(archivedPlantId)
+      val actual           = store.getAttentionSamples(size = 20)
 
       val firstWateringHistory  = WateringHistory.from(firstWaterings.reverse.take(20).map(_.date)).fold(message => fail(message), identity)
       val secondWateringHistory = WateringHistory.from(secondWaterings.reverse.map(_.date)).fold(message => fail(message), identity)
@@ -145,7 +306,9 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         PlantAttentionSample(secondPlantId, secondWateringHistory),
         PlantAttentionSample(PlantId("no-waterings"), emptyWateringHistory)
       )
-      assertEquals(store.getAttentionSamples(size = 20), GetAttentionSamplesResult.Read(expectedSamples))
+      assertEquals(logged, operations.map(operation => LogOperationResult.Logged(operation.id)))
+      assertEquals(archived, ArchivePlantResult.Archived)
+      assertEquals(actual, GetAttentionSamplesResult.Read(expectedSamples))
 
   test("should report malformed watering dates through the attention read"):
     Using.resource(storeResource): resource =>
@@ -250,18 +413,39 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
   test("should update every editable plant detail"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
-      val store      = resource.store
       seedPlant(dataSource, id = "p1")
       val updatedSubstrate = lecaSubstrate
       val updatedNickname  = Nickname("Monty").some
       val updatedDetails   =
-        PlantDetails(Species("Monstera deliciosa"), updatedNickname, Location("Living room"), updatedSubstrate, PlantStatus.Archived)
+        PlantDetails(Species("Monstera deliciosa"), updatedNickname, Location("Living room"), updatedSubstrate, PlantStatus.Active)
       val updatedPlant = Plant(PlantId("p1"), updatedDetails)
 
-      assertEquals(store.updatePlant(updatedPlant), UpdatePlantResult.Updated)
-      assertEquals(store.getPlant(updatedPlant.id), GetPlantResult.Read(updatedPlant))
-      assertEquals(store.getPlants(PlantStatus.Active), GetPlantsResult.Read(Vector.empty))
-      assertEquals(store.getPlants(PlantStatus.Archived), GetPlantsResult.Read(Vector(updatedPlant)))
+      val store      = resource.store
+      val updated    = store.updatePlant(updatedPlant)
+      val stored     = store.getPlant(updatedPlant.id)
+      val activeList = store.getPlants(PlantStatus.Active)
+
+      assertEquals(updated, UpdatePlantResult.Updated)
+      assertEquals(stored, GetPlantResult.Read(updatedPlant))
+      assertEquals(activeList, GetPlantsResult.Read(Vector(updatedPlant)))
+
+  test("should preserve archived status when editing details and reject stale active updates"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "p1", status = PlantStatus.Archived)
+      val activePlant   = Plant(PlantId("p1"), defaultPlantDetails)
+      val archivedPlant = activePlant.copy(details = activePlant.details.copy(substrate = lecaSubstrate, status = PlantStatus.Archived))
+
+      val store          = resource.store
+      val rejectedUpdate = store.updatePlant(activePlant)
+      val updated        = store.updatePlant(archivedPlant)
+      val stored         = store.getPlant(archivedPlant.id)
+
+      rejectedUpdate match
+        case UpdatePlantResult.UpdateFailed(reason) => assertEquals(reason.getMessage, "plant not found while updating: p1")
+        case other                                  => fail(s"expected UpdateFailed, got $other")
+      assertEquals(updated, UpdatePlantResult.Updated)
+      assertEquals(stored, GetPlantResult.Read(archivedPlant))
 
   test("should return no operation for an unknown id"):
     Using.resource(storeResource): resource =>
@@ -345,10 +529,27 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val failure = intercept[DatabaseCorruption](store.updateOperation(OperationId("o1"), care))
       assertEquals(failure.err.getMessage, "invalid stored operation date: today")
 
-  test("should report a logging failure when the plant does not exist"):
+  test("should reject logging an operation for an unknown plant"):
     Using.resource(storeResource): resource =>
-      val store = resource.store
-      store.addOperation(Operation(OperationId("o1"), PlantId("no-such-plant"), date, care)) match
+      val store   = resource.store
+      val missing = Operation(OperationId("o1"), PlantId("no-such-plant"), date, care)
+
+      val result = store.addOperation(missing)
+
+      assertEquals(result, LogOperationResult.PlantMissing)
+
+  test("should report a logging failure when the write is rejected"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val operation = Operation(OperationId("o1"), PlantId("p1"), date, care)
+
+      val firstWrite     = store.addOperation(operation)
+      val duplicateWrite = store.addOperation(operation)
+
+      assertEquals(firstWrite, LogOperationResult.Logged(operation.id))
+      duplicateWrite match
         case LogOperationResult.LoggingFailed(_) => ()
         case other                               => fail(s"expected LoggingFailed, got $other")
 
@@ -393,30 +594,34 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
 
   test("should seed, add, and edit pesticides"):
     Using.resource(storeResource): resource =>
-      val store = resource.store
-      store.getPesticides match
+      val store  = resource.store
+      val seeded = store.getPesticides
+
+      val added         = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
+      val editedData    = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType.Treatment, NomenclatureInfo("2g/L").some)
+      val addedResult   = store.addPesticide(added)
+      val editedResult  = store.editPesticide(pesticideId, editedData)
+      val missingResult = store.editPesticide(PesticideId(UUID.randomUUID()), editedData)
+
+      val expectedSeeded = Vector(
+        ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some),
+        ("SWITCH 62.5 WG", PesticideType.Fungicide, none),
+        ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some),
+        ("SIMFONIA", PesticideType.Insecticide, "organic".some),
+        ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none),
+        ("MOSPILAN 20SG", PesticideType.Insecticide, none),
+        ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some),
+        ("H2O2", PesticideType.Treatment, none)
+      )
+      seeded match
         case CatalogReadResult.Read(pesticides) =>
-          assertEquals(
-            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value))),
-            Vector(
-              ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some),
-              ("SWITCH 62.5 WG", PesticideType.Fungicide, none),
-              ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some),
-              ("SIMFONIA", PesticideType.Insecticide, "organic".some),
-              ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none),
-              ("MOSPILAN 20SG", PesticideType.Insecticide, none),
-              ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some),
-              ("H2O2", PesticideType.Treatment, none)
-            )
-          )
+          val actualSeeded =
+            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value)))
+          assertEquals(actualSeeded, expectedSeeded)
         case other => fail(s"expected Read, got $other")
-
-      val added = Pesticide(pesticideId, PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none))
-      assertEquals(store.addPesticide(added), CatalogAddResult.Added(added))
-
-      val editedData = PesticideData(NomenclatureName("Wettable sulfur"), PesticideType.Treatment, NomenclatureInfo("2g/L").some)
-      assertEquals(store.editPesticide(pesticideId, editedData), CatalogEditResult.Edited(added.copy(data = editedData)))
-      assertEquals(store.editPesticide(PesticideId(UUID.randomUUID()), editedData), CatalogEditResult.RecordMissing)
+      assertEquals(addedResult, CatalogAddResult.Added(added))
+      assertEquals(editedResult, CatalogEditResult.Edited(added.copy(data = editedData)))
+      assertEquals(missingResult, CatalogEditResult.RecordMissing)
 
   test("should reject corrupt catalog values"):
     Using.resource(storeResource): resource =>
@@ -468,6 +673,18 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         case CatalogEditResult.EditFailed(_) => ()
         case other                           => fail(s"expected EditFailed, got $other")
 
+  test("should report an archive failure when the database is read-only"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      seedPlant(dataSource, id = "p1")
+
+      val readOnlyStore = SqlitePlantStore.make(Transactor(dataSource, connectionConfig = makeReadOnly))
+      val result        = readOnlyStore.archivePlant(PlantId("p1"))
+
+      result match
+        case ArchivePlantResult.ArchiveFailed(_) => ()
+        case other                               => fail(s"expected ArchiveFailed, got $other")
+
   test("should return read failures when the journal schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val store = SqlitePlantStore.make(connection.transactor)
@@ -492,6 +709,23 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       store.getPesticides match
         case CatalogReadResult.ReadFailed(_) => ()
         case other                           => fail(s"expected ReadFailed, got $other")
+
+  test("should report archived count, date-range, and archive errors when the schema is unavailable"):
+    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+      val store       = SqlitePlantStore.make(connection.transactor)
+      val countResult = store.getArchivedCount
+      val dateResult  = store.getOperationDateRange(PlantId("p1"))
+      val archive     = store.archivePlant(PlantId("p1"))
+
+      countResult match
+        case ArchivedCountResult.ReadFailed(_) => ()
+        case other                             => fail(s"expected ReadFailed, got $other")
+      dateResult match
+        case GetOperationDateRangeResult.ReadFailed(_) => ()
+        case other                                     => fail(s"expected ReadFailed, got $other")
+      archive match
+        case ArchivePlantResult.ArchiveFailed(_) => ()
+        case other                               => fail(s"expected ArchiveFailed, got $other")
 
   final private case class StoreResource(
       connection: SqliteConnection,

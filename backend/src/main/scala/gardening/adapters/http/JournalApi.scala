@@ -20,8 +20,10 @@ import java.time.Instant
 import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
 import scala.deriving.Mirror
 import scala.util.Try
+import scala.util.chaining.scalaUtilChainingOps
 
 final private case class LoggedOperation(id: String) derives Codec.AsObject
+final private case class ArchivedPlantCount(count: Long) derives Codec.AsObject
 
 object JournalApi:
 
@@ -35,12 +37,18 @@ object JournalApi:
         case _: WateringAttention.Current     => "current"
         case _: WateringAttention.Overdue     => "overdue"
         case _: WateringAttention.RedAlert    => "redAlert"
-    // $COVERAGE-ON$
+  // $COVERAGE-ON$
 
   private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
   private val getPlantsEndpoint =
-    journalEndpoint.get.in("plants").in(query[PlantStatus]("status").default(PlantStatus.Active))
-      .out(jsonBody[Vector[Plant]]).summary("List plants by status")
+    journalEndpoint.get.in(
+      "plants"
+    ).in(query[PlantStatus]("status").default(PlantStatus.Active)).out(jsonBody[Vector[Plant]]).summary("List plants by status")
+  private val getArchivedCountEndpoint =
+    journalEndpoint.get.in("plants" / "archived" / "count").out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
+  private val archivePlantEndpoint =
+    endpoint.post.in("plants" / path[String]("plantId") / "archive").errorOut(JournalError.plantRequest)
+      .out(statusCode(StatusCode.NoContent)).summary("Permanently archive an active plant")
   private val getAttentionEndpoint =
     endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
@@ -52,8 +60,15 @@ object JournalApi:
       .out(jsonBody[OperationPage])
       .summary("List a bounded page of plant operations")
 
+  private val getOperationDateRangeEndpoint =
+    endpoint.get.in("plants" / path[String]("plantId") / "operation-date-range")
+      .errorOut(JournalError.plantRead)
+      .out(jsonBody[OperationDateRange])
+      .summary("Read the first and last recorded operation dates")
+
   private val logOperationEndpoint =
-    journalEndpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[LogOperationRequest])
+    endpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[LogOperationRequest])
+      .errorOut(JournalError.plantRequest)
       .out(statusCode(StatusCode.Created)).out(jsonBody[LoggedOperation]).summary("Log a plant operation")
 
   private val editOperationEndpoint =
@@ -82,8 +97,11 @@ object JournalApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(
       getPlantsEndpoint,
+      getArchivedCountEndpoint,
+      archivePlantEndpoint,
       getAttentionEndpoint,
       getOperationsEndpoint,
+      getOperationDateRangeEndpoint,
       logOperationEndpoint,
       editOperationEndpoint,
       getComponentsEndpoint,
@@ -99,66 +117,68 @@ object JournalApi:
       getPlantsEndpoint.handle: status =>
         journal.getPlants(status) match
           case GetPlantsResult.Read(plants)  => plants.asRight
-          case GetPlantsResult.ReadFailed(_) =>
-            (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
+          case GetPlantsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
+      getArchivedCountEndpoint.handle: _ =>
+        journal.getArchivedCount match
+          case ArchivedCountResult.Counted(count) => ArchivedPlantCount(count).asRight
+          case ArchivedCountResult.ReadFailed(_)  => (StatusCode.InternalServerError, ApiError("archived count could not be read")).asLeft,
+      archivePlantEndpoint.handle: plantId =>
+        val id = PlantId(plantId)
+        journal.archivePlant(id) match
+          case ArchivePlantResult.Archived         => attention.removeArchivedPlant(id).pipe(_.asRight)
+          case ArchivePlantResult.PlantMissing     => JournalError.plantMissing.asLeft
+          case ArchivePlantResult.AlreadyArchived  => JournalError.plantArchived.asLeft
+          case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft,
       getAttentionEndpoint.handleSuccess(_ => attention.current),
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
-          case GetOperationsResult.ReadFailed(_) =>
-            (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
+          case GetOperationsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
+      getOperationDateRangeEndpoint.handle: plantId =>
+        journal.getOperationDateRange(PlantId(plantId)) match
+          case GetOperationDateRangeResult.Read(range)   => range.asRight
+          case GetOperationDateRangeResult.PlantMissing  => JournalError.plantMissing.asLeft
+          case GetOperationDateRangeResult.ReadFailed(_) => ApiError("operation dates could not be read").asLeft,
       logOperationEndpoint.handle: (plantId, request) =>
         journal.logOperation(PlantId(plantId), request.date, request.details) match
-          case LogOperationResult.Logged(id) =>
-            LoggedOperation(id.value).asRight
-          case LogOperationResult.LoggingFailed(_) =>
-            (StatusCode.InternalServerError, ApiError("operation could not be logged")).asLeft,
+          case LogOperationResult.Logged(id)       => LoggedOperation(id.value).asRight
+          case LogOperationResult.PlantMissing     => JournalError.plantMissing.asLeft
+          case LogOperationResult.PlantArchived    => JournalError.plantArchived.asLeft
+          case LogOperationResult.LoggingFailed(_) => ApiError("operation could not be logged").asLeft,
       editOperationEndpoint.handle: (operationId, details) =>
         journal.editOperation(OperationId(operationId), details) match
-          case EditOperationResult.Edited(operation) =>
-            operation.asRight
-          case EditOperationResult.OperationMissing =>
-            JournalError.operationMissing.asLeft
-          case EditOperationResult.OperationTypeMismatch =>
-            JournalError.operationTypeMismatch.asLeft
-          case EditOperationResult.EditFailed(_) =>
-            JournalError.editFailed.asLeft,
+          case EditOperationResult.Edited(operation)     => operation.asRight
+          case EditOperationResult.OperationMissing      => JournalError.operationMissing.asLeft
+          case EditOperationResult.OperationTypeMismatch => JournalError.operationTypeMismatch.asLeft
+          case EditOperationResult.EditFailed(_)         => JournalError.editFailed.asLeft,
       getComponentsEndpoint.handle: _ =>
         journal.getSubstrateComponents match
           case CatalogReadResult.Read(components) => components.asRight
-          case CatalogReadResult.ReadFailed(_)    =>
-            (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
+          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
       addComponentEndpoint.handle: data =>
         journal.addSubstrateComponent(data) match
           case CatalogAddResult.Added(component) => component.asRight
-          case CatalogAddResult.AddFailed(_)     =>
-            (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
+          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
       editComponentEndpoint.handle: (encodedId, data) =>
-        SubstrateComponentId.parse(encodedId) match
-          case None     => JournalError.catalogInvalidId.asLeft
-          case Some(id) =>
-            journal.editSubstrateComponent(id, data) match
-              case CatalogEditResult.Edited(component) => component.asRight
-              case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
-              case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft,
+        SubstrateComponentId.parse(encodedId).fold(JournalError.catalogInvalidId.asLeft): id =>
+          journal.editSubstrateComponent(id, data) match
+            case CatalogEditResult.Edited(component) => component.asRight
+            case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
+            case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft,
       getPesticidesEndpoint.handle: _ =>
         journal.getPesticides match
           case CatalogReadResult.Read(pesticides) => pesticides.asRight
-          case CatalogReadResult.ReadFailed(_)    =>
-            (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
+          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
       addPesticideEndpoint.handle: data =>
         journal.addPesticide(data) match
           case CatalogAddResult.Added(pesticide) => pesticide.asRight
-          case CatalogAddResult.AddFailed(_)     =>
-            (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
+          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
       editPesticideEndpoint.handle: (encodedId, data) =>
-        PesticideId.parse(encodedId) match
-          case None     => JournalError.catalogInvalidId.asLeft
-          case Some(id) =>
-            journal.editPesticide(id, data) match
-              case CatalogEditResult.Edited(pesticide) => pesticide.asRight
-              case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
-              case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft
+        PesticideId.parse(encodedId).fold(JournalError.catalogInvalidId.asLeft): id =>
+          journal.editPesticide(id, data) match
+            case CatalogEditResult.Edited(pesticide) => pesticide.asRight
+            case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
+            case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft
     )
 
   private given circeConfiguration: CirceConfiguration =
@@ -249,6 +269,7 @@ object JournalApi:
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
   private given Codec.AsObject[OperationDetails]    = ConfiguredCodec.derived
+  private given Codec.AsObject[OperationDateRange]  = ConfiguredCodec.derived
   private given Codec.AsObject[LogOperationRequest] = ConfiguredCodec.derived
   private given Codec.AsObject[PlantDetails]        = ConfiguredCodec.derived
   private given Codec.AsObject[Plant]               = ConfiguredCodec.derived

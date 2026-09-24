@@ -159,6 +159,10 @@ export interface OperationPage {
   readonly hasNextPage: boolean;
 }
 
+export type OperationDates =
+  | { readonly kind: "empty" }
+  | { readonly kind: "recorded"; readonly first: Instant; readonly last: Instant };
+
 export type GetAttentionResult =
   | { readonly kind: "read"; readonly projection: AttentionProjection }
   | { readonly kind: "readFailed"; readonly reason: Error };
@@ -167,12 +171,27 @@ export type GetPlantsResult =
   | { readonly kind: "read"; readonly plants: readonly Plant[] }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
+export type GetArchivedCountResult =
+  | { readonly kind: "read"; readonly count: number }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
+export type GetOperationDatesResult =
+  | { readonly kind: "read"; readonly dates: OperationDates }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
+export type ArchivePlantResult =
+  | { readonly kind: "archived" }
+  | { readonly kind: "plantMissing" }
+  | { readonly kind: "alreadyArchived" }
+  | { readonly kind: "archiveFailed"; readonly reason: Error };
+
 export type GetOperationsResult =
   | { readonly kind: "read"; readonly page: OperationPage }
   | { readonly kind: "readFailed"; readonly reason: Error };
 
 export type LogOperationResult =
   | { readonly kind: "logged"; readonly id: OperationId }
+  | { readonly kind: "plantArchived" }
   | { readonly kind: "loggingFailed"; readonly reason: Error };
 
 export type EditOperationResult =
@@ -196,6 +215,9 @@ export type CatalogEditResult<A> =
 
 export interface JournalClient {
   getPlants(status?: PlantStatus): Promise<GetPlantsResult>;
+  getArchivedCount(): Promise<GetArchivedCountResult>;
+  getOperationDates(plantId: PlantId): Promise<GetOperationDatesResult>;
+  archivePlant(plantId: PlantId): Promise<ArchivePlantResult>;
   getAttention(): Promise<GetAttentionResult>;
   getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
   logOperation(

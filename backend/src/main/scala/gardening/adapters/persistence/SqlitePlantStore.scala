@@ -1,6 +1,5 @@
 package gardening.adapters.persistence
 
-import cats.syntax.eq.*
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
@@ -29,12 +28,36 @@ object SqlitePlantStore:
 
     override def getPlants(status: PlantStatus): GetPlantsResult =
       try
-        val rows = connect(transactor)(sql"select id, species, nickname, location, substrate, status from plant order by rowid".query[PlantRow].run())
+        val rows = connect(transactor):
+          sql"select id, species, nickname, location, substrate, status from plant where status = ${status.toString} order by rowid".query[
+            PlantRow
+          ].run()
         val plants = trust(rows.traverse(toPlant))
-        GetPlantsResult.Read(plants.filter(_.details.status === status))
+        GetPlantsResult.Read(plants)
       catch
         case error: SqlException       => GetPlantsResult.ReadFailed(error)
         case error: DatabaseCorruption => GetPlantsResult.ReadFailed(error)
+
+    override def getArchivedCount: ArchivedCountResult =
+      try
+        connect(transactor)(sql"select count(*) from plant where status = 'Archived'".query[Long].run().headOption) match
+          case Some(count) => ArchivedCountResult.Counted(count)
+          // An aggregate without GROUP BY always returns exactly one row.
+          // $COVERAGE-OFF$
+          case None => ArchivedCountResult.ReadFailed(DatabaseCorruption(IllegalStateException("archived plant count query returned no row")))
+          // $COVERAGE-ON$
+      catch case error: SqlException => ArchivedCountResult.ReadFailed(error)
+
+    override def archivePlant(id: PlantId): ArchivePlantResult =
+      try
+        transact(transactor):
+          sql"update plant set status = 'Archived' where id = ${id.value} and status = 'Active'".update.run() match
+            case 1 => ArchivePlantResult.Archived
+            case _ =>
+              sql"select status from plant where id = ${id.value}".query[String].run().headOption match
+                case Some(_) => ArchivePlantResult.AlreadyArchived
+                case None    => ArchivePlantResult.PlantMissing
+      catch case error: SqlException => ArchivePlantResult.ArchiveFailed(error)
 
     override def getPlant(id: PlantId): GetPlantResult =
       try
@@ -65,6 +88,25 @@ object SqlitePlantStore:
         val operations = trust(rows.traverse(toOperation))
         GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
       catch case error: SqlException => GetOperationsResult.ReadFailed(error)
+
+    override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
+      try
+        val rows = connect(transactor):
+          sql"""select operation.date from plant
+                left join operation on operation.plant_id = plant.id
+                where plant.id = ${plantId.value}""".query[OperationDateRow].run()
+        rows.headOption match
+          case None    => GetOperationDateRangeResult.PlantMissing
+          case Some(_) =>
+            val dates = rows.flatMap(_.date).traverse(parseOperationDate).map: parsed =>
+              parsed.headOption match
+                case None        => OperationDateRange.Empty
+                case Some(first) =>
+                  val earliest = parsed.foldLeft(first)((previous, current) => if current.isBefore(previous) then current else previous)
+                  val latest   = parsed.foldLeft(first)((previous, current) => if current.isAfter(previous) then current else previous)
+                  OperationDateRange.Recorded(earliest, latest)
+            dates.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
+      catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
       try
@@ -144,13 +186,20 @@ object SqlitePlantStore:
     override def addOperation(operation: Operation): LogOperationResult =
       try
         transact(transactor):
-          insertOperationRow(operation).update.run().pipe(_ => Logged(operation.id))
+          insertOperationRow(operation).update.run() match
+            case 1 => Logged(operation.id)
+            case _ =>
+              sql"select status from plant where id = ${operation.plantId.value}".query[String].run().headOption match
+                case Some(_) => LogOperationResult.PlantArchived
+                case None    => LogOperationResult.PlantMissing
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation) =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
       val storedDate               = operationDateFormatter.format(operation.date)
-      sql"insert into operation (id, plant_id, date, kind, payload) values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"
+      sql"""insert into operation (id, plant_id, date, kind, payload)
+           select ${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload
+           where exists (select 1 from plant where id = ${operation.plantId.value} and status = 'Active')"""
 
     override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
       try
@@ -274,7 +323,7 @@ object SqlitePlantStore:
                location = ${details.location.value},
                substrate = ${details.substrate.asJson.noSpaces},
                status = ${details.status.toString}
-           where id = ${plant.id.value}"""
+           where id = ${plant.id.value} and status = ${details.status.toString}"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails) =
       val (operationKind, payload) = encodeOperationDetails(details)
@@ -370,6 +419,7 @@ object SqlitePlantStore:
       derives DbCodec
 
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
+  private case class OperationDateRow(date: Option[String]) derives DbCodec
   private case class AttentionSampleRow(
       id: String,
       wateringDates: String

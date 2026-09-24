@@ -79,28 +79,58 @@ h1 {
   line-height: 1;
 }
 
-.masthead__summary {
-  margin-bottom: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
+.plant-views {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--paper);
 }
 
-.plant-count {
+.plant-views__button {
   display: grid;
-  margin: 0;
-  text-align: right;
+  grid-template-columns: auto auto;
+  min-width: 6.5rem;
+  align-items: center;
+  justify-content: center;
+  justify-items: center;
+  column-gap: 0.35rem;
+  row-gap: 0.1rem;
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  border-radius: 0.6rem;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
 }
 
-.plant-count strong {
+.plant-views__button[aria-pressed="true"] {
+  color: #fff;
+  background: var(--leaf);
+}
+
+.plant-views__button:hover:not([aria-pressed="true"]) {
+  color: var(--leaf);
+  background: var(--sage);
+}
+
+.plant-views__icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  fill: currentcolor;
+}
+
+.plant-views__button strong {
   font-family: Georgia, serif;
   font-size: 1.8rem;
   font-weight: 500;
   line-height: 1;
 }
 
-.plant-count span {
-  color: var(--muted);
-  font-size: 0.75rem;
+.plant-views__button span {
+  grid-column: 1 / -1;
+  font-size: 0.7rem;
 }
 
 .journal {
@@ -131,8 +161,11 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .masthead__summary,
-  .plant-count {
-    display: none;
+  .plant-views {
+    justify-self: stretch;
+  }
+
+  .plant-views__button {
+    flex: 1;
   }
 }
