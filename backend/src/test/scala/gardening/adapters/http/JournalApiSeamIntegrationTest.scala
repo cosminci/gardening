@@ -3,7 +3,6 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.*
-import gardening.domain.catalog.*
 import gardening.domain.journal.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
@@ -26,28 +25,21 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val nickname       = Nickname("Fern").some
   private val location       = Location("Balcony")
   private val perliteId      = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val pesticideId    = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
   private val substrate      = Substrate.of(List(SubstratePart(perliteId, 100))).getOrElse(fail("invalid substrate"))
   private val plant          = Plant(PlantId("p1"), PlantDetails(species, nickname, location, substrate, PlantStatus.Active))
   private val care           = OperationDetails.Care(Set(ActionType.Watered, ActionType.Pruned), Set.empty, MoistureLevel.Wet, Note("dry").some)
   private val repot          = OperationDetails.Repot(substrate, Note("fresh").some)
-  private val careOperation  = Operation(OperationId("care"), plant.id, date, care)
+  private val careOperation  = Operation(OperationId("care"), plant.id, date, care.copy(pesticides = Set(pesticideId)))
   private val repotOperation = Operation(OperationId("repot"), plant.id, date.plusSeconds(1), repot)
   private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
   private val repotRequest   =
     """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
   private val loggedCareRequest = s"""{"date":"$date","details":$careRequest}"""
   private val operationsJson    =
-    """{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":[],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
+    s"""{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":["${pesticideId.value}"],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
   private val repotJson =
     """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
-  private val pesticideId       = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-  private val pesticideData     = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, NomenclatureInfo("2g/L").some)
-  private val pesticide         = Pesticide(pesticideId, pesticideData)
-  private val pesticideDataJson = """{"name":"Sulfur","type":"fungicide","info":"2g/L"}"""
-  private val pesticideJson     = s"""{"id":"${pesticideId.value}","data":$pesticideDataJson}"""
-  private val catalogReadError  = """{"message":"nomenclatures could not be read"}"""
-  private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
-
   test("should return the requested plant's care history"):
     val refs = Refs(
       getOperationsResult = GetOperationsResult.Read(
@@ -326,47 +318,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
-  test("should list and add pesticides"):
-    val refs = Refs(
-      pesticideReadResult = CatalogReadResult.Read(Vector(pesticide)),
-      pesticideAddResult = CatalogAddResult.Added(pesticide)
-    )
-    val server = buildServer(refs)
-
-    assertResponse(get("/pesticides", server), StatusCode.Ok, s"[$pesticideJson]")
-    assertResponse(post("/pesticides", pesticideDataJson, server), StatusCode.Created, pesticideJson)
-
-  test("should edit pesticides and reject invalid or missing identifiers"):
-    val refs = Refs(
-      pesticideEditResult = CatalogEditResult.Edited(pesticide)
-    )
-    val server = buildServer(refs)
-
-    assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server), StatusCode.Ok, pesticideJson)
-    assertResponse(
-      put("/pesticides/not-a-uuid", pesticideDataJson, server),
-      StatusCode.BadRequest,
-      """{"message":"invalid nomenclature id"}"""
-    )
-    assertResponse(
-      put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(Refs())),
-      StatusCode.NotFound,
-      """{"message":"nomenclature not found"}"""
-    )
-
-  test("should hide pesticide catalog storage failures"):
-    val failure = RuntimeException("private details")
-    val refs    = Refs(
-      pesticideReadResult = CatalogReadResult.ReadFailed(failure),
-      pesticideAddResult = CatalogAddResult.AddFailed(failure),
-      pesticideEditResult = CatalogEditResult.EditFailed(failure)
-    )
-    val server = buildServer(refs)
-
-    assertResponse(get("/pesticides", server), StatusCode.InternalServerError, catalogReadError)
-    assertResponse(post("/pesticides", pesticideDataJson, server), StatusCode.InternalServerError, catalogWriteError)
-    assertResponse(put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server), StatusCode.InternalServerError, catalogWriteError)
-
   private case class Refs(
       attentionProjection: AttentionProjection = AttentionProjection(date, Vector.empty),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
@@ -376,9 +327,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       operationDateRangeResult: GetOperationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
-      pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
-      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
-      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing,
       requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
       requestedDateRanges: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
       requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
@@ -403,9 +351,6 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
         refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => refs.logOperationResult)
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
         refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => refs.editOperationResult)
-      override def getPesticides: CatalogReadResult[Pesticide]                                       = refs.pesticideReadResult
-      override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]                    = refs.pesticideAddResult
-      override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] = refs.pesticideEditResult
     val attention = new PlantAttentionMonitor:
       override def current: AttentionProjection           = refs.attentionProjection
       override def refreshAll: RefreshAttentionResult     = fail("HTTP must not refresh attention")

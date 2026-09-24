@@ -1,7 +1,6 @@
 package gardening.domain.journal
 
 import gardening.domain.*
-import gardening.domain.catalog.*
 
 trait PlantJournalStore:
   def getPlants(status: PlantStatus): GetPlantsResult
@@ -16,6 +15,3 @@ trait PlantJournalStore:
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def removeOperation(id: OperationId): OperationCompensationResult
   def restoreOperation(operation: Operation): OperationCompensationResult
-  def getPesticides: CatalogReadResult[Pesticide]
-  def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide]
-  def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide]

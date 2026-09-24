@@ -1,5 +1,6 @@
 import { render } from "solid-js/web";
 import { makeHttpJournalClient } from "./adapters/http/HttpJournalClient";
+import { makeHttpPesticideClient } from "./adapters/http/HttpPesticideClient";
 import { makeHttpSubstrateComponentClient } from "./adapters/http/HttpSubstrateComponentClient";
 import { App } from "./app/App";
 import "./app/controls.css";
@@ -7,7 +8,13 @@ import "./app/controls.css";
 const root = document.getElementById("root");
 if (root !== null) {
   render(
-    () => <App journal={makeHttpJournalClient()} substrates={makeHttpSubstrateComponentClient()} />,
+    () => (
+      <App
+        journal={makeHttpJournalClient()}
+        substrates={makeHttpSubstrateComponentClient()}
+        pesticideCatalog={makeHttpPesticideClient()}
+      />
+    ),
     root,
   );
 }

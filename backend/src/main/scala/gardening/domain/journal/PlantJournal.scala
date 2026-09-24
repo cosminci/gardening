@@ -5,6 +5,7 @@ import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
+import gardening.domain.pesticide.PesticideStore
 import gardening.domain.substrate.SubstrateComponentStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
@@ -26,21 +27,23 @@ trait PlantJournal:
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
-  def getPesticides: CatalogReadResult[Pesticide]
-  def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]
-  def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide]
 
 object PlantJournal:
 
   def make(using
       store: PlantJournalStore^,
       substrateStore: SubstrateComponentStore^,
+      pesticideStore: PesticideStore^,
       idGen: IdGenerator^
-  ): PlantJournal^{store, substrateStore, idGen} =
+  ): PlantJournal^{store, substrateStore, pesticideStore, idGen} =
     new LivePlantJournal
 
-  private class LivePlantJournal(using store: PlantJournalStore^, substrateStore: SubstrateComponentStore^, idGen: IdGenerator^)
-      extends PlantJournal:
+  private class LivePlantJournal(using
+      store: PlantJournalStore^,
+      substrateStore: SubstrateComponentStore^,
+      pesticideStore: PesticideStore^,
+      idGen: IdGenerator^
+  ) extends PlantJournal:
     private val operationMutex = ReentrantLock()
 
     override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
@@ -55,14 +58,6 @@ object PlantJournal:
 
     override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
       store.getOperationDateRange(plantId)
-
-    override def getPesticides: CatalogReadResult[Pesticide] = store.getPesticides
-
-    override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
-      store.addPesticide(Pesticide(PesticideId(java.util.UUID.fromString(idGen.nextId())), data))
-
-    override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-      store.editPesticide(id, data)
 
     override def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
       store.getPlant(plantId) match
@@ -112,7 +107,7 @@ object PlantJournal:
     private def validatePesticides(selected: Set[PesticideId]) =
       if selected.isEmpty then ().asRight
       else
-        store.getPesticides match
+        pesticideStore.getPesticides match
           case CatalogReadResult.Read(pesticides) =>
             val known   = pesticides.map(_.id).toSet
             val missing = selected.diff(known)

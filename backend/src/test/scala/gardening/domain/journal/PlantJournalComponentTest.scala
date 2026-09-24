@@ -3,6 +3,7 @@ package gardening.domain.journal
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
+import gardening.domain.pesticide.PesticideStore
 import gardening.domain.substrate.SubstrateComponentStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
@@ -54,10 +55,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
   private val firstPage        = OperationWindow(offset = 0, size = 3)
   private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
     .map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
-  private val addedPesticide = Pesticide(
-    PesticideId(UUID.fromString("20000000-0000-4000-8000-000000000001")),
-    PesticideData(NomenclatureName("Neem"), PesticideType.Treatment, none)
-  )
 
   test("should return operation history while preserving read failures"):
     val readFailure = RuntimeException("store down")
@@ -143,18 +140,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(repeatResult, ArchivePlantResult.AlreadyArchived)
     assertEquals(failedResult, ArchivePlantResult.ArchiveFailed(failure))
     assertEquals(activeRefs.archivedPlants.get(), Vector(plant.id))
-
-  test("should assign pesticide identifiers and delegate nomenclature operations"):
-    val pesticideId = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-    val refs        = Refs(nextId = () => pesticideId.value.toString)
-    val journal     = buildJournal(refs)
-    val pesticide   = PesticideData(NomenclatureName("Soap"), PesticideType.Treatment, none)
-
-    assertEquals(journal.getPesticides, refs.pesticideReadResult)
-    assertEquals(journal.addPesticide(pesticide), refs.pesticideAddResult)
-    assertEquals(journal.editPesticide(pesticideId, pesticide), refs.pesticideEditResult)
-    assertEquals(refs.addedPesticides.get(), Vector(Pesticide(pesticideId, pesticide)))
-    assertEquals(refs.editedPesticides.get(), Vector(pesticideId -> pesticide))
 
   test("should validate catalog references before writing operations"):
     val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
@@ -525,8 +510,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
       componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(seededComponents),
       pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
-      pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(addedPesticide),
-      pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing,
       nextId: () => String = () => "id-1"
   ):
     val operationReads: AtomicInteger                                                  = AtomicInteger(0)
@@ -540,8 +523,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val removedOperations: AtomicReference[Vector[OperationId]]                        = new AtomicReference(Vector.empty)
     val restoredOperations: AtomicReference[Vector[Operation]]                         = new AtomicReference(Vector.empty)
     val updatedPlants: AtomicReference[Vector[Plant]]                                  = new AtomicReference(Vector.empty)
-    val addedPesticides: AtomicReference[Vector[Pesticide]]                            = new AtomicReference(Vector.empty)
-    val editedPesticides: AtomicReference[Vector[(PesticideId, PesticideData)]]        = new AtomicReference(Vector.empty)
 
   private def buildJournal(refs: Refs) =
     val store = new PlantJournalStore:
@@ -571,15 +552,16 @@ class PlantJournalComponentTest extends munit.FunSuite:
         refs.restoredOperations.updateAndGet(_ :+ operation).pipe(_ => refs.restoreOperationResult)
       override def updatePlant(plant: Plant): UpdatePlantResult =
         refs.updatedPlants.updateAndGet(_ :+ plant).pipe(_ => refs.updatePlantResult)
-      override def getPesticides: CatalogReadResult[Pesticide]                     = refs.pesticideReadResult
-      override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
-        refs.addedPesticides.updateAndGet(_ :+ pesticide).pipe(_ => refs.pesticideAddResult)
-      override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-        refs.editedPesticides.updateAndGet(_ :+ (id -> data)).pipe(_ => refs.pesticideEditResult)
     val substrateStore = new SubstrateComponentStore:
       override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                              = refs.componentReadResult
       override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
         fail("journal must not write substrate components")
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
         fail("journal must not edit substrate components")
-    PlantJournal.make(using store, substrateStore, () => refs.nextId())
+    val pesticideStore = new PesticideStore:
+      override def getPesticides: CatalogReadResult[Pesticide]                     = refs.pesticideReadResult
+      override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+        fail("journal must not write pesticides")
+      override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
+        fail("journal must not edit pesticides")
+    PlantJournal.make(using store, substrateStore, pesticideStore, () => refs.nextId())
