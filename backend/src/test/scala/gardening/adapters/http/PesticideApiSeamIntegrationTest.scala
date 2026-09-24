@@ -26,10 +26,7 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
   private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
 
   test("should list and add pesticides with their existing wire shape"):
-    val refs = Refs(
-      readResult = CatalogReadResult.Read(Vector(pesticide)),
-      addResult = CatalogAddResult.Added(pesticide)
-    )
+    val refs   = Refs()
     val server = buildServer(refs)
 
     val listed = get("/pesticides", server)
@@ -40,12 +37,12 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(refs.added.get(), Vector(pesticideData))
 
   test("should edit pesticides and reject invalid or missing identifiers"):
-    val refs   = Refs(editResult = CatalogEditResult.Edited(pesticide))
-    val server = buildServer(refs)
+    val refs   = Refs()
+    val server = buildServer(refs, editResult = CatalogEditResult.Edited(pesticide))
 
     val edited  = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server)
     val invalid = put("/pesticides/not-a-uuid", pesticideDataJson, server)
-    val missing = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(Refs()))
+    val missing = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer())
 
     assertResponse(edited, StatusCode.Ok, pesticideJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid nomenclature id"}""")
@@ -65,12 +62,11 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should hide pesticide storage failures"):
     val failure = RuntimeException("private details")
-    val refs    = Refs(
+    val server  = buildServer(
       readResult = CatalogReadResult.ReadFailed(failure),
       addResult = CatalogAddResult.AddFailed(failure),
       editResult = CatalogEditResult.EditFailed(failure)
     )
-    val server = buildServer(refs)
 
     val listed = get("/pesticides", server)
     val added  = post("/pesticides", pesticideDataJson, server)
@@ -81,20 +77,22 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
     assertResponse(edited, StatusCode.InternalServerError, catalogWriteError)
 
   private case class Refs(
-      readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
-      addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
-      editResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing,
       added: AtomicReference[Vector[PesticideData]] = AtomicReference(Vector.empty),
       edited: AtomicReference[Vector[(PesticideId, PesticideData)]] = AtomicReference(Vector.empty)
   )
 
-  private def buildServer(refs: Refs) =
+  private def buildServer(
+      refs: Refs = Refs(),
+      readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector(pesticide)),
+      addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
+      editResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing
+  ) =
     val catalog = new PesticideCatalog:
-      override def getPesticides: CatalogReadResult[Pesticide]                    = refs.readResult
+      override def getPesticides: CatalogReadResult[Pesticide]                    = readResult
       override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
-        refs.added.updateAndGet(_ :+ data).pipe(_ => refs.addResult)
+        refs.added.updateAndGet(_ :+ data).pipe(_ => addResult)
       override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] =
-        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => refs.editResult)
+        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(PesticideApi.serverEndpoints(using catalog))
       .backend()

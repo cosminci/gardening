@@ -26,10 +26,7 @@ class SubstrateComponentApiSeamIntegrationTest extends munit.FunSuite:
   private val catalogWriteError = """{"message":"nomenclature could not be saved"}"""
 
   test("should list and add substrate components at their resource path"):
-    val refs = Refs(
-      readResult = CatalogReadResult.Read(Vector(component)),
-      addResult = CatalogAddResult.Added(component)
-    )
+    val refs   = Refs()
     val server = buildServer(refs)
 
     val listed = get("/substrate/components", server)
@@ -42,12 +39,12 @@ class SubstrateComponentApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(refs.added.get(), Vector(componentData))
 
   test("should edit substrate components and reject invalid or missing identifiers"):
-    val refs   = Refs(editResult = CatalogEditResult.Edited(component))
-    val server = buildServer(refs)
+    val refs   = Refs()
+    val server = buildServer(refs, editResult = CatalogEditResult.Edited(component))
 
     val edited  = put(s"/substrate/components/${componentId.value}", componentDataJson, server)
     val invalid = put("/substrate/components/not-a-uuid", componentDataJson, server)
-    val missing = put(s"/substrate/components/${componentId.value}", componentDataJson, buildServer(Refs()))
+    val missing = put(s"/substrate/components/${componentId.value}", componentDataJson, buildServer())
 
     assertResponse(edited, StatusCode.Ok, componentJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid nomenclature id"}""")
@@ -56,12 +53,11 @@ class SubstrateComponentApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should hide substrate catalog storage failures"):
     val failure = RuntimeException("private details")
-    val refs    = Refs(
+    val server  = buildServer(
       readResult = CatalogReadResult.ReadFailed(failure),
       addResult = CatalogAddResult.AddFailed(failure),
       editResult = CatalogEditResult.EditFailed(failure)
     )
-    val server = buildServer(refs)
 
     val listed = get("/substrate/components", server)
     val added  = post("/substrate/components", componentDataJson, server)
@@ -72,20 +68,22 @@ class SubstrateComponentApiSeamIntegrationTest extends munit.FunSuite:
     assertResponse(edited, StatusCode.InternalServerError, catalogWriteError)
 
   private case class Refs(
-      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
-      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
-      editResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
       added: AtomicReference[Vector[SubstrateComponentData]] = AtomicReference(Vector.empty),
       edited: AtomicReference[Vector[(SubstrateComponentId, SubstrateComponentData)]] = AtomicReference(Vector.empty)
   )
 
-  private def buildServer(refs: Refs) =
+  private def buildServer(
+      refs: Refs = Refs(),
+      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
+      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
+      editResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing
+  ) =
     val catalog = new SubstrateComponentCatalog:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = refs.readResult
+      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = readResult
       override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
-        refs.added.updateAndGet(_ :+ data).pipe(_ => refs.addResult)
+        refs.added.updateAndGet(_ :+ data).pipe(_ => addResult)
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => refs.editResult)
+        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(SubstrateComponentApi.serverEndpoints(using catalog))
       .backend()

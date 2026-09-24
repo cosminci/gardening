@@ -22,20 +22,19 @@ class SubstrateComponentCatalogComponentTest extends munit.FunSuite:
     val addResult  = catalog.addSubstrateComponent(componentData)
     val editResult = catalog.editSubstrateComponent(componentId, componentData)
 
-    assertEquals(readResult, refs.readResult)
-    assertEquals(addResult, refs.addResult)
-    assertEquals(editResult, refs.editResult)
+    assertEquals(readResult, CatalogReadResult.Read(Vector(component)))
+    assertEquals(addResult, CatalogAddResult.Added(component))
+    assertEquals(editResult, CatalogEditResult.RecordMissing)
     assertEquals(refs.added.get(), Vector(component))
     assertEquals(refs.edited.get(), Vector(componentId -> componentData))
 
   test("should preserve catalog failures"):
     val failure = RuntimeException("storage unavailable")
-    val refs    = Refs(
+    val catalog = buildCatalog(
       readResult = CatalogReadResult.ReadFailed(failure),
       addResult = CatalogAddResult.AddFailed(failure),
       editResult = CatalogEditResult.EditFailed(failure)
     )
-    val catalog = buildCatalog(refs)
 
     val readResult = catalog.getSubstrateComponents
     val addResult  = catalog.addSubstrateComponent(componentData)
@@ -46,18 +45,21 @@ class SubstrateComponentCatalogComponentTest extends munit.FunSuite:
     assertEquals(editResult, CatalogEditResult.EditFailed(failure))
 
   private case class Refs(
-      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
-      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
-      editResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
       added: AtomicReference[Vector[SubstrateComponent]] = AtomicReference(Vector.empty),
       edited: AtomicReference[Vector[(SubstrateComponentId, SubstrateComponentData)]] = AtomicReference(Vector.empty)
   )
 
-  private def buildCatalog(refs: Refs) =
+  private def buildCatalog(
+      refs: Refs = Refs(),
+      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
+      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
+      editResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
+      nextId: () => String = () => componentId.value.toString
+  ) =
     val store = new SubstrateComponentStore:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                          = refs.readResult
+      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                          = readResult
       override def addSubstrateComponent(value: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
-        refs.added.updateAndGet(_ :+ value).pipe(_ => refs.addResult)
+        refs.added.updateAndGet(_ :+ value).pipe(_ => addResult)
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => refs.editResult)
-    SubstrateComponentCatalog.make(using store, () => componentId.value.toString)
+        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
+    SubstrateComponentCatalog.make(using store, () => nextId())

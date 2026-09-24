@@ -523,12 +523,13 @@ export interface operations {
                     "application/json": components["schemas"]["Plant"];
                 };
             };
+            /** @description Invalid value for: body */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiError"];
+                    "text/plain": string;
                 };
             };
             422: {

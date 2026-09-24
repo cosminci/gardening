@@ -18,19 +18,16 @@ import scala.util.chaining.*
 import Codecs.given
 
 final private case class ArchivedPlantCount(count: Long) derives Codec.AsObject
-final private case class PlantCreation(species: String, maybeNickname: Option[String], location: String, substrate: Substrate)
-    derives Codec.AsObject
+final private case class PlantCreation(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate)
 final private case class PlantPatchOperation(op: String, path: String, value: Json) derives Codec.AsObject
 
 object PlantApi:
 
-  private val invalidPlantDetails = ApiError("plant details must not be blank")
   private val unknownComponent    = ApiError("unknown substrate component")
   private val catalogReadFailed   = ApiError("substrate catalog could not be read")
   private val plantCreationFailed = ApiError("plant could not be created")
   private val plantCreationErrors =
     oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidPlantDetails),
       oneOfVariantExactMatcher(StatusCode.UnprocessableEntity, jsonBody[ApiError])(unknownComponent),
       oneOfVariantExactMatcher(StatusCode.ServiceUnavailable, jsonBody[ApiError])(catalogReadFailed),
       oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
@@ -39,24 +36,19 @@ object PlantApi:
   private val plantArchived             = ApiError("plant already archived")
   private val unsupportedPlantPatch     = "unsupported plant patch"
   private val unsupportedPatchMediaType = ApiError("unsupported patch media type")
-  private val plantPatchErrors          =
-    oneOf[ApiError | String](
-      oneOfVariantExactMatcher(StatusCode.BadRequest, stringBody)(unsupportedPlantPatch),
-      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
-      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
-      oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedPatchMediaType),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
+  private val plantPatchErrors          = oneOf[ApiError | String](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, stringBody)(unsupportedPlantPatch),
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
+    oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedPatchMediaType),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
 
   final private case class JsonPatchFormat() extends CodecFormat:
     override val mediaType: MediaType = MediaType.unsafeApply("application", "json-patch+json")
 
   private val plantPatchBody =
-    stringBodyUtf8AnyFormat(
-      summon[TapirCodec.JsonCodec[Vector[PlantPatchOperation]]]
-        .schema(_.copy(isOptional = false))
-        .format(JsonPatchFormat())
-    )
+    stringBodyUtf8AnyFormat(summon[TapirCodec.JsonCodec[Vector[PlantPatchOperation]]].schema(_.copy(isOptional = false)).format(JsonPatchFormat()))
 
   private val plantEndpoint       = endpoint.errorOut(ApiError.generic)
   private val createPlantEndpoint =
@@ -69,8 +61,7 @@ object PlantApi:
     plantEndpoint.get.in("plants" / "archived" / "count").out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
   private val patchPlantEndpoint =
     endpoint.patch.in("plants" / path[String]("plantId")).in(extractFromRequest(_.contentTypeParsed)).in(plantPatchBody)
-      .errorOut(plantPatchErrors)
-      .out(statusCode(StatusCode.NoContent)).summary("Patch a plant")
+      .errorOut(plantPatchErrors).out(statusCode(StatusCode.NoContent)).summary("Patch a plant")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(createPlantEndpoint, getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
@@ -78,14 +69,11 @@ object PlantApi:
   def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
       createPlantEndpoint.handle: input =>
-        if input.species.trim.isEmpty || input.location.trim.isEmpty || input.maybeNickname.exists(_.trim.isEmpty) then
-          invalidPlantDetails.asLeft
-        else
-          journal.createPlant(Species(input.species), input.maybeNickname.map(Nickname.apply), Location(input.location), input.substrate) match
-            case CreatePlantResult.Created(plant)       => plant.asRight
-            case CreatePlantResult.UnknownComponent     => unknownComponent.asLeft
-            case CreatePlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
-            case CreatePlantResult.CreateFailed(_)      => plantCreationFailed.asLeft,
+        journal.createPlant(input.species, input.maybeNickname, input.location, input.substrate) match
+          case CreatePlantResult.Created(plant)       => plant.asRight
+          case CreatePlantResult.UnknownComponent     => unknownComponent.asLeft
+          case CreatePlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
+          case CreatePlantResult.CreateFailed(_)      => plantCreationFailed.asLeft,
       getPlantsEndpoint.handle: status =>
         journal.getPlants(status) match
           case GetPlantsResult.Read(plants)  => plants.asRight
@@ -121,15 +109,22 @@ object PlantApi:
   private given Schema[PlantStatus] = Codecs.enumSchema[PlantStatus]
   private given Codec[PlantStatus]  = ConfiguredEnumCodec.derived
 
-  // Plant fields that are output-only in JSON bodies.
-  // $COVERAGE-OFF$
-  private given Codec[Species]  = Codec.from(Decoder.decodeString.map(Species.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[Nickname] = Codec.from(Decoder.decodeString.map(Nickname.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[Location] = Codec.from(Decoder.decodeString.map(Location.apply), Encoder.encodeString.contramap(_.value))
-  // $COVERAGE-ON$
-  private given Codec.AsObject[PlantDetails] = ConfiguredCodec.derived
-  private given Codec.AsObject[Plant]        = ConfiguredCodec.derived
-  private given Schema[PlantCreation]        = Schema
+  private given Codec[Species] = Codec.from(
+    Decoder.decodeString.emap(value => Either.cond(value.trim.nonEmpty, Species(value), "species must not be blank")),
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[Nickname] = Codec.from(
+    Decoder.decodeString.emap(value => Either.cond(value.trim.nonEmpty, Nickname(value), "nickname must not be blank")),
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec[Location] = Codec.from(
+    Decoder.decodeString.emap(value => Either.cond(value.trim.nonEmpty, Location(value), "location must not be blank")),
+    Encoder.encodeString.contramap(_.value)
+  )
+  private given Codec.AsObject[PlantCreation] = ConfiguredCodec.derived
+  private given Codec.AsObject[PlantDetails]  = ConfiguredCodec.derived
+  private given Codec.AsObject[Plant]         = ConfiguredCodec.derived
+  private given Schema[PlantCreation]         = Schema
     .derived[PlantCreation]
     .modify(_.maybeNickname)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))
