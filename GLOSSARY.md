@@ -9,8 +9,9 @@ Domain terms for the house-plant care journal. Controlled vocabulary is presente
 | **Plant** | A single house plant the household owns and the unit for which a journal is kept. |
 | **Location** | The in-house place where a plant lives, such as a room or windowsill. |
 | **Nickname** | An optional household name for a plant, distinct from its species. |
-| **Plant status** | Whether a plant is active or archived. The journal shows active plants; either status can be read independently through the plant API. |
+| **Plant status** | Whether a plant belongs to the active garden or the permanently archived cemetery. |
 | **Operation** | A dated care event belonging to one plant. It is either care or a repot; its identifier, plant, timestamp, and kind do not change after logging, while its kind-specific details may be edited. |
+| **Recorded care range** | The earliest and latest recorded operation dates for a plant, not its archive date or a known date of death. The range is unknown when the plant has no operations. |
 | **Care operation** | An operation recording one moisture-level, zero or more action-types, selected pesticides when applicable, and an optional note. |
 | **Repot operation** | An operation recording the plant's new substrate and an optional note. The latest repot determines the plant's current substrate. |
 | **Action-type** | A fixed English category of care performed, such as watering, fertilizing, pesticide treatment, or pruning. |

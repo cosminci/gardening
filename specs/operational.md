@@ -10,7 +10,7 @@ There is no runtime monitoring or alerting yet.
 
 ## Scaling characteristics
 
-The service is a single process for one household's bounded plant collection. Operation log and edit workflows are serialized within that process, and SQLite coordinates database access with foreign keys enabled and a five-second busy timeout. Each attention refresh reads active plant identities and up to 20 watering dates per plant through indexed operation seeks. Separate plant reads validate every stored plant before status filtering. A startup attention-read failure prevents serving, while a later refresh failure retains the previous complete projection.
+The service is a single process for one household's bounded plant collection. Archive, operation log, and edit workflows are serialized within that process, and SQLite coordinates database access with foreign keys enabled and a five-second busy timeout. Each attention refresh reads active plant identities and up to 20 watering dates per plant through indexed operation seeks. Plant reads filter by status before decoding, so garden loading does not read archived details. The garden obtains an archived count through an aggregate query without loading archived cards; opening the cemetery loads archived plants on demand, then reads recent operations and all recorded date values per plant to determine the care range. Cemetery loading grows with archived plants and their operation histories, while the unopened garden avoids that cost. A startup attention-read failure prevents serving, while a later refresh failure retains the previous complete projection.
 
 ## Runtime dependencies
 
