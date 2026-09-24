@@ -7,7 +7,8 @@ import * as Git from "./hooks/git";
 import { frontendCheck } from "./hooks/frontend";
 import { runtimeImage } from "./hooks/image";
 import { pipelineCheck } from "./hooks/pipeline";
-import { publishedTags } from "./hooks/registry";
+import { publishedImageDigest, publishedTags } from "./hooks/registry";
+import { assertSameImage } from "./registryClient";
 import * as Selection from "./selection";
 import { assertReleaseSource, deriveVersion, planLatestRepair, planPublication } from "./version";
 
@@ -112,7 +113,7 @@ export class Gardening {
   }
 
   /** Refuses to release anything except the explicitly selected annotated tag at HEAD. */
-  @func()
+  @func({ cache: "never" })
   async releaseGuard(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
     tag: string,
@@ -130,14 +131,14 @@ export class Gardening {
   }
 
   /** Verifies and publishes a guarded release, without overwriting an existing version. */
-  @func()
+  @func({ cache: "never" })
   async publish(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
     tag: string,
     token: Dagger.Secret,
   ): Promise<string> {
     await this.releaseGuard(source, tag);
-    const plan = planPublication(tag, await publishedTags(token));
+    const plan = planPublication(tag, await publishedTags(source, token));
     await this.verify(source, "", true);
     const image = runtimeImage(source, {
       version: plan.version,
@@ -146,19 +147,21 @@ export class Gardening {
     }).withRegistryAuth("ghcr.io", GHCR_USER, token);
     const versioned = await image.publish(`${GHCR_REPOSITORY}:${plan.version}`);
     if (!plan.updateLatest) return `published ${versioned}`;
+    const versionedDigest = await publishedImageDigest(source, token, plan.version);
     const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
+    assertSameImage(versionedDigest, await publishedImageDigest(source, token, "latest"));
     return `published ${versioned} and ${latest}`;
   }
 
   /** Repairs a partially published stable release without replacing its versioned image. */
-  @func()
+  @func({ cache: "never" })
   async repairLatest(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
     tag: string,
     token: Dagger.Secret,
   ): Promise<string> {
     await this.releaseGuard(source, tag);
-    const version = planLatestRepair(tag, await publishedTags(token));
+    const version = planLatestRepair(tag, await publishedTags(source, token));
     await this.verify(source, "", true);
     const image = dag
       .container({ platform: TARGET_PLATFORM as Dagger.Platform })
@@ -171,7 +174,10 @@ export class Gardening {
     ) {
       throw new Error("release refused: published image provenance differs from selected tag");
     }
-    return image.publish(`${GHCR_REPOSITORY}:latest`);
+    const versionedDigest = await publishedImageDigest(source, token, version);
+    const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
+    assertSameImage(versionedDigest, await publishedImageDigest(source, token, "latest"));
+    return latest;
   }
 
   /** Prints how the NAS pulls a given version (WUD auto-update is preferred). */
