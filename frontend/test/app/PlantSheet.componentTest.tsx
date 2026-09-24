@@ -97,8 +97,16 @@ describe("PlantSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save plant" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Add at least one substrate component.");
     fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
+    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toHaveClass(
+      "sheet--entering",
+    );
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toHaveClass(
+      "sheet--closing",
+    );
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
     const reopenedEditor = screen.getByRole("dialog", { name: "Substrate component editor" });
     fireEvent.keyDown(window, { key: "Tab" });
@@ -139,8 +147,8 @@ describe("PlantSheet", () => {
     fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
     await vi.waitFor(() => {
       expect(onEditComponent).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
     });
-    expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
 
     setComponents([]);
     fireEvent.input(screen.getByRole("textbox", { name: "Species" }), {
@@ -154,7 +162,7 @@ describe("PlantSheet", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Choose known substrate components.");
   });
 
-  it("should dismiss with Escape and restore focus to Add plant", () => {
+  it("should collapse the nested editor before the plant sheet and restore focus", async () => {
     const [open, setOpen] = createSignal(false);
     render(() => (
       <>
@@ -188,9 +196,27 @@ describe("PlantSheet", () => {
     expect(within(dialog).getByRole("button", { name: "Save plant" })).toHaveFocus();
     fireEvent.keyDown(window, { key: "Tab" });
     expect(within(dialog).getByRole("button", { name: "Collapse plant editor" })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Define new component" }));
+    const editor = screen.getByRole("dialog", { name: "Substrate component editor" });
+    expect(dialog.parentElement).toHaveClass("sheet-layer--editing");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Collapse plant editor" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Collapse plant editor" }));
+    expect(editor).toHaveClass("sheet--closing");
+    expect(dialog.parentElement).not.toHaveClass("sheet-layer--editing");
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+      expect(dialog).toHaveClass("sheet--closing");
+    });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
     fireEvent.keyDown(window, { key: "Escape" });
-
-    expect(screen.queryByRole("dialog", { name: "Plant editor" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Plant editor" })).toHaveClass("sheet--closing");
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
     expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
   });
 });

@@ -14,7 +14,7 @@ describe("plant attention ordering", () => {
     },
   };
 
-  it("should place plants with unknown watering cadence before plants with scored watering attention", () => {
+  it("should place plants without a watering deadline before plants with one", () => {
     const unknownPlant = { ...referencePlant, id: Journal.plantId("unknown") };
     const scoredPlant = { ...referencePlant, id: Journal.plantId("scored") };
     const unknown: Journal.PlantAttention = {
@@ -36,33 +36,43 @@ describe("plant attention ordering", () => {
     expect(orderedPlantIds).toEqual(["unknown", "scored"]);
   });
 
-  it("should order scored plants by their exact watering-attention ratio", () => {
+  it("should order by time remaining regardless of cadence or attention category", () => {
     const lessUrgentPlant = { ...referencePlant, id: Journal.plantId("less-urgent") };
     const moreUrgentPlant = { ...referencePlant, id: Journal.plantId("more-urgent") };
+    const overduePlant = { ...referencePlant, id: Journal.plantId("overdue") };
     const lessUrgent: Journal.PlantAttention = {
       plant: lessUrgentPlant,
       watering: {
         kind: "current",
         sampleCount: 5,
-        averageInterval: Journal.milliseconds("2"),
-        elapsed: Journal.milliseconds("1"),
+        averageInterval: Journal.milliseconds("864000000"),
+        elapsed: Journal.milliseconds("604800000"),
       },
     };
     const moreUrgent: Journal.PlantAttention = {
       plant: moreUrgentPlant,
       watering: {
-        kind: "overdue",
+        kind: "current",
         sampleCount: 5,
-        averageInterval: Journal.milliseconds("4"),
-        elapsed: Journal.milliseconds("6"),
+        averageInterval: Journal.milliseconds("172800000"),
+        elapsed: Journal.milliseconds("86400000"),
+      },
+    };
+    const overdue: Journal.PlantAttention = {
+      plant: overduePlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("259200000"),
       },
     };
 
-    const orderedPlantIds = orderPlantAttention([lessUrgent, moreUrgent]).map(
+    const orderedPlantIds = orderPlantAttention([lessUrgent, moreUrgent, overdue]).map(
       ({ plant }) => plant.id,
     );
 
-    expect(orderedPlantIds).toEqual(["more-urgent", "less-urgent"]);
+    expect(orderedPlantIds).toEqual(["overdue", "more-urgent", "less-urgent"]);
   });
 
   it("should place a plant with elapsed time and no average interval above recently watered plants", () => {
@@ -97,7 +107,7 @@ describe("plant attention ordering", () => {
     expect(orderedPlantIds).toEqual(["elapsed", "recently-watered"]);
   });
 
-  it("should use plant details when scored plants have equal watering attention", () => {
+  it("should preserve input order when plants have the same watering deadline", () => {
     const firstPlant = { ...referencePlant, id: Journal.plantId("first") };
     const secondPlant = { ...referencePlant, id: Journal.plantId("second") };
     const first: Journal.PlantAttention = {
@@ -121,10 +131,10 @@ describe("plant attention ordering", () => {
 
     const orderedPlantIds = orderPlantAttention([second, first]).map(({ plant }) => plant.id);
 
-    expect(orderedPlantIds).toEqual(["first", "second"]);
+    expect(orderedPlantIds).toEqual(["second", "first"]);
   });
 
-  it("should order equal watering attention by location, species, nickname, then identifier", () => {
+  it("should preserve input order for plants without a watering deadline", () => {
     const watering: Journal.WateringAttention = {
       kind: "unavailable",
       sampleCount: 4,
@@ -167,11 +177,11 @@ describe("plant attention ordering", () => {
     const orderedPlantIds = orderPlantAttention(attention).map(({ plant }) => plant.id);
 
     expect(orderedPlantIds).toEqual([
-      "kitchen-ficus",
-      "office-ficus",
-      "office-monstera",
-      "office-monty-a",
       "office-monty-z",
+      "office-monty-a",
+      "office-monstera",
+      "office-ficus",
+      "kitchen-ficus",
     ]);
   });
 });
