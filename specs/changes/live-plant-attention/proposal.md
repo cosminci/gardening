@@ -14,7 +14,8 @@ Push attention to the browser over a WebSocket instead of polling, and stop lett
 
 ## Domain / Design Notes
 
-- `PlantAttentionMonitor` is unchanged: one `current: AttentionProjection`, refreshed every 30 seconds instead of five minutes. Attention computation and classification stay exactly as they are.
+- `PlantAttentionMonitor.make` takes its recompute interval as a parameter, and the monitor owns its own recompute schedule; the composition root no longer runs a separate polling loop with the interval baked in. `current`, `refreshAll`, and attention computation and classification are unchanged.
+- The interval is a static default of 30 seconds. Making it overridable at runtime (for example by environment variable) is future scope; every environment uses the same default for now.
 - The frontend now holds an open WebSocket connection to the backend. Each time the monitor's current projection changes, the backend pushes it down every open connection; this is a push adapter around the existing monitor, not a new domain port or type.
 - Pending is a browser-side fact, not a monitor state: a plant absent from the projection the browser has received is pending for that plant. The monitor never represents "pending."
 
@@ -45,5 +46,5 @@ Push attention to the browser over a WebSocket instead of polling, and stop lett
 
 ## Out of Scope
 
-- An in-process metrics adapter reading the monitor directly.
+- Runtime overrides (e.g. environment variables) for the recompute interval; a static default is used for now.
 - Any change to watering cadence classification math or sample bounds.
