@@ -138,46 +138,6 @@ export const makeHttpJournalClient = (
         return { kind: "editFailed", reason: requestFailure(error) };
       }
     },
-
-    async getPesticides(): Promise<Journal.CatalogReadResult<Journal.Pesticide>> {
-      try {
-        const { data, error } = await client.GET("/pesticides");
-        return data === undefined
-          ? { kind: "readFailed", reason: requestFailure(error) }
-          : { kind: "read", entries: data.map(toPesticide) };
-      } catch (error) {
-        return { kind: "readFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async addPesticide(
-      value: Journal.PesticideData,
-    ): Promise<Journal.CatalogAddResult<Journal.Pesticide>> {
-      try {
-        const { data, error } = await client.POST("/pesticides", {
-          body: toWirePesticideData(value),
-        });
-        return data === undefined
-          ? { kind: "addFailed", reason: requestFailure(error) }
-          : { kind: "added", entry: toPesticide(data) };
-      } catch (error) {
-        return { kind: "addFailed", reason: requestFailure(error) };
-      }
-    },
-
-    async editPesticide(id, value): Promise<Journal.CatalogEditResult<Journal.Pesticide>> {
-      try {
-        const { data, error, response } = await client.PUT("/pesticides/{pesticideId}", {
-          params: { path: { pesticideId: id } },
-          body: toWirePesticideData(value),
-        });
-        if (data !== undefined) return { kind: "edited", entry: toPesticide(data) };
-        if (response.status === 404) return { kind: "recordMissing" };
-        return { kind: "editFailed", reason: requestFailure(error) };
-      } catch (error) {
-        return { kind: "editFailed", reason: requestFailure(error) };
-      }
-    },
   };
 };
 
@@ -277,21 +237,6 @@ const toWireDetails = (details: Journal.OperationDetails): Wire["OperationDetail
         })),
         notes: details.maybeNote,
       };
-
-const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
-  id: Journal.pesticideId(value.id),
-  data: {
-    name: Journal.nomenclatureName(value.data.name),
-    pesticideType: value.data.type,
-    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
-  },
-});
-
-const toWirePesticideData = (value: Journal.PesticideData): Wire["PesticideData"] => ({
-  name: value.name,
-  type: value.pesticideType,
-  info: value.maybeInfo,
-});
 
 const requestFailure = (error: unknown): Error =>
   error instanceof Error ? error : new Error("journal request failed");

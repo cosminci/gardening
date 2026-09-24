@@ -226,7 +226,4 @@ export interface JournalClient {
     details: OperationDetails,
   ): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
-  getPesticides(): Promise<CatalogReadResult<Pesticide>>;
-  addPesticide(data: PesticideData): Promise<CatalogAddResult<Pesticide>>;
-  editPesticide(id: PesticideId, data: PesticideData): Promise<CatalogEditResult<Pesticide>>;
 }

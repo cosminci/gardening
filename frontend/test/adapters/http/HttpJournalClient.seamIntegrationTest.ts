@@ -455,40 +455,6 @@ describe("HttpJournalClient", () => {
     expect(requests[0]?.url).toContain("/plants/p1/operations?offset=0&pageSize=3");
   });
 
-  it("should translate pesticide catalogs", async () => {
-    const requests: Request[] = [];
-    const fetch = respondingWith(
-      [
-        jsonResponse([
-          {
-            id: "00000000-0000-4000-8001-000000000003",
-            data: { name: "Neem oil", type: "insecticide", info: null },
-          },
-        ]),
-      ],
-      requests,
-    );
-    const journal = makeHttpJournalClient(fetch);
-    const expectedPesticides = [
-      {
-        id: Journal.pesticideId("00000000-0000-4000-8001-000000000003"),
-        data: {
-          name: Journal.nomenclatureName("Neem oil"),
-          pesticideType: "insecticide",
-          maybeInfo: null,
-        },
-      },
-    ];
-
-    const pesticidesResult = await journal.getPesticides();
-    const requestedPaths = requests.map(
-      (request) => `${request.method} ${new URL(request.url).pathname}`,
-    );
-
-    expect(pesticidesResult).toEqual({ kind: "read", entries: expectedPesticides });
-    expect(requestedPaths).toEqual(["GET /pesticides"]);
-  });
-
   it("should send operation details and preserve write outcomes", async () => {
     const requests: Request[] = [];
     const repotResponse = (notes: string | null) =>
@@ -587,55 +553,6 @@ describe("HttpJournalClient", () => {
     expect(actualRequests).toEqual(expectedRequests);
   });
 
-  it("should send pesticide catalog changes", async () => {
-    const requests: Request[] = [];
-    const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
-    const fetch = respondingWith(
-      [
-        jsonResponse(
-          {
-            id: pesticide,
-            data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
-          },
-          201,
-        ),
-        jsonResponse({
-          id: pesticide,
-          data: { name: "Neem", type: "insecticide", info: null },
-        }),
-      ],
-      requests,
-    );
-    const neemOil = {
-      name: Journal.nomenclatureName("Neem oil"),
-      pesticideType: "insecticide" as const,
-      maybeInfo: Journal.nomenclatureInfo("Dilute first"),
-    };
-    const neem = {
-      name: Journal.nomenclatureName("Neem"),
-      pesticideType: "insecticide" as const,
-      maybeInfo: null,
-    };
-    const journal = makeHttpJournalClient(fetch);
-
-    const addedPesticide = await journal.addPesticide(neemOil);
-    const editedPesticide = await journal.editPesticide(pesticide, neem);
-    const requestedPaths = requests.map(
-      (request) => `${request.method} ${new URL(request.url).pathname}`,
-    );
-    const requestBodies = await Promise.all(requests.map((request) => request.json()));
-
-    const expectedPaths = ["POST /pesticides", `PUT /pesticides/${pesticide}`];
-    const expectedBodies = [
-      { name: "Neem oil", type: "insecticide", info: "Dilute first" },
-      { name: "Neem", type: "insecticide", info: null },
-    ];
-    expect(addedPesticide).toMatchObject({ kind: "added", entry: { id: pesticide } });
-    expect(editedPesticide).toMatchObject({ kind: "edited", entry: { data: neem } });
-    expect(requestedPaths).toEqual(expectedPaths);
-    expect(requestBodies).toEqual(expectedBodies);
-  });
-
   it("should translate HTTP and network failures into explicit domain failures", async () => {
     const details = {
       kind: "care" as const,
@@ -651,18 +568,8 @@ describe("HttpJournalClient", () => {
         jsonResponse("invalid body", 400),
         jsonResponse({ message: "operation not found" }, 404),
         jsonResponse({ message: "journal could not be changed" }, 500),
-        jsonResponse({ message: "catalog could not be read" }, 500),
-        jsonResponse({ message: "catalog could not be changed" }, 500),
-        jsonResponse({ message: "pesticide not found" }, 404),
-        jsonResponse({ message: "catalog could not be changed" }, 500),
       ]),
     );
-    const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
-    const pesticideData = {
-      name: Journal.nomenclatureName("Neem"),
-      pesticideType: "insecticide" as const,
-      maybeInfo: null,
-    };
     await expectKind(httpFailures.getAttention(), "readFailed");
     await expectKind(
       httpFailures.getOperations(Journal.plantId("p1"), { offset: 0, size: 3 }),
@@ -680,15 +587,8 @@ describe("HttpJournalClient", () => {
       kind: "operationMissing",
     });
     await expectKind(httpFailures.editOperation(Journal.operationId("o1"), details), "editFailed");
-    await expectKind(httpFailures.getPesticides(), "readFailed");
-    await expectKind(httpFailures.addPesticide(pesticideData), "addFailed");
-    await expectResult(httpFailures.editPesticide(pesticide, pesticideData), {
-      kind: "recordMissing",
-    });
-    await expectKind(httpFailures.editPesticide(pesticide, pesticideData), "editFailed");
-
     const reason = new Error("offline");
-    const networkFailures = makeHttpJournalClient(respondingWith(new Array<Error>(7).fill(reason)));
+    const networkFailures = makeHttpJournalClient(respondingWith(new Array<Error>(4).fill(reason)));
     const expectNetworkFailure = (result: Promise<unknown>, kind: string) =>
       expect(result).resolves.toEqual({ kind, reason });
     await expectNetworkFailure(networkFailures.getAttention(), "readFailed");
@@ -706,12 +606,6 @@ describe("HttpJournalClient", () => {
     );
     await expectNetworkFailure(
       networkFailures.editOperation(Journal.operationId("o1"), details),
-      "editFailed",
-    );
-    await expectNetworkFailure(networkFailures.getPesticides(), "readFailed");
-    await expectNetworkFailure(networkFailures.addPesticide(pesticideData), "addFailed");
-    await expectNetworkFailure(
-      networkFailures.editPesticide(pesticide, pesticideData),
       "editFailed",
     );
   });

@@ -42,7 +42,7 @@ Vitest.describe("animating operation changes", () => {
       getOperations: (plantId: PlantId, window: OperationWindow) =>
         operationReads++ === 0 ? base.getOperations(plantId, window) : refresh,
     };
-    Testing.render(() => <App journal={journal} substrates={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -89,7 +89,7 @@ Vitest.describe("animating operation changes", () => {
           ? Promise.resolve({ kind: "read" as const, plants: [] })
           : base.getPlants(),
     };
-    Testing.render(() => <App journal={journal} substrates={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} pesticideCatalog={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));

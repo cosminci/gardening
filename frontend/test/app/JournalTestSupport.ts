@@ -1,4 +1,5 @@
 import * as Journal from "../../src/domain/Journal";
+import type { PesticideClient } from "../../src/domain/PesticideCatalog";
 import type { SubstrateComponentClient } from "../../src/domain/SubstrateComponentCatalog";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
@@ -123,7 +124,7 @@ export const buildJournal = ({
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
-} = {}): Journal.JournalClient & SubstrateComponentClient => {
+} = {}): Journal.JournalClient & SubstrateComponentClient & PesticideClient => {
   const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
   let attentionReads = 0;
   let plantReads = 0;
