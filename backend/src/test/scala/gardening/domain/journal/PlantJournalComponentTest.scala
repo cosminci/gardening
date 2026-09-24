@@ -207,6 +207,10 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
     val archivedResult = buildJournal(archivedRefs, getPlantResult = GetPlantResult.Read(archivedPlant))
       .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val archivedWithUnknownComponentResult = buildJournal(
+      getPlantResult = GetPlantResult.Read(archivedPlant),
+      componentReadResult = CatalogReadResult.Read(Vector.empty)
+    ).editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
     val missingResult = buildJournal(missingRefs, getPlantResult = GetPlantResult.RecordMissing)
       .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
     val readResult = buildJournal(unreadable, getPlantResult = GetPlantResult.ReadFailed(readFailure))
@@ -215,6 +219,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       .editPlant(plant.id, plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
 
     assertEquals(archivedResult, EditPlantResult.PlantArchived)
+    assertEquals(archivedWithUnknownComponentResult, EditPlantResult.PlantArchived)
     assertEquals(missingResult, EditPlantResult.PlantMissing)
     assertEquals(readResult, EditPlantResult.EditFailed(readFailure))
     assertEquals(writeFailedResult, EditPlantResult.EditFailed(failure))

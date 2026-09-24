@@ -83,17 +83,17 @@ object PlantJournal:
         location: Location,
         substrate: Substrate
     ): EditPlantResult = operationMutex.exclusively:
-      substrateStore.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason)
-        case CatalogReadResult.Read(components)   =>
-          val known = components.map(_.id).toSet
-          if !substrate.parts.forall(part => known.contains(part.componentId)) then EditPlantResult.UnknownComponent
-          else
-            store.getPlant(id) match
-              case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing
-              case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason)
-              case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived
-              case GetPlantResult.Read(plant)                                                  =>
+      store.getPlant(id) match
+        case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing
+        case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason)
+        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived
+        case GetPlantResult.Read(plant)                                                  =>
+          substrateStore.getSubstrateComponents match
+            case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason)
+            case CatalogReadResult.Read(components)   =>
+              val known = components.map(_.id).toSet
+              if !substrate.parts.forall(part => known.contains(part.componentId)) then EditPlantResult.UnknownComponent
+              else
                 val edited = plant.copy(details =
                   plant.details.copy(species = species, maybeNickname = maybeNickname, location = location, substrate = substrate)
                 )

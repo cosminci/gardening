@@ -301,7 +301,7 @@ export const App: Component<AppProps> = (props) => {
       return;
     }
     setPlantTarget(undefined);
-    await loadJournal().catch(() => setView("failed"));
+    await loadJournal(false, latestAttention).catch(() => setView("failed"));
     document.getElementById(editPlantControlId(plant.id))?.focus();
   };
 
