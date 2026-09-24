@@ -1,6 +1,16 @@
-import { Index, Match, Show, Switch, createSignal, onMount } from "solid-js";
+import {
+  Index,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
@@ -13,17 +23,35 @@ interface AppProps {
   readonly journal: Journal.JournalClient;
 }
 
-interface PlantHistory {
+interface GardenHistory {
+  readonly kind: "garden";
   readonly attention: Journal.PlantAttention;
   readonly measuredAt: Journal.Instant;
   readonly page: Journal.OperationPage;
 }
 
+interface CemeteryHistory {
+  readonly kind: "cemetery";
+  readonly plant: Journal.Plant;
+  readonly dates: Journal.OperationDates;
+  readonly page: Journal.OperationPage;
+}
+
 type ViewState = "loading" | "failed" | "loaded";
+type PlantView = "garden" | "cemetery";
+
+const viewFromUrl = (): PlantView =>
+  new URLSearchParams(window.location.search).get("view") === "cemetery" ? "cemetery" : "garden";
 
 export const App: Component<AppProps> = (props) => {
   const [view, setView] = createSignal<ViewState>("loading");
-  const [histories, setHistories] = createSignal<readonly PlantHistory[]>([]);
+  const [gardenHistories, setGardenHistories] = createSignal<readonly GardenHistory[]>([]);
+  const [cemeteryHistories, setCemeteryHistories] = createSignal<readonly CemeteryHistory[]>([]);
+  const [cemeteryCount, setCemeteryCount] = createSignal(0);
+  const [selected, setSelected] = createSignal<PlantView>(viewFromUrl());
+  const [ready, setReady] = createSignal(false);
+  const [archiveTarget, setArchiveTarget] = createSignal<Journal.Plant>();
+  const [archiveCompleted, setArchiveCompleted] = createSignal(false);
   const [substrateComponents, setSubstrateComponents] = createSignal<
     readonly Journal.SubstrateComponent[]
   >([]);
@@ -31,17 +59,26 @@ export const App: Component<AppProps> = (props) => {
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
   const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
+  const recentlyArchived = new Set<Journal.PlantId>();
+  let loadVersion = 0;
+  let initialViewLoaded = false;
+  const histories = () => (selected() === "garden" ? gardenHistories() : cemeteryHistories());
 
   const loadJournal = async (animate = false) => {
+    const version = ++loadVersion;
     const journal = props.journal;
-    const [plantsResult, attentionResult, componentsResult, pesticidesResult] = await Promise.all([
-      journal.getPlants(),
-      journal.getAttention(),
-      journal.getSubstrateComponents(),
-      journal.getPesticides(),
-    ]);
+    const [plantsResult, countResult, attentionResult, componentsResult, pesticidesResult] =
+      await Promise.all([
+        journal.getPlants(),
+        journal.getArchivedCount(),
+        journal.getAttention(),
+        journal.getSubstrateComponents(),
+        journal.getPesticides(),
+      ]);
+    if (version !== loadVersion) return;
     if (
       plantsResult.kind !== "read" ||
+      countResult.kind !== "read" ||
       attentionResult.kind !== "read" ||
       componentsResult.kind !== "read" ||
       pesticidesResult.kind !== "read"
@@ -52,8 +89,13 @@ export const App: Component<AppProps> = (props) => {
     setSubstrateComponents(componentsResult.entries);
     setPesticides(pesticidesResult.entries);
 
+    const attentionSamples = attentionResult.projection.plants;
+    for (const id of recentlyArchived)
+      if (!attentionSamples.some((sample) => sample.plantId === id)) recentlyArchived.delete(id);
     const attentionById = new Map(
-      attentionResult.projection.plants.map((sample) => [sample.plantId, sample]),
+      attentionSamples
+        .filter((sample) => !recentlyArchived.has(sample.plantId))
+        .map((sample) => [sample.plantId, sample]),
     );
     const plants = plantsResult.plants.map((plant) => {
       const sample = attentionById.get(plant.id);
@@ -63,7 +105,7 @@ export const App: Component<AppProps> = (props) => {
     if (
       joined.length !== plantsResult.plants.length ||
       joined.length !== attentionById.size ||
-      attentionResult.projection.plants.length !== attentionById.size
+      attentionSamples.length !== new Set(attentionSamples.map((sample) => sample.plantId)).size
     ) {
       setView("failed");
       return;
@@ -78,19 +120,101 @@ export const App: Component<AppProps> = (props) => {
         }),
       })),
     );
-    const loaded: PlantHistory[] = [];
+    if (version !== loadVersion) return;
+    const loaded: GardenHistory[] = [];
     for (const { attention, measuredAt, operationsResult } of results)
       if (operationsResult.kind === "read")
-        loaded.push({ attention, measuredAt, page: operationsResult.page });
+        loaded.push({ kind: "garden", attention, measuredAt, page: operationsResult.page });
       else {
         setView("failed");
         return;
       }
     const display = () => {
-      setHistories(loaded);
+      if (version !== loadVersion) return;
+      setGardenHistories(loaded);
+      setCemeteryCount(countResult.count);
+      setReady(true);
       setView("loaded");
     };
     await displayJournalUpdate(animate && formTarget() === undefined, display);
+  };
+
+  const loadCemetery = async (preserveView = false) => {
+    const version = ++loadVersion;
+    const journal = props.journal;
+    if (!preserveView) setView("loading");
+    const result = await journal.getPlants("archived");
+    if (version !== loadVersion) return;
+    if (result.kind !== "read") {
+      setView("failed");
+      return;
+    }
+    const records = await Promise.all(
+      result.plants.map(async (plant) => ({
+        plant,
+        datesResult: await journal.getOperationDates(plant.id),
+        operationsResult: await journal.getOperations(plant.id, {
+          offset: 0,
+          size: recentOperationCount,
+        }),
+      })),
+    );
+    if (version !== loadVersion) return;
+    const loaded: CemeteryHistory[] = [];
+    for (const { plant, datesResult, operationsResult } of records)
+      if (datesResult.kind === "read" && operationsResult.kind === "read")
+        loaded.push({
+          kind: "cemetery",
+          plant,
+          dates: datesResult.dates,
+          page: operationsResult.page,
+        });
+      else {
+        setView("failed");
+        return;
+      }
+    setCemeteryHistories(loaded);
+    setCemeteryCount(result.plants.length);
+    setView("loaded");
+  };
+
+  const selectView = (next: PlantView, updateUrl = true) => {
+    if (updateUrl) {
+      const url = new URL(window.location.href);
+      if (next === "cemetery") url.searchParams.set("view", "cemetery");
+      else url.searchParams.delete("view");
+      if (url.href !== window.location.href)
+        window.history.pushState(window.history.state, "", url);
+    }
+    if (next === "garden") {
+      ++loadVersion;
+      setSelected("garden");
+      setView("loaded");
+    } else if (selected() !== "cemetery" || view() !== "loaded") {
+      setSelected("cemetery");
+      const pending = loadCemetery();
+      const version = loadVersion;
+      void pending.catch(() => {
+        if (version === loadVersion) setView("failed");
+      });
+    }
+  };
+
+  const confirmArchive = async (plant: Journal.Plant) => {
+    let result: Journal.ArchivePlantResult;
+    try {
+      result = await props.journal.archivePlant(plant.id);
+    } catch {
+      return "The plant could not be archived.";
+    }
+    if (result.kind === "plantMissing") return "This plant no longer exists.";
+    if (result.kind === "alreadyArchived") return "This plant was already archived.";
+    if (result.kind === "archiveFailed") return "The plant could not be archived.";
+    recentlyArchived.add(plant.id);
+    await loadJournal().catch(() => setView("failed"));
+    setArchiveCompleted(true);
+    setArchiveTarget(undefined);
+    return undefined;
   };
 
   const saveOperation = async (
@@ -104,7 +228,11 @@ export const App: Component<AppProps> = (props) => {
       if (target.kind === "log") {
         const result = await props.journal.logOperation(target.plantId, date, details);
         if (result.kind !== "logged") {
-          setTargetError("The operation could not be saved.");
+          setTargetError(
+            result.kind === "plantArchived"
+              ? "This plant is archived; new operations cannot be added."
+              : "The operation could not be saved.",
+          );
           return;
         }
       } else {
@@ -129,8 +257,11 @@ export const App: Component<AppProps> = (props) => {
       setFormTarget(undefined);
       setSaveError(undefined);
     }
-    await loadJournal(target.kind === "log").catch(() => {
-      setView("failed");
+    const refresh =
+      selected() === "garden" ? loadJournal(target.kind === "log") : loadCemetery(true);
+    const version = loadVersion;
+    await refresh.catch(() => {
+      if (version === loadVersion) setView("failed");
     });
     setOperationChange(
       editedOperation === undefined
@@ -173,7 +304,26 @@ export const App: Component<AppProps> = (props) => {
     return result;
   };
 
+  createEffect(() => {
+    if (!ready() || initialViewLoaded) return;
+    initialViewLoaded = true;
+    if (selected() === "cemetery") {
+      const pending = loadCemetery();
+      const version = loadVersion;
+      void pending.catch(() => {
+        if (version === loadVersion) setView("failed");
+      });
+    }
+  });
+
   onMount(() => {
+    const navigate = () => {
+      selectView(viewFromUrl(), false);
+    };
+    window.addEventListener("popstate", navigate);
+    onCleanup(() => {
+      window.removeEventListener("popstate", navigate);
+    });
     void loadJournal().catch(() => {
       setView("failed");
     });
@@ -181,7 +331,13 @@ export const App: Component<AppProps> = (props) => {
 
   return (
     <main>
-      <JournalHeader loaded={view() === "loaded"} plantCount={histories().length} />
+      <JournalHeader
+        loaded={ready()}
+        gardenCount={gardenHistories().length}
+        cemeteryCount={cemeteryCount()}
+        selected={selected()}
+        onSelect={selectView}
+      />
       <Switch>
         <Match when={view() === "loading"}>
           <p class="page-state">Loading your journal…</p>
@@ -192,29 +348,69 @@ export const App: Component<AppProps> = (props) => {
           </p>
         </Match>
         <Match when={view() === "loaded"}>
-          <section class="journal" aria-label="Plant journal">
+          <section class="journal" aria-label={selected() === "garden" ? "Garden" : "Cemetery"}>
             <Index each={histories()}>
-              {(history) => (
-                <PlantCard
-                  attention={history().attention}
-                  measuredAt={history().measuredAt}
-                  operationPage={history().page}
-                  substrateComponents={substrateComponents()}
-                  pesticides={pesticides()}
-                  getOperations={(window) =>
-                    props.journal.getOperations(history().attention.plant.id, window)
-                  }
-                  operationChange={operationChange()}
-                  onLog={() => {
-                    setSaveError(undefined);
-                    setFormTarget({ kind: "log", plantId: history().attention.plant.id });
-                  }}
-                  onEdit={(operation) => {
-                    setSaveError(undefined);
-                    setFormTarget({ kind: "edit", operation });
-                  }}
-                />
-              )}
+              {(history) => {
+                const garden = () => {
+                  const entry = history();
+                  return entry.kind === "garden" ? entry : undefined;
+                };
+                const cemetery = () => {
+                  const entry = history();
+                  return entry.kind === "cemetery" ? entry : undefined;
+                };
+                return (
+                  <>
+                    <Show when={garden()}>
+                      {(entry) => (
+                        <PlantCard
+                          attention={entry().attention}
+                          measuredAt={entry().measuredAt}
+                          operationPage={entry().page}
+                          substrateComponents={substrateComponents()}
+                          pesticides={pesticides()}
+                          getOperations={(window) =>
+                            props.journal.getOperations(entry().attention.plant.id, window)
+                          }
+                          operationChange={operationChange()}
+                          onLog={() => {
+                            setSaveError(undefined);
+                            setFormTarget({ kind: "log", plantId: entry().attention.plant.id });
+                          }}
+                          onArchive={() => {
+                            setArchiveCompleted(false);
+                            setArchiveTarget(entry().attention.plant);
+                          }}
+                          onEdit={(operation) => {
+                            setSaveError(undefined);
+                            setFormTarget({ kind: "edit", operation });
+                          }}
+                        />
+                      )}
+                    </Show>
+                    <Show when={cemetery()}>
+                      {(entry) => (
+                        <PlantCard
+                          kind="cemetery"
+                          plant={entry().plant}
+                          dates={entry().dates}
+                          operationPage={entry().page}
+                          substrateComponents={substrateComponents()}
+                          pesticides={pesticides()}
+                          getOperations={(window) =>
+                            props.journal.getOperations(entry().plant.id, window)
+                          }
+                          operationChange={operationChange()}
+                          onEdit={(operation) => {
+                            setSaveError(undefined);
+                            setFormTarget({ kind: "edit", operation });
+                          }}
+                        />
+                      )}
+                    </Show>
+                  </>
+                );
+              }}
             </Index>
           </section>
         </Match>
@@ -233,6 +429,18 @@ export const App: Component<AppProps> = (props) => {
             onEditPesticide={editPesticide}
             onCancel={() => {
               setFormTarget(undefined);
+            }}
+          />
+        )}
+      </Show>
+      <Show when={archiveTarget()} keyed>
+        {(plant) => (
+          <ArchiveConfirmation
+            plant={plant}
+            completed={archiveCompleted()}
+            onConfirm={() => confirmArchive(plant)}
+            onCancel={() => {
+              setArchiveTarget(undefined);
             }}
           />
         )}

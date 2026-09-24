@@ -130,18 +130,55 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code, StatusCode.Ok)
     assertEquals(refs.requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
+  test("should expose the entire recorded date range or an explicit empty history"):
+    val lastDate      = date.plusSeconds(60)
+    val rangePath     = s"/plants/${plant.id.value}/operation-date-range"
+    val recordedRange = OperationDateRange.Recorded(date, lastDate)
+
+    val recordedRefs     = Refs(operationDateRangeResult = GetOperationDateRangeResult.Read(recordedRange))
+    val emptyRefs        = Refs(operationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty))
+    val recordedResponse = get(rangePath, buildServer(recordedRefs))
+    val emptyResponse    = get(rangePath, buildServer(emptyRefs))
+
+    val recordedJson     = s"""{"kind":"recorded","first":"$date","last":"$lastDate"}"""
+    val expectedRecorded = StatusCode.Ok         -> json(recordedJson)
+    val actualRecorded   = recordedResponse.code -> jsonBody(recordedResponse)
+    val expectedEmpty    = StatusCode.Ok         -> json("""{"kind":"empty"}""")
+    val actualEmpty      = emptyResponse.code    -> jsonBody(emptyResponse)
+    assertEquals(actualRecorded, expectedRecorded)
+    assertEquals(actualEmpty, expectedEmpty)
+    assertEquals(recordedRefs.requestedDateRanges.get(), Vector(plant.id))
+    assertEquals(recordedRefs.requestedWindows.get(), Vector.empty)
+
+  test("should distinguish an unknown plant from a failed date-range read"):
+    val rangePath   = s"/plants/${plant.id.value}/operation-date-range"
+    val missingRefs = Refs(operationDateRangeResult = GetOperationDateRangeResult.PlantMissing)
+    val failedRefs  = Refs(operationDateRangeResult = GetOperationDateRangeResult.ReadFailed(RuntimeException("secret")))
+
+    val missingResponse = get(rangePath, buildServer(missingRefs))
+    val failedResponse  = get(rangePath, buildServer(failedRefs))
+
+    val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
+    val expectedFailed  = StatusCode.InternalServerError -> json("""{"message":"operation dates could not be read"}""")
+    val actualMissing   = missingResponse.code           -> jsonBody(missingResponse)
+    val actualFailed    = failedResponse.code            -> jsonBody(failedResponse)
+    assertEquals(actualMissing, expectedMissing)
+    assertEquals(actualFailed, expectedFailed)
+
   test("should list active plants by default and archived plants on request"):
-    val active         = plant
-    val archived       = plant.copy(id = PlantId("archived"), details = plant.details.copy(status = PlantStatus.Archived))
-    val activeRefs     = Refs(plantsResult = GetPlantsResult.Read(Vector(active)))
-    val archivedRefs   = Refs(plantsResult = GetPlantsResult.Read(Vector(archived)))
+    val active       = plant
+    val archived     = plant.copy(id = PlantId("archived"), details = plant.details.copy(status = PlantStatus.Archived))
+    val activeRefs   = Refs(plantsResult = GetPlantsResult.Read(Vector(active)))
+    val archivedRefs = Refs(plantsResult = GetPlantsResult.Read(Vector(archived)))
+
     val activeServer   = buildServer(activeRefs)
     val archivedServer = buildServer(archivedRefs)
 
     val activeResponse   = get("/plants", activeServer)
     val archivedResponse = get("/plants?status=archived", archivedServer)
     val invalidResponse  = get("/plants?status=unknown", activeServer)
-    val expectedActive   =
+
+    val expectedActive =
       json(
         s"""[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}]"""
       )
@@ -164,6 +201,62 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
     val response = get("/plants", server)
     assertEquals(response.code, StatusCode.InternalServerError)
+
+  test("should read the archived count without loading archived plants"):
+    val refs = Refs(archivedCountResult = ArchivedCountResult.Counted(3))
+
+    val response = get("/plants/archived/count", buildServer(refs))
+
+    val expected = StatusCode.Ok -> json("""{"count":3}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+    assertEquals(refs.requestedStatuses.get(), Vector.empty)
+
+  test("should surface archived-count read failure without guessing a count"):
+    val refs = Refs(archivedCountResult = ArchivedCountResult.ReadFailed(RuntimeException("offline")))
+
+    val response = get("/plants/archived/count", buildServer(refs))
+
+    val expected = StatusCode.InternalServerError -> json("""{"message":"archived count could not be read"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+
+  test("should archive a plant and distinguish missing, already archived, and failed writes"):
+    val archivePath  = s"/plants/${plant.id.value}/archive"
+    val archivedRefs = Refs()
+    val missingRefs  = Refs(archivePlantResult = ArchivePlantResult.PlantMissing)
+    val repeatRefs   = Refs(archivePlantResult = ArchivePlantResult.AlreadyArchived)
+    val failedRefs   = Refs(archivePlantResult = ArchivePlantResult.ArchiveFailed(RuntimeException("secret")))
+
+    val archived = post(archivePath, body = "", buildServer(archivedRefs))
+    val missing  = post(archivePath, body = "", buildServer(missingRefs))
+    val repeat   = post(archivePath, body = "", buildServer(repeatRefs))
+    val failed   = post(archivePath, body = "", buildServer(failedRefs))
+
+    val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
+    val expectedRepeat  = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
+    val expectedFailed  = StatusCode.InternalServerError -> json("""{"message":"plant could not be archived"}""")
+    assertEquals(archived.code, StatusCode.NoContent)
+    assertEquals(missing.code -> jsonBody(missing), expectedMissing)
+    assertEquals(repeat.code  -> jsonBody(repeat), expectedRepeat)
+    assertEquals(failed.code  -> jsonBody(failed), expectedFailed)
+    assertEquals(archivedRefs.removedArchivedPlantIds.get(), Vector(plant.id))
+    assertEquals(missingRefs.removedArchivedPlantIds.get(), Vector.empty)
+    assertEquals(repeatRefs.removedArchivedPlantIds.get(), Vector.empty)
+    assertEquals(failedRefs.removedArchivedPlantIds.get(), Vector.empty)
+
+  test("should reject new operations on archived plants with a conflict"):
+    val refs = Refs(logOperationResult = LogOperationResult.PlantArchived)
+
+    val response = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, buildServer(refs))
+
+    val expected = StatusCode.Conflict -> json("""{"message":"plant already archived"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+
+  test("should report when logging is attempted for an unknown plant"):
+    val refs     = Refs(logOperationResult = LogOperationResult.PlantMissing)
+    val response = post(s"/plants/${plant.id.value}/operations", loggedCareRequest, buildServer(refs))
+
+    val expected = StatusCode.NotFound -> json("""{"message":"plant not found"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
 
   test("should log care and replace the details of an existing repot"):
     val refs = Refs(
@@ -303,7 +396,10 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private case class Refs(
       attentionProjection: AttentionProjection = AttentionProjection(date, Vector.empty),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
+      archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
+      archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
+      operationDateRangeResult: GetOperationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
       componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector.empty),
@@ -313,7 +409,9 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       pesticideAddResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
       pesticideEditResult: CatalogEditResult[Pesticide] = CatalogEditResult.RecordMissing,
       requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
+      requestedDateRanges: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
       requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
+      removedArchivedPlantIds: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
       loggedOperations: AtomicReference[Vector[(PlantId, Instant, OperationDetails)]] = AtomicReference(Vector.empty),
       editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
   )
@@ -323,9 +421,13 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         refs.plantsResult
+      override def getArchivedCount: ArchivedCountResult                                         = refs.archivedCountResult
+      override def archivePlant(id: PlantId): ArchivePlantResult                                 = refs.archivePlantResult
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
         refs.getOperationsResult
+      override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
+        refs.requestedDateRanges.updateAndGet(_ :+ plantId).pipe(_ => refs.operationDateRangeResult)
       override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
         refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => refs.logOperationResult)
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
@@ -338,8 +440,10 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]                    = refs.pesticideAddResult
       override def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide] = refs.pesticideEditResult
     val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = refs.attentionProjection
-      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
+      override def current: AttentionProjection           = refs.attentionProjection
+      override def refreshAll: RefreshAttentionResult     = fail("HTTP must not refresh attention")
+      override def removeArchivedPlant(id: PlantId): Unit =
+        val _ = refs.removedArchivedPlantIds.updateAndGet(_ :+ id)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(JournalApi.serverEndpoints(using journal, attention))
       .backend()

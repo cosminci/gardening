@@ -62,4 +62,47 @@ Vitest.describe("animating operation changes", () => {
     ).toBeInTheDocument();
     Vitest.expect(startViewTransition).not.toHaveBeenCalled();
   });
+
+  Vitest.it("should not display an obsolete garden transition over the cemetery", async () => {
+    let displayGarden: () => void = () => undefined;
+    let finishTransition: () => void = () => undefined;
+    const transitionDone = new Promise<void>((resolve) => {
+      finishTransition = resolve;
+    });
+    const startViewTransition = Vitest.vi.fn((update: () => void) => {
+      displayGarden = update;
+      return { updateCallbackDone: transitionDone };
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: startViewTransition,
+    });
+    const base = buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [operationsPage()] },
+      logOperationResult: { kind: "logged", id: operationId("new") },
+    });
+    const journal = {
+      ...base,
+      getPlants: (status?: "active" | "archived") =>
+        status === "archived"
+          ? Promise.resolve({ kind: "read" as const, plants: [] })
+          : base.getPlants(),
+    };
+    Testing.render(() => <App journal={journal} />);
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(startViewTransition).toHaveBeenCalledOnce();
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+    displayGarden();
+    finishTransition();
+    await Testing.screen.findByRole("region", { name: "Cemetery" });
+
+    Vitest.expect(Testing.screen.queryByRole("article", { name: "Fern" })).toBeNull();
+    Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+  });
 });

@@ -68,6 +68,133 @@ describe("HttpJournalClient", () => {
     await expect(networkJournal.getPlants()).resolves.toEqual({ kind: "readFailed", reason });
   });
 
+  it("should read the archived count without fetching the archived plant list", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(respondingWith([jsonResponse({ count: 7 })], requests));
+
+    const result = await journal.getArchivedCount();
+    const paths = requests.map((request) => new URL(request.url).pathname);
+
+    expect(result).toEqual({ kind: "read", count: 7 });
+    expect(paths).toEqual(["/plants/archived/count"]);
+  });
+
+  it("should read the first and last operation dates without paging through history", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          jsonResponse({
+            kind: "recorded",
+            first: "2026-02-01T10:00:00Z",
+            last: "2026-04-03T18:00:00Z",
+          }),
+          jsonResponse({ kind: "empty" }),
+        ],
+        requests,
+      ),
+    );
+    const plantId = Journal.plantId("p1");
+
+    const recordedResult = await journal.getOperationDates(plantId);
+    const emptyResult = await journal.getOperationDates(plantId);
+    const expectedDates = {
+      kind: "recorded",
+      first: Journal.instant("2026-02-01T10:00:00Z"),
+      last: Journal.instant("2026-04-03T18:00:00Z"),
+    };
+
+    expect(recordedResult).toEqual({ kind: "read", dates: expectedDates });
+    expect(emptyResult).toEqual({ kind: "read", dates: { kind: "empty" } });
+    expect(requests).toHaveLength(2);
+  });
+
+  it("should report invalid or unavailable archived counts", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({ count: -1 }),
+        jsonResponse({ message: "count unavailable" }, 503),
+        new Error("offline"),
+      ]),
+    );
+
+    const malformedCount = await journal.getArchivedCount();
+    const failedCount = await journal.getArchivedCount();
+    const offlineCount = await journal.getArchivedCount();
+
+    expect(malformedCount).toMatchObject({ kind: "readFailed" });
+    expect(failedCount).toMatchObject({ kind: "readFailed" });
+    expect(offlineCount).toMatchObject({ kind: "readFailed" });
+  });
+
+  it("should reject incomplete or unavailable recorded operation dates", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([
+        jsonResponse({ kind: "recorded", first: "2026-02-01T10:00:00Z", last: null }),
+        jsonResponse({ message: "missing plant" }, 404),
+        new Error("offline"),
+      ]),
+    );
+    const plantId = Journal.plantId("p1");
+
+    const incompleteDates = await journal.getOperationDates(plantId);
+    const missingDates = await journal.getOperationDates(plantId);
+    const offlineDates = await journal.getOperationDates(plantId);
+
+    expect(incompleteDates).toMatchObject({ kind: "readFailed" });
+    expect(missingDates).toMatchObject({ kind: "readFailed" });
+    expect(offlineDates).toMatchObject({ kind: "readFailed" });
+  });
+
+  it("should translate irreversible archive outcomes", async () => {
+    const requests: Request[] = [];
+    const journal = makeHttpJournalClient(
+      respondingWith(
+        [
+          new Response(null, { status: 204 }),
+          jsonResponse({ message: "missing" }, 404),
+          jsonResponse({ message: "already archived" }, 409),
+          jsonResponse({ message: "archive unavailable" }, 500),
+        ],
+        requests,
+      ),
+    );
+    const plantId = Journal.plantId("p1");
+    const offline = makeHttpJournalClient(respondingWith([new Error("offline")]));
+
+    const archived = await journal.archivePlant(plantId);
+    const missing = await journal.archivePlant(plantId);
+    const alreadyArchived = await journal.archivePlant(plantId);
+    const failed = await journal.archivePlant(plantId);
+    const offlineResult = await offline.archivePlant(plantId);
+
+    expect(archived).toEqual({ kind: "archived" });
+    expect(missing).toEqual({ kind: "plantMissing" });
+    expect(alreadyArchived).toEqual({ kind: "alreadyArchived" });
+    expect(failed).toMatchObject({ kind: "archiveFailed" });
+    expect(requests).toHaveLength(4);
+    expect(offlineResult).toMatchObject({ kind: "archiveFailed" });
+  });
+
+  it("should reject logging an operation after its plant has been archived", async () => {
+    const journal = makeHttpJournalClient(
+      respondingWith([jsonResponse({ message: "archived plant" }, 409)]),
+    );
+    const plantId = Journal.plantId("p1");
+    const date = Journal.instant("2026-04-03T18:00:00Z");
+    const care: Journal.OperationDetails = {
+      kind: "care",
+      actions: new Set(["watered"]),
+      pesticides: new Set(),
+      moisture: "wet",
+      maybeNote: null,
+    };
+
+    const result = await journal.logOperation(plantId, date, care);
+
+    expect(result).toEqual({ kind: "plantArchived" });
+  });
+
   it("should translate the attention projection into domain values", async () => {
     const noSamples = plant("no-samples");
     const unknown = plant("unknown");
@@ -368,17 +495,15 @@ describe("HttpJournalClient", () => {
       },
     ];
 
-    await expect(journal.getSubstrateComponents()).resolves.toEqual({
-      kind: "read",
-      entries: expectedComponents,
-    });
-    await expect(journal.getPesticides()).resolves.toEqual({
-      kind: "read",
-      entries: expectedPesticides,
-    });
-    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      ["GET /substrate-components", "GET /pesticides"],
+    const componentsResult = await journal.getSubstrateComponents();
+    const pesticidesResult = await journal.getPesticides();
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
+
+    expect(componentsResult).toEqual({ kind: "read", entries: expectedComponents });
+    expect(pesticidesResult).toEqual({ kind: "read", entries: expectedPesticides });
+    expect(requestedPaths).toEqual(["GET /substrate-components", "GET /pesticides"]);
   });
 
   it("should send operation details and preserve write outcomes", async () => {
@@ -429,26 +554,21 @@ describe("HttpJournalClient", () => {
       Journal.instant("2026-01-01T00:00:00Z"),
       care,
     );
-    const expectedLogged = { kind: "logged", id: Journal.operationId("logged") };
-    expect(loggedResult).toEqual(expectedLogged);
-    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toEqual({
-      kind: "operationTypeMismatch",
-    });
-    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toMatchObject({
-      kind: "edited",
-      operation: expectedOperation,
-    });
-    await expect(journal.editOperation(Journal.operationId("o1"), repot)).resolves.toMatchObject({
-      operation: { details: { maybeNote: null } },
-    });
-    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      [
-        "POST /plants/p1/operations",
-        "PUT /operations/o1",
-        "PUT /operations/o1",
-        "PUT /operations/o1",
-      ],
+    const mismatchResult = await journal.editOperation(Journal.operationId("o1"), repot);
+    const editedResult = await journal.editOperation(Journal.operationId("o1"), repot);
+    const clearedResult = await journal.editOperation(Journal.operationId("o1"), repot);
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
+    const actualRequests = await Promise.all(requests.map((request) => request.json()));
+
+    const expectedLogged = { kind: "logged", id: Journal.operationId("logged") };
+    const expectedPaths = [
+      "POST /plants/p1/operations",
+      "PUT /operations/o1",
+      "PUT /operations/o1",
+      "PUT /operations/o1",
+    ];
     const expectedRequests = [
       {
         date: "2026-01-01T00:00:00Z",
@@ -476,7 +596,11 @@ describe("HttpJournalClient", () => {
         notes: "Fresh",
       },
     ];
-    const actualRequests = await Promise.all(requests.map((request) => request.json()));
+    expect(loggedResult).toEqual(expectedLogged);
+    expect(mismatchResult).toEqual({ kind: "operationTypeMismatch" });
+    expect(editedResult).toMatchObject({ kind: "edited", operation: expectedOperation });
+    expect(clearedResult).toMatchObject({ operation: { details: { maybeNote: null } } });
+    expect(requestedPaths).toEqual(expectedPaths);
     expect(actualRequests).toEqual(expectedRequests);
   });
 
@@ -501,63 +625,50 @@ describe("HttpJournalClient", () => {
       ],
       requests,
     );
+    const perlite = {
+      name: Journal.nomenclatureName("Perlite"),
+      maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
+    };
+    const finePerlite = { name: Journal.nomenclatureName("Perlite fine"), maybeInfo: null };
+    const neemOil = {
+      name: Journal.nomenclatureName("Neem oil"),
+      pesticideType: "insecticide" as const,
+      maybeInfo: Journal.nomenclatureInfo("Dilute first"),
+    };
+    const neem = {
+      name: Journal.nomenclatureName("Neem"),
+      pesticideType: "insecticide" as const,
+      maybeInfo: null,
+    };
     const journal = makeHttpJournalClient(fetch);
 
-    await expect(
-      journal.addSubstrateComponent({
-        name: Journal.nomenclatureName("Perlite"),
-        maybeInfo: Journal.nomenclatureInfo("Adds drainage"),
-      }),
-    ).resolves.toMatchObject({ kind: "added", entry: { id: perliteId } });
-    await expect(
-      journal.editSubstrateComponent(perliteId, {
-        name: Journal.nomenclatureName("Perlite fine"),
-        maybeInfo: null,
-      }),
-    ).resolves.toMatchObject({
-      kind: "edited",
-      entry: { data: { name: "Perlite fine", maybeInfo: null } },
-    });
-    await expect(
-      journal.addPesticide({
-        name: Journal.nomenclatureName("Neem oil"),
-        pesticideType: "insecticide",
-        maybeInfo: Journal.nomenclatureInfo("Dilute first"),
-      }),
-    ).resolves.toMatchObject({ kind: "added", entry: { id: pesticide } });
-    await expect(
-      journal.editPesticide(pesticide, {
-        name: Journal.nomenclatureName("Neem"),
-        pesticideType: "insecticide",
-        maybeInfo: null,
-      }),
-    ).resolves.toMatchObject({
-      kind: "edited",
-      entry: { data: { name: "Neem", pesticideType: "insecticide", maybeInfo: null } },
-    });
-
-    expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      [
-        "POST /substrate-components",
-        `PUT /substrate-components/${perliteId}`,
-        "POST /pesticides",
-        `PUT /pesticides/${pesticide}`,
-      ],
+    const addedComponent = await journal.addSubstrateComponent(perlite);
+    const editedComponent = await journal.editSubstrateComponent(perliteId, finePerlite);
+    const addedPesticide = await journal.addPesticide(neemOil);
+    const editedPesticide = await journal.editPesticide(pesticide, neem);
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
-    await expect(Promise.all(requests.map((request) => request.json()))).resolves.toEqual([
+    const requestBodies = await Promise.all(requests.map((request) => request.json()));
+
+    const expectedPaths = [
+      "POST /substrate-components",
+      `PUT /substrate-components/${perliteId}`,
+      "POST /pesticides",
+      `PUT /pesticides/${pesticide}`,
+    ];
+    const expectedBodies = [
       { name: "Perlite", info: "Adds drainage" },
       { name: "Perlite fine", info: null },
-      {
-        name: "Neem oil",
-        type: "insecticide",
-        info: "Dilute first",
-      },
-      {
-        name: "Neem",
-        type: "insecticide",
-        info: null,
-      },
-    ]);
+      { name: "Neem oil", type: "insecticide", info: "Dilute first" },
+      { name: "Neem", type: "insecticide", info: null },
+    ];
+    expect(addedComponent).toMatchObject({ kind: "added", entry: { id: perliteId } });
+    expect(editedComponent).toMatchObject({ kind: "edited", entry: { data: finePerlite } });
+    expect(addedPesticide).toMatchObject({ kind: "added", entry: { id: pesticide } });
+    expect(editedPesticide).toMatchObject({ kind: "edited", entry: { data: neem } });
+    expect(requestedPaths).toEqual(expectedPaths);
+    expect(requestBodies).toEqual(expectedBodies);
   });
 
   it("should translate HTTP and network failures into explicit domain failures", async () => {

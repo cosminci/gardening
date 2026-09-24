@@ -136,6 +136,10 @@ export const buildJournal = ({
 
   return {
     getPlants: () => Promise.resolve(queuedResult(plantResponses, plantReads++)),
+    getArchivedCount: () => Promise.resolve({ kind: "read", count: 0 }),
+    getOperationDates: () => Promise.resolve({ kind: "read", dates: { kind: "empty" } }),
+    archivePlant: () =>
+      Promise.resolve({ kind: "archiveFailed", reason: new Error("unexpected write") }),
     getAttention: () => {
       const read = attentionReads++;
       return Promise.resolve(queuedResult(attentionResponses, read));

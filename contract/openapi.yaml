@@ -46,6 +46,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /plants/archived/count:
+    get:
+      summary: Count archived plants
+      operationId: getPlantsArchivedCount
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArchivedPlantCount'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /plants/{plantId}/archive:
+    post:
+      summary: Permanently archive an active plant
+      operationId: postPlantsPlantidArchive
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /attention:
     get:
       summary: Read plant attention
@@ -132,7 +180,48 @@ paths:
             text/plain:
               schema:
                 type: string
-        default:
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /plants/{plantId}/operation-date-range:
+    get:
+      summary: Read the first and last recorded operation dates
+      operationId: getPlantsPlantidOperation-date-range
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationDateRange'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
           description: ''
           content:
             application/json:
@@ -380,6 +469,15 @@ components:
       properties:
         message:
           type: string
+    ArchivedPlantCount:
+      title: ArchivedPlantCount
+      type: object
+      required:
+      - count
+      properties:
+        count:
+          type: integer
+          format: int64
     AttentionProjection:
       title: AttentionProjection
       type: object
@@ -424,6 +522,15 @@ components:
         kind:
           type: string
           const: care
+    Empty:
+      title: Empty
+      type: object
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          const: empty
     HealthResponse:
       title: HealthResponse
       type: object
@@ -482,6 +589,16 @@ components:
           format: date-time
         details:
           $ref: '#/components/schemas/OperationDetails'
+    OperationDateRange:
+      title: OperationDateRange
+      oneOf:
+      - $ref: '#/components/schemas/Empty'
+      - $ref: '#/components/schemas/Recorded'
+      discriminator:
+        propertyName: kind
+        mapping:
+          empty: '#/components/schemas/Empty'
+          recorded: '#/components/schemas/Recorded'
     OperationDetails:
       title: OperationDetails
       oneOf:
@@ -593,6 +710,23 @@ components:
       enum:
       - active
       - archived
+    Recorded:
+      title: Recorded
+      type: object
+      required:
+      - first
+      - last
+      - kind
+      properties:
+        first:
+          type: string
+          format: date-time
+        last:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          const: recorded
     Repot:
       title: Repot
       type: object

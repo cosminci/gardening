@@ -1,6 +1,7 @@
 package gardening.domain.attention
 
 import cats.syntax.either.*
+import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.WateringHistory.*
@@ -16,6 +17,7 @@ import scala.concurrent.duration.*
 trait PlantAttentionMonitor:
   def current: AttentionProjection
   def refreshAll: RefreshAttentionResult
+  def removeArchivedPlant(id: PlantId): Unit
 
 object PlantAttentionMonitor:
 
@@ -28,12 +30,16 @@ object PlantAttentionMonitor:
 
     override def current: AttentionProjection = currentProjection.get()
 
-    override def refreshAll: RefreshAttentionResult =
+    override def refreshAll: RefreshAttentionResult = synchronized:
       computeProjection match
         case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason)
         case Right(projection) =>
           currentProjection.set(projection)
           RefreshAttentionResult.Refreshed(projection)
+
+    override def removeArchivedPlant(id: PlantId): Unit = synchronized:
+      val projection = currentProjection.get()
+      currentProjection.set(projection.copy(plants = projection.plants.filterNot(_.plantId.value === id.value)))
 
   private def computeProjection(using store: PlantAttentionStore^, clock: Clock^) =
     store.getAttentionSamples(size = 20) match

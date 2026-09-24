@@ -23,6 +23,59 @@ export const makeHttpJournalClient = (
       }
     },
 
+    async getArchivedCount(): Promise<Journal.GetArchivedCountResult> {
+      try {
+        const { data, error } = await client.GET("/plants/archived/count");
+        if (data === undefined) return { kind: "readFailed", reason: requestFailure(error) };
+        if (!Number.isSafeInteger(data.count) || data.count < 0)
+          return { kind: "readFailed", reason: new Error("invalid archived plant count") };
+        return { kind: "read", count: data.count };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async getOperationDates(id): Promise<Journal.GetOperationDatesResult> {
+      try {
+        const { data, error } = await client.GET("/plants/{plantId}/operation-date-range", {
+          params: { path: { plantId: id } },
+        });
+        if (data === undefined) return { kind: "readFailed", reason: requestFailure(error) };
+        if (data.kind === "empty") return { kind: "read", dates: { kind: "empty" } };
+        if (
+          typeof data.first === "string" &&
+          typeof data.last === "string" &&
+          Number.isFinite(Date.parse(data.first)) &&
+          Date.parse(data.first) <= Date.parse(data.last)
+        )
+          return {
+            kind: "read",
+            dates: {
+              kind: "recorded",
+              first: Journal.instant(data.first),
+              last: Journal.instant(data.last),
+            },
+          };
+        return { kind: "readFailed", reason: new Error("invalid operation date range") };
+      } catch (error) {
+        return { kind: "readFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async archivePlant(id): Promise<Journal.ArchivePlantResult> {
+      try {
+        const { error, response } = await client.POST("/plants/{plantId}/archive", {
+          params: { path: { plantId: id } },
+        });
+        if (response.status === 204) return { kind: "archived" };
+        if (response.status === 404) return { kind: "plantMissing" };
+        if (response.status === 409) return { kind: "alreadyArchived" };
+        return { kind: "archiveFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "archiveFailed", reason: requestFailure(error) };
+      }
+    },
+
     async getAttention(): Promise<Journal.GetAttentionResult> {
       try {
         const { data, error } = await client.GET("/attention");
@@ -58,10 +111,11 @@ export const makeHttpJournalClient = (
 
     async logOperation(id, date, details): Promise<Journal.LogOperationResult> {
       try {
-        const { data, error } = await client.POST("/plants/{plantId}/operations", {
+        const { data, error, response } = await client.POST("/plants/{plantId}/operations", {
           params: { path: { plantId: id } },
           body: { date, details: toWireDetails(details) },
         });
+        if (response.status === 409) return { kind: "plantArchived" };
         return data === undefined
           ? { kind: "loggingFailed", reason: requestFailure(error) }
           : { kind: "logged", id: Journal.operationId(data.id) };
