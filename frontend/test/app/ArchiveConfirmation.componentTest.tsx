@@ -18,14 +18,19 @@ describe("archive confirmation", () => {
     const cancel = within(warning).getByRole("button", { name: "Cancel" });
     const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
 
-    expect(cancel).toHaveFocus();
+    const initialFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    expect(confirm).toHaveFocus();
+    const backwardsFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Tab" });
-    expect(cancel).toHaveFocus();
+    const forwardsFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(onCancel).toHaveBeenCalledOnce();
+    const escapeCalls = onCancel.mock.calls.length;
     fireEvent.click(cancel);
+
+    expect(initialFocus).toBe(cancel);
+    expect(backwardsFocus).toBe(confirm);
+    expect(forwardsFocus).toBe(cancel);
+    expect(escapeCalls).toBe(1);
     expect(onCancel).toHaveBeenCalledTimes(2);
   });
 
@@ -52,19 +57,25 @@ describe("archive confirmation", () => {
     const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
 
     fireEvent.click(confirm);
-    expect(warning).toHaveFocus();
+    const pendingFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Tab" });
-    expect(warning).toHaveFocus();
+    const trappedFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Escape" });
+    const pendingCancelCalls = onCancel.mock.calls.length;
     finish("The plant could not be archived.");
 
-    expect(onCancel).not.toHaveBeenCalled();
-    expect(await screen.findByRole("alert")).toHaveTextContent("The plant could not be archived.");
+    const alert = await screen.findByRole("alert");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Archive permanently" })).toBeEnabled();
     });
-    expect(cancel).toHaveFocus();
+    const restoredFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(pendingFocus).toBe(warning);
+    expect(trappedFocus).toBe(warning);
+    expect(pendingCancelCalls).toBe(0);
+    expect(alert).toHaveTextContent("The plant could not be archived.");
+    expect(restoredFocus).toBe(cancel);
     expect(onCancel).toHaveBeenCalledOnce();
     expect(onConfirm).toHaveBeenCalledOnce();
   });

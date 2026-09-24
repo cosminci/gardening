@@ -75,7 +75,7 @@ const archivedCardProps = {
   operationChange: emptyCardProps.operationChange,
 };
 
-describe("plant operation controls", () => {
+describe("plant cards", () => {
   afterEach(() => {
     vi.useRealTimers();
   });

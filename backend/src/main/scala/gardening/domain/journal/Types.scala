@@ -10,9 +10,12 @@ type OperationPageSize = Int :| Interval.Closed[1, 10]
 final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
 final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
 
-enum OperationDateRange:
-  case Empty
-  case Recorded(first: Instant, last: Instant)
+sealed trait OperationDateRange
+
+object OperationDateRange:
+  case object Empty                                        extends OperationDateRange
+  final case class Recorded(first: Instant, last: Instant) extends OperationDateRange:
+    require(!last.isBefore(first), "last recorded operation cannot precede first")
 
 enum GetOperationDateRangeResult:
   case Read(range: OperationDateRange)
@@ -41,9 +44,12 @@ enum GetPlantsResult:
   case Read(plants: Vector[Plant])
   case ReadFailed(reason: Throwable)
 
-enum ArchivedCountResult:
-  case Counted(count: Long)
-  case ReadFailed(reason: Throwable)
+sealed trait ArchivedCountResult
+
+object ArchivedCountResult:
+  final case class Counted(count: Long) extends ArchivedCountResult:
+    require(count >= 0L, "archived plant count must be non-negative")
+  final case class ReadFailed(reason: Throwable) extends ArchivedCountResult
 
 enum ArchivePlantResult:
   case Archived

@@ -1,6 +1,5 @@
 package gardening.adapters.persistence
 
-import cats.syntax.eq.*
 import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
@@ -29,17 +28,24 @@ object SqlitePlantStore:
 
     override def getPlants(status: PlantStatus): GetPlantsResult =
       try
-        val rows = connect(transactor)(sql"select id, species, nickname, location, substrate, status from plant order by rowid".query[PlantRow].run())
+        val rows = connect(transactor):
+          sql"select id, species, nickname, location, substrate, status from plant where status = ${status.toString} order by rowid".query[
+            PlantRow
+          ].run()
         val plants = trust(rows.traverse(toPlant))
-        GetPlantsResult.Read(plants.filter(_.details.status === status))
+        GetPlantsResult.Read(plants)
       catch
         case error: SqlException       => GetPlantsResult.ReadFailed(error)
         case error: DatabaseCorruption => GetPlantsResult.ReadFailed(error)
 
     override def getArchivedCount: ArchivedCountResult =
       try
-        val count = connect(transactor)(sql"select count(*) from plant where status = 'Archived'".query[Long].run().headOption)
-        ArchivedCountResult.Counted(count.getOrElse(0L))
+        connect(transactor)(sql"select count(*) from plant where status = 'Archived'".query[Long].run().headOption) match
+          case Some(count) => ArchivedCountResult.Counted(count)
+          // An aggregate without GROUP BY always returns exactly one row.
+          // $COVERAGE-OFF$
+          case None => ArchivedCountResult.ReadFailed(DatabaseCorruption(IllegalStateException("archived plant count query returned no row")))
+          // $COVERAGE-ON$
       catch case error: SqlException => ArchivedCountResult.ReadFailed(error)
 
     override def archivePlant(id: PlantId): ArchivePlantResult =
@@ -85,22 +91,21 @@ object SqlitePlantStore:
 
     override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
       try
-        val maybeDates = connect(transactor):
-          sql"""select
-                 (select date from operation where plant_id = plant.id order by date asc, id asc limit 1) as first_date,
-                 (select date from operation where plant_id = plant.id order by date desc, id desc limit 1) as last_date
-               from plant where id = ${plantId.value}""".query[OperationDateRangeRow].run().headOption
-        maybeDates match
-          case None        => GetOperationDateRangeResult.PlantMissing
-          case Some(dates) =>
-            val rangeResult = dates.firstDate.zip(dates.lastDate) match
-              case None                => Right(OperationDateRange.Empty)
-              case Some((first, last)) =>
-                for
-                  start <- parseOperationDate(first)
-                  end   <- parseOperationDate(last)
-                yield OperationDateRange.Recorded(start, end)
-            rangeResult.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
+        val rows = connect(transactor):
+          sql"""select operation.date from plant
+                left join operation on operation.plant_id = plant.id
+                where plant.id = ${plantId.value}""".query[OperationDateRow].run()
+        rows.headOption match
+          case None    => GetOperationDateRangeResult.PlantMissing
+          case Some(_) =>
+            val dates = rows.flatMap(_.date).traverse(parseOperationDate).map: parsed =>
+              parsed.headOption match
+                case None        => OperationDateRange.Empty
+                case Some(first) =>
+                  val earliest = parsed.foldLeft(first)((previous, current) => if current.isBefore(previous) then current else previous)
+                  val latest   = parsed.foldLeft(first)((previous, current) => if current.isAfter(previous) then current else previous)
+                  OperationDateRange.Recorded(earliest, latest)
+            dates.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
       catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
@@ -414,7 +419,7 @@ object SqlitePlantStore:
       derives DbCodec
 
   private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
-  private case class OperationDateRangeRow(firstDate: Option[String], lastDate: Option[String]) derives DbCodec
+  private case class OperationDateRow(date: Option[String]) derives DbCodec
   private case class AttentionSampleRow(
       id: String,
       wateringDates: String

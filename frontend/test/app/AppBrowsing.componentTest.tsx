@@ -114,18 +114,16 @@ describe("browsing the journal", () => {
     ]);
     const recentDate = within(card).getByText("5th of April");
     expect(recentDate).toHaveAttribute("datetime", "2026-04-04T22:30:00Z");
-    expect(
-      screen.getAllByRole("article").map((article) => article.getAttribute("aria-label")),
-    ).toEqual(["Monstera deliciosa", "Fern"]);
+    const plantNames = screen
+      .getAllByRole("article")
+      .map((article) => article.getAttribute("aria-label"));
+    expect(plantNames).toEqual(["Monstera deliciosa", "Fern"]);
     expect(operationWindows).toEqual([
       { plantId: "p2", window: { offset: 0, size: 3 } },
       { plantId: "p1", window: { offset: 0, size: 3 } },
     ]);
-    expect(
-      within(screen.getByRole("article", { name: "Monstera deliciosa" })).getByText(
-        "No operations yet.",
-      ),
-    ).toBeInTheDocument();
+    const emptyCard = screen.getByRole("article", { name: "Monstera deliciosa" });
+    expect(within(emptyCard).getByText("No operations yet.")).toBeInTheDocument();
 
     fireEvent.click(within(card).getByRole("button", { name: "Show operation history" }));
     const history = await within(card).findByRole("table");
@@ -233,14 +231,31 @@ describe("browsing the journal", () => {
 
     render(() => <App journal={journal} />);
 
-    expect(await screen.findByRole("heading", { name: "Plant Journal" })).toBeInTheDocument();
-    expect(screen.queryByText("Care history, growing conditions, and repotting notes.")).toBeNull();
+    const heading = await screen.findByRole("heading", { name: "Plant Journal" });
     const garden = await screen.findByRole("button", { name: /Garden.*1 plant/ });
     const cemetery = screen.getByRole("button", { name: /Cemetery.*0 plants/ });
+
+    expect(heading).toBeInTheDocument();
+    expect(screen.queryByText("Care history, growing conditions, and repotting notes.")).toBeNull();
     expect(garden).toHaveAttribute("aria-pressed", "true");
     expect(cemetery).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("should select the cemetery from its focusable control", async () => {
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    render(() => <App journal={journal} />);
+    const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
+
     cemetery.focus();
     fireEvent.click(cemetery);
+    const cemeteryView = await screen.findByRole("region", { name: "Cemetery" });
+    const garden = screen.getByRole("button", { name: /Garden.*1 plant/ });
+
+    expect(cemeteryView).toBeInTheDocument();
+    expect(cemetery).toHaveFocus();
     expect(cemetery).toHaveAttribute("aria-pressed", "true");
     expect(garden).toHaveAttribute("aria-pressed", "false");
   });
@@ -256,20 +271,25 @@ describe("browsing the journal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Cemetery/ }));
     await screen.findByRole("region", { name: "Cemetery" });
-    expect(window.location.search).toBe("?from=bookmark&view=cemetery");
-    expect(window.location.hash).toBe("#journal");
+    const cemeterySearch = window.location.search;
+    const cemeteryHash = window.location.hash;
 
     mounted.unmount();
     render(() => <App journal={journal} />);
-    expect(await screen.findByRole("region", { name: "Cemetery" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Cemetery/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const restoredCemetery = await screen.findByRole("region", { name: "Cemetery" });
+    const selectedCemetery = screen.getByRole("button", { name: /Cemetery/ });
+    const restoredCemeteryLabel = restoredCemetery.getAttribute("aria-label");
+    const cemeterySelected = selectedCemetery.getAttribute("aria-pressed");
 
     window.history.replaceState(null, "", "/?from=bookmark#journal");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(await screen.findByRole("region", { name: "Garden" })).toBeInTheDocument();
+    const restoredGarden = await screen.findByRole("region", { name: "Garden" });
+
+    expect(cemeterySearch).toBe("?from=bookmark&view=cemetery");
+    expect(cemeteryHash).toBe("#journal");
+    expect(restoredCemeteryLabel).toBe("Cemetery");
+    expect(cemeterySelected).toBe("true");
+    expect(restoredGarden).toBeInTheDocument();
     expect(window.location.search).toBe("?from=bookmark");
   });
 
@@ -288,10 +308,8 @@ describe("browsing the journal", () => {
     render(() => <App journal={journal} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-    expect(screen.getByRole("button", { name: /Cemetery/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const selectedCemetery = screen.getByRole("button", { name: /Cemetery/ });
+    expect(selectedCemetery).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("article", { name: "Fern" })).toBeNull();
   });
 
@@ -345,26 +363,65 @@ describe("browsing the journal", () => {
     render(() => <App journal={journal} />);
 
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*2 plants/ });
-    expect(statuses).toEqual([undefined]);
+    const unopenedStatuses = [...statuses];
     fireEvent.click(cemetery);
     const card = await screen.findByRole("article", { name: "Monstera deliciosa" });
-    expect(screen.getByRole("button", { name: /Cemetery.*1 plant/ })).toBeInTheDocument();
-    expect(statuses).toEqual([undefined, "archived"]);
-    expect(within(card).getByText("RIP")).toBeInTheDocument();
-    expect(within(card).getByText("01.02.2026")).toBeInTheDocument();
-    expect(within(card).getByText("03.04.2026")).toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: /Log operation/ })).toBeNull();
-    expect(
-      within(card).getByRole("button", { name: /Edit recent care operation/ }),
-    ).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Show operation history" }));
-    expect(await within(card).findByRole("table")).toHaveTextContent("01.02.2026");
+    const history = await within(card).findByRole("table");
+
+    const life = within(card).getByRole("complementary", { name: /Recorded care dates/ });
+    const editOperation = within(card).getByRole("button", { name: /Edit recent care operation/ });
+
+    expect(unopenedStatuses).toEqual([undefined]);
+    expect(screen.getByRole("button", { name: /Cemetery.*1 plant/ })).toBeInTheDocument();
+    expect(within(life).getByText("RIP")).toBeInTheDocument();
+    expect(within(life).getByText("01.02.2026")).toBeInTheDocument();
+    expect(within(life).getByText("03.04.2026")).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /Log operation/ })).toBeNull();
+    expect(editOperation).toBeInTheDocument();
+    expect(history).toHaveTextContent("01.02.2026");
     expect(getOperationDates).toHaveBeenCalledWith(archivedPlant.id);
-    fireEvent.click(screen.getByRole("button", { name: /Garden.*1 plant/ }));
+    expect(statuses).toEqual([undefined, "archived"]);
+  });
+
+  it("should refresh the cemetery list when returning from the garden", async () => {
+    const archivedPlant = {
+      ...JournalFixtures.monstera(),
+      details: { ...JournalFixtures.monstera().details, status: "archived" as const },
+    };
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [JournalFixtures.operationsPage()],
+      },
+    });
+    const statuses: (string | undefined)[] = [];
+    const journal = {
+      ...base,
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+      getPlants: (status?: string) => {
+        statuses.push(status);
+        return Promise.resolve({
+          kind: "read" as const,
+          plants: status === "archived" ? [archivedPlant] : [JournalFixtures.ficus()],
+        });
+      },
+    };
+    render(() => <App journal={journal} />);
+    await screen.findByRole("article", { name: "Fern" });
+
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
     await screen.findByRole("article", { name: "Monstera deliciosa" });
+    fireEvent.click(screen.getByRole("button", { name: /Garden.*1 plant/ }));
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
+    const cemeteryCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
+    const readsBeforeReselect = statuses.length;
+    fireEvent.click(screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
+
+    expect(cemeteryCard).toBeInTheDocument();
     expect(statuses).toEqual([undefined, "archived", "archived"]);
+    expect(statuses).toHaveLength(readsBeforeReselect);
   });
 
   it("should fail an archived date read instead of showing a partial cemetery", async () => {
@@ -385,34 +442,52 @@ describe("browsing the journal", () => {
         reason: new Error("private details"),
       }),
     );
-    let cemeteryReads = 0;
     const journal = {
       ...base,
       getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
       getPlants: (status?: string) =>
-        status === "archived" && cemeteryReads++ === 0
-          ? Promise.resolve({ kind: "readFailed" as const, reason: new Error("offline") })
-          : Promise.resolve({
-              kind: "read" as const,
-              plants: status === "archived" ? [archivedPlant] : [JournalFixtures.ficus()],
-            }),
+        Promise.resolve({
+          kind: "read" as const,
+          plants: status === "archived" ? [archivedPlant] : [JournalFixtures.ficus()],
+        }),
       getOperationDates,
     };
     render(() => <App journal={journal} />);
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*1 plant/ });
 
     fireEvent.click(cemetery);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-    expect(screen.queryByRole("article", { name: "Monstera deliciosa" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Cemetery.*1 plant/ }));
-    await vi.waitFor(() => {
-      expect(getOperationDates).toHaveBeenCalledOnce();
-    });
-    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-    expect(screen.queryByText("private details")).toBeNull();
+    const alert = await screen.findByRole("alert");
+    const incompleteCard = screen.queryByRole("article", { name: "Monstera deliciosa" });
     fireEvent.click(screen.getByRole("button", { name: /Garden.*1 plant/ }));
-    expect(await screen.findByRole("article", { name: "Fern" })).toBeInTheDocument();
+    const gardenCard = await screen.findByRole("article", { name: "Fern" });
+
+    expect(alert).toHaveTextContent("The journal could not be loaded.");
+    expect(incompleteCard).toBeNull();
+    expect(getOperationDates).toHaveBeenCalledWith(archivedPlant.id);
+    expect(screen.queryByText("private details")).toBeNull();
+    expect(gardenCard).toBeInTheDocument();
+  });
+
+  it("should report an unreadable cemetery list rather than showing partial cards", async () => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const journal = {
+      ...base,
+      getPlants: (status?: string) =>
+        status === "archived"
+          ? Promise.resolve({ kind: "readFailed" as const, reason: new Error("offline") })
+          : base.getPlants(),
+    };
+    render(() => <App journal={journal} />);
+    const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
+
+    fireEvent.click(cemetery);
+    const alert = await screen.findByRole("alert");
+
+    expect(alert).toHaveTextContent("The journal could not be loaded.");
+    expect(screen.queryByRole("article", { name: "Fern" })).toBeNull();
   });
 
   it("should leave a restored garden visible after an obsolete cemetery read rejects", async () => {

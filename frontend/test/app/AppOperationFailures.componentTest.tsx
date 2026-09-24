@@ -39,19 +39,18 @@ Vitest.describe("operation failures", () => {
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "The operation could not be saved.",
-    );
-    Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
+    const alert = await Testing.screen.findByRole("alert");
+    const privateReason = Testing.screen.queryByText("private details");
     Testing.fireEvent.click(
       Testing.screen.getByRole("button", { name: "Collapse operation editor" }),
     );
-    await Testing.waitFor(() => {
-      Vitest.expect(
-        Testing.screen.queryByRole("form", { name: "Log operation" }),
-      ).not.toBeInTheDocument();
-    });
+    await Testing.waitForElementToBeRemoved(() =>
+      Testing.screen.queryByRole("form", { name: "Log operation" }),
+    );
+
+    Vitest.expect(alert).toHaveTextContent("The operation could not be saved.");
+    Vitest.expect(privateReason).toBeNull();
+    Vitest.expect(Testing.screen.queryByRole("form", { name: "Log operation" })).toBeNull();
   });
 
   Vitest.it(
@@ -70,12 +69,12 @@ Vitest.describe("operation failures", () => {
       );
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-        "This plant is archived; new operations cannot be added.",
-      );
-      Vitest.expect(
-        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
-      ).toBeInTheDocument();
+      const alert = await Testing.screen.findByRole("alert");
+      const editor = Testing.screen.getByRole("dialog", { name: "Operation editor" });
+
+      const expectedMessage = "This plant is archived; new operations cannot be added.";
+      Vitest.expect(alert).toHaveTextContent(expectedMessage);
+      Vitest.expect(editor).toBeInTheDocument();
     },
   );
 
@@ -93,9 +92,9 @@ Vitest.describe("operation failures", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "The operation could not be saved.",
-    );
+    const alert = await Testing.screen.findByRole("alert");
+
+    Vitest.expect(alert).toHaveTextContent("The operation could not be saved.");
     Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
   });
 
@@ -117,9 +116,9 @@ Vitest.describe("operation failures", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "The journal could not be loaded.",
-    );
+    const alert = await Testing.screen.findByRole("alert");
+
+    Vitest.expect(alert).toHaveTextContent("The journal could not be loaded.");
     Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
     Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -221,12 +220,12 @@ Vitest.describe("operation failures", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     finishSaving({ kind: "logged", id: operationId("new") });
 
+    const editor = await Testing.screen.findByRole("dialog", { name: "Operation editor" });
     await Testing.waitFor(() => {
       Vitest.expect(attentionReads).toBe(2);
-      Vitest.expect(
-        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
-      ).toBeInTheDocument();
     });
+
+    Vitest.expect(editor).toBeInTheDocument();
     Vitest.expect(startViewTransition).not.toHaveBeenCalled();
   });
 });
