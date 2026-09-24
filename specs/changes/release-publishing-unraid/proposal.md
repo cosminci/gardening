@@ -5,18 +5,16 @@
 
 **Date:** 2026-09-24
 
-Publish the first versioned plant-journal image and make its NAS rollout and recovery reproducible without an agent.
+Publish versioned plant-journal images and let the operator manage the NAS installation directly in Unraid.
 
 ## What & Why
 
-- The pipeline can build and publish a private image from a guarded tag, but there is no completed release or repeatable first-deploy and recovery path for the household NAS.
-- A release has an explicit SemVer identity tied to a specific commit and image. The already-published trial candidate proved the registry-to-NAS path; subsequent releases use stable tags from merged main, starting with `v1.0.0`.
-- The NAS retains the journal across operator-led replacements. WUD reports stable releases so an operator can choose when to move to a newer version.
+- The pipeline builds the runtime image and the trial proved private registry access, but the existing proposal adds a `latest` alias and scripted NAS preparation and recovery, while older operational guidance still prefers WUD auto-update; the operator wants none of those.
+- Stable versions from merged main, beginning with `v1.0.0`, are published by a dedicated check. The operator imports an Unraid template once, then edits its selected version when WUD reports an update.
 
 ## Domain / Design Notes
 
-- Release preparation selects an immutable published image and updates saved NAS configuration; Unraid owns container lifecycle when the operator applies that configuration.
-- Recovery preparation owns data restoration while the service is stopped; update discovery owns availability reporting, not rollout.
+- Publishing owns version provenance and registry delivery. Unraid and the operator own image selection, container lifecycle, persistent data, and recovery from existing backups; WUD only reports availability.
 
 ## Invariants
 
@@ -26,22 +24,21 @@ Publish the first versioned plant-journal image and make its NAS rollout and rec
 
 ## Tradeoffs Accepted
 
-- Updates wait for an operator even when WUD reports a new version; this avoids unattended migration and rollout.
-- A previous image alone may not read a database migrated by a newer release. Recovery uses the existing periodic Unraid backups rather than a release-time backup, so restoring may lose care entries recorded since the last backup.
+- Manual recovery from an existing periodic backup may lose entries recorded after it; a previous image alone may not read a database migrated by a newer version.
 
 ## Acceptance Criteria
 
-- Releases use explicit annotated `vMAJOR.MINOR.PATCH` tags from merged main, with SemVer major for incompatible changes, minor for backward-compatible features, and patch for fixes. Pushing a selected tag starts a dedicated publishing check that fully verifies the system before publishing the image. The selected tag must identify HEAD unambiguously; dirty, untagged, mistagged, prerelease, unmerged, or already published versions fail without replacing an existing image.
-- An authenticated publish makes a private GHCR image available for the NAS architecture under write-once version tags and immutable image digests, with commit/version provenance available to operators. `latest` points to the highest published stable SemVer version, including when an older maintenance release is published later. Missing or invalid credentials fail visibly and are never printed.
-- An operator can import an Unraid template, supply read-only registry credentials, select a stable release, and apply the template to start one container with a persistent writable journal volume and a health response reporting the selected version. First-deploy checks confirm LAN and tailnet reachability without public-internet exposure.
-- WUD authenticates to the private registry and shows only newer stable SemVer releases for the running service, without automatically pulling, replacing, or restarting it. An available update remains visible until an operator chooses to deploy; unrelated containers keep their existing update behavior.
-- Deterministic operator commands prepare the saved Unraid configuration for an explicitly selected stable release, check deployments, and restore an available compatible Unraid backup while the service is stopped when recovery needs one. The already-running trial remains checkable and recoverable with its published image until the transition to stable. Only the operator's Apply action starts or replaces the container. After a successful replacement, existing journal entries remain available and the healthy service reports the selected version. Missing backups and failed preparation or health checks exit nonzero; Unraid surfaces pull and startup failures. These actions need no coding-agent service or runtime.
+- Annotated `vMAJOR.MINOR.PATCH` tags on merged main select stable releases (major for incompatible changes, minor for backward-compatible features, patch for fixes). A dedicated tag-push publishing check verifies the system and refuses invalid, prerelease, unmerged, or already-published versions before publication.
+- Authenticated publication provides a private NAS-compatible GHCR image under its stable version tag with commit/version provenance and an immutable digest. No `latest` alias is maintained; missing or invalid credentials fail visibly without exposing them.
+- The operator imports the Unraid template once, supplies read-only registry credentials, selects an existing published version, and applies it to run one container with persistent writable journal data. Unraid reports pull and startup failures; the operator verifies that the service reports the selected version and is reachable on the LAN and tailnet, not the public internet.
+- WUD is configured once on the NAS to report newer stable versions of this service without updating it; no WUD configuration is persisted in the repository. The operator edits the existing Unraid template's version and applies it when ready; journal entries remain available after replacement. Other containers retain their existing update behavior.
+- The already-published trial remains runnable and its version checkable until the operator moves to stable. For incompatible images, the operator stops the service and manually restores a compatible existing Unraid backup before applying a selected version.
 
 ## Doc Sync
 
-- `ci/specs/design.md` — Processing rules, Edge cases, and Invariants for stable releases and manual rollout.
-- `ci/specs/contracts.md` — Version, Publish, and Runtime image contracts for stable tags and provenance.
-- `ci/specs/testing.md` — Traceability and Pipeline validation for the publishing check and deployment behavior.
-- `ci/specs/operational.md` — Versioning & release provenance, Publishing, and Deployment including the publishing check, credentials, historical trial, watch-only WUD, manual rollout, existing Unraid backups, and recovery.
+- `ci/specs/design.md` — Processing rules, Edge cases, and Invariants for stable-only publication and operator-owned rollout.
+- `ci/specs/contracts.md` — Version, Publish, and Runtime image contracts for version-only tags and provenance.
+- `ci/specs/testing.md` — Traceability and Pipeline validation for the publishing check and manual deployment.
+- `ci/specs/operational.md` — Versioning & release provenance, Publishing, and Deployment for the release check, one-time Unraid/WUD setup, manual updates, and recovery.
 - `specs/operational.md` — Deployment topology for the running NAS service, volume, network, and health.
-- `CONTRIBUTING.md` — Working in the repo: release and deploy commands.
+- `CONTRIBUTING.md` — Working in the repo: release commands.
