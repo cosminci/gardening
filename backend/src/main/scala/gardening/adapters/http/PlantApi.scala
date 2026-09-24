@@ -94,30 +94,14 @@ object PlantApi:
     .schema(Codecs.enumSchema[PlantStatus])
 
   private given Schema[PlantStatus] = Codecs.enumSchema[PlantStatus]
+  private given Codec[PlantStatus]  = ConfiguredEnumCodec.derived
 
-  private given Codec[PlantStatus] = ConfiguredEnumCodec.derived
-
-  private given Codec[Species] = Codec.from(
-    // Plant species are output-only in JSON bodies.
-    // $COVERAGE-OFF$
-    Decoder.decodeString.map(Species.apply),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[Nickname] = Codec.from(
-    // Plant nicknames are output-only in JSON bodies.
-    // $COVERAGE-OFF$
-    Decoder.decodeString.map(Nickname.apply),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[Location] = Codec.from(
-    // Plant locations are output-only in JSON bodies.
-    // $COVERAGE-OFF$
-    Decoder.decodeString.map(Location.apply),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.value)
-  )
+  // Plant fields that are output-only in JSON bodies.
+  // $COVERAGE-OFF$
+  private given Codec[Species]  = Codec.from(Decoder.decodeString.map(Species.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[Nickname] = Codec.from(Decoder.decodeString.map(Nickname.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[Location] = Codec.from(Decoder.decodeString.map(Location.apply), Encoder.encodeString.contramap(_.value))
+  // $COVERAGE-ON$
   private given Codec.AsObject[PlantDetails] = ConfiguredCodec.derived
   private given Codec.AsObject[Plant]        = ConfiguredCodec.derived
 

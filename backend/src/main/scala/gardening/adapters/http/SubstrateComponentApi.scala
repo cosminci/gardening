@@ -66,14 +66,8 @@ object SubstrateComponentApi:
     case name        => name
   })
 
-  private given Codec[NomenclatureName] = Codec.from(
-    Decoder.decodeString.map(NomenclatureName.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[NomenclatureInfo] = Codec.from(
-    Decoder.decodeString.map(NomenclatureInfo.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
+  private given Codec[NomenclatureName]     = Codec.from(Decoder.decodeString.map(NomenclatureName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[NomenclatureInfo]     = Codec.from(Decoder.decodeString.map(NomenclatureInfo.apply), Encoder.encodeString.contramap(_.value))
   private given Codec[SubstrateComponentId] = Codec.from(
     // Component identifiers appear only in response bodies.
     // $COVERAGE-OFF$
