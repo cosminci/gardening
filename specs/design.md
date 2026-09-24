@@ -4,11 +4,11 @@
 
 ## Service overview
 
-plant-journal keeps the household's plants, current substrates, and dated care history. The backend persists journal state and periodically measures watering attention; the browser reads current plant details separately, orders active plants by attention, and presents recent and historical operations for logging and editing.
+plant-journal keeps the household's plants, current substrates, and dated care history. The backend persists journal state and periodically measures watering attention; the browser orders the active garden by attention and displays recorded care dates in the archived cemetery, with recent and historical operations.
 
 ## Domain model
 
-- A Plant has descriptive details, an active or archived status, and a current Substrate. Each dated Operation belongs to one Plant: Care records moisture, actions, and optional pesticide selections; Repot records a new substrate. The latest repot by date and identifier determines the current substrate.
+- A Plant has descriptive details, an active or archived status, a current Substrate, and a recorded care range derived from its Operations. Each dated Operation belongs to one Plant: Care records moisture, actions, and optional pesticide selections; Repot records a new substrate. The latest repot by date and identifier determines the current substrate.
 - A Substrate is a mix of percentage shares referencing Substrate-components. Substrate-components and Pesticides are editable nomenclatures with stable identifiers; pesticide type and the moisture and action vocabularies are fixed.
 - An attention projection has a measurement time and, for each active Plant, its identifier and watering assessment. The assessment is unavailable with insufficient history or current, overdue, or red alert when cadence can be inferred. Plant details are read independently of this periodically refreshed measurement.
 
@@ -28,7 +28,10 @@ erDiagram
 
 ## Processing rules
 
-- Plant reads return current details for active plants by default or archived plants on request. They validate all stored plants before status filtering. Attention reads return the latest complete, separately measured identity-and-watering projection for active plants; the browser joins it to current plant details by identifier.
+- Plant reads return current details for active plants by default or archived plants on request. Status filtering precedes decoding, so corruption in an archived plant does not prevent garden reads. Attention reads return the latest complete, separately measured identity-and-watering projection for active plants; the browser joins it to current plant details by identifier.
+- The garden opens with its loaded active count and a separate archived count; the archived list loads only when the cemetery opens. Once loaded, the cemetery count is its list size. Its cards replace watering attention with a RIP marker and the recorded care range as `dd.mm.yyyy` dates, or unknown dates if there are no operations; recent and paginated history and editing remain available.
+- Archiving an active Plant requires an explicit permanent-action confirmation. Success moves that Plant to the cemetery, refreshes the garden and archived count, preserves its history, and restores focus to a persistent control. Cancelling leaves the journal unchanged and restores focus. The cemetery has no restoration or add-operation control.
+- Logging care or repot for an archived Plant is rejected even if its form was opened before archiving. Editing an existing operation's details remains available without changing the operation's date or the recorded care range.
 - The logging form starts at the current local minute, accepts edits, and submits the selected time as an absolute instant. The backend persists that instant with a new operation identifier. Editing changes only kind-specific details, never the recorded time.
 - A latest repot log or edit also persists its substrate as the plant's current mix; an older repot or ordinary care does not. A failed post-write plant read or update compensates the operation write, reporting both failures if compensation also fails. Mutation workflows are serialized.
 - Operations cannot be deleted by users because they record care that already happened.
@@ -44,15 +47,18 @@ erDiagram
 
 ## Edge cases
 
-- An empty journal and an operation-list read for an unknown plant both return an empty collection.
+- An empty garden or cemetery has a zero count; an operation-list read for an unknown plant returns an empty collection.
 - A missing plant or operation in a single-record workflow is distinct from an empty collection.
+- Archiving an unknown or already archived Plant, or failing to save an archive, leaves recorded state unchanged and reports the failure rather than success.
+- An archived-count read failure is shown as a failure, not a guessed count. A date-range read for an unknown Plant returns not found; an existing Plant with no operations has an empty range, and malformed stored dates fail the range read.
 - Editing an operation as the other operation kind is rejected without changing the journal.
 - Editing a missing nomenclature is distinct from a catalog-access failure.
 - An invalid or missing local date remains in the logging form with an accessible error; an invalid or missing absolute date is rejected at the HTTP boundary.
 - An unknown plant status is rejected rather than returning an empty list.
-- Independently malformed persisted rows are all reported together and attributed to their plant or operation identifiers.
+- Independently malformed selected persisted rows are reported together and attributed to their plant or operation identifiers.
 - Database-access failures are reported separately from stored-data corruption.
-- Failed plant or attention reads and unmatched or duplicate attention identifiers produce a load failure rather than an incomplete or stale successful view.
+- Failed plant, cemetery-history, or attention reads and unmatched or duplicate attention identifiers produce a load failure rather than an incomplete or stale successful view.
+- A recently archived Plant still present in a lagging attention measurement does not block garden browsing; unrelated attention mismatches remain failures.
 - API failures remain explicit failures in the browser; the interface does not present failed writes as successful.
 - A startup attention-read failure prevents startup. A later refresh failure retains the last complete projection and does not stop HTTP service.
 - Plants without waterings remain visible with unavailable attention. Equal watering timestamps are ordered by Operation identifier. Unknown attention values fail at the HTTP client boundary rather than rendering a reassuring default.
@@ -72,7 +78,7 @@ erDiagram
 
 ## Component architecture
 
-Domain services own journal behavior and watering assessment through separate, use-case-shaped capability ports. The application injects HTTP, persistence, clock, and identifier adapters into the services without moving business orchestration into those adapters. The SQLite adapter implements both persistence ports: journal reads validate plants and operations, while attention reads select active plant identities and bounded watering dates.
+Domain services own journal behavior and watering assessment through separate, use-case-shaped capability ports. The application injects HTTP, persistence, clock, and identifier adapters into the services without moving business orchestration into those adapters. The SQLite adapter implements both persistence ports: journal reads select plants by status and validate their stored details, while attention reads select active plant identities and bounded watering dates.
 
 ```mermaid
 flowchart LR
