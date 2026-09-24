@@ -14,9 +14,8 @@ object SqliteSubstrateComponentStore:
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
       try
-        val components = trust(
-          connect(transactor)(sql"select id, name, info from substrate_component order by rowid".query[ComponentRow].run()).traverse(toComponent)
-        )
+        val query      = sql"select id, name, info from substrate_component order by rowid"
+        val components = trust(connect(transactor)(query.query[ComponentRow].run()).traverse(toComponent))
         CatalogReadResult.Read(components)
       catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 

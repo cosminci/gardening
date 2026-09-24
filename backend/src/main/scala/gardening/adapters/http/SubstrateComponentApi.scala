@@ -64,12 +64,12 @@ object SubstrateComponentApi:
     Encoder.encodeString.contramap(_.value)
   )
   // Tapir requires a bidirectional codec for the output-only component identifier.
-  // $COVERAGE-OFF$
   private given Codec[SubstrateComponentId] = Codec.from(
+    // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value")),
+    // $COVERAGE-ON$
     Encoder.encodeString.contramap(_.value.toString)
   )
-  // $COVERAGE-ON$
   private given Codec.AsObject[SubstrateComponentData] = ConfiguredCodec.derived
   private given Codec.AsObject[SubstrateComponent]     = ConfiguredCodec.derived
 
