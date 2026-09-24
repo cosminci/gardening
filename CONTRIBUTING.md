@@ -14,7 +14,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 ### Local development
 
-Prerequisites: Python 3, mise-managed Java 25, sbt and Node; free localhost ports 8080 and 5173. Install frontend dependencies once:
+Prerequisites: Python 3, mise-managed Java 25, sbt, Node and npm; free localhost ports 8080 and 5173. Install frontend dependencies once:
 
 ```sh
 mise install
