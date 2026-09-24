@@ -51,7 +51,16 @@ object PlantJournal:
     override def getArchivedCount: ArchivedCountResult = store.getArchivedCount
 
     override def archivePlant(id: PlantId): ArchivePlantResult = operationMutex.exclusively:
-      store.archivePlant(id)
+      store.getPlant(id) match
+        case GetPlantResult.RecordMissing                                                => ArchivePlantResult.PlantMissing
+        case GetPlantResult.ReadFailed(reason)                                           => ArchivePlantResult.ArchiveFailed(reason)
+        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived =>
+          ArchivePlantResult.AlreadyArchived
+        case GetPlantResult.Read(plant) =>
+          val archived = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
+          store.updatePlant(archived) match
+            case UpdatePlantResult.Updated              => ArchivePlantResult.Archived
+            case UpdatePlantResult.UpdateFailed(reason) => ArchivePlantResult.ArchiveFailed(reason)
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)

@@ -63,10 +63,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /plants/{plantId}/archive:
+  /plants/{plantId}/archivals:
     post:
       summary: Permanently archive an active plant
-      operationId: postPlantsPlantidArchive
+      operationId: postPlantsPlantidArchivals
       parameters:
       - name: plantId
         in: path
@@ -105,10 +105,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttentionProjection'
-  /plants/{plantId}/operations:
+  /operations/plants/{plantId}:
     get:
       summary: List a bounded page of plant operations
-      operationId: getPlantsPlantidOperations
+      operationId: getOperationsPlantsPlantid
       parameters:
       - name: plantId
         in: path
@@ -154,7 +154,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       summary: Log a plant operation
-      operationId: postPlantsPlantidOperations
+      operationId: postOperationsPlantsPlantid
       parameters:
       - name: plantId
         in: path
@@ -198,10 +198,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /plants/{plantId}/operation-date-range:
+  /operations/plants/{plantId}/date-range:
     get:
       summary: Read the first and last recorded operation dates
-      operationId: getPlantsPlantidOperation-date-range
+      operationId: getOperationsPlantsPlantidDate-range
       parameters:
       - name: plantId
         in: path

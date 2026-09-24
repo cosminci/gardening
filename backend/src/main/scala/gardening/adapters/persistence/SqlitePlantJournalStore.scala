@@ -18,13 +18,13 @@ import java.time.format.DateTimeFormatterBuilder
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
-object SqlitePlantStore:
+object SqlitePlantJournalStore:
 
   private val operationDateFormatter = DateTimeFormatterBuilder().appendInstant(9).toFormatter
 
-  def make(transactor: Transactor): PlantJournalStore & PlantAttentionStore = LiveSqlitePlantStore(transactor)
+  def make(transactor: Transactor): PlantJournalStore & PlantAttentionStore = LiveSqlitePlantJournalStore(transactor)
 
-  private class LiveSqlitePlantStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
+  private class LiveSqlitePlantJournalStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
 
     override def getPlants(status: PlantStatus): GetPlantsResult =
       try
@@ -48,23 +48,14 @@ object SqlitePlantStore:
           // $COVERAGE-ON$
       catch case error: SqlException => ArchivedCountResult.ReadFailed(error)
 
-    override def archivePlant(id: PlantId): ArchivePlantResult =
-      try
-        transact(transactor):
-          sql"update plant set status = 'Archived' where id = ${id.value} and status = 'Active'".update.run() match
-            case 1 => ArchivePlantResult.Archived
-            case _ =>
-              sql"select status from plant where id = ${id.value}".query[String].run().headOption match
-                case Some(_) => ArchivePlantResult.AlreadyArchived
-                case None    => ArchivePlantResult.PlantMissing
-      catch case error: SqlException => ArchivePlantResult.ArchiveFailed(error)
-
     override def getPlant(id: PlantId): GetPlantResult =
       try
         connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
           case None      => GetPlantResult.RecordMissing
           case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
-      catch case error: SqlException => GetPlantResult.ReadFailed(error)
+      catch
+        case error: SqlException       => GetPlantResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetPlantResult.ReadFailed(error)
 
     override def updatePlant(plant: Plant): UpdatePlantResult =
       try
@@ -250,7 +241,7 @@ object SqlitePlantStore:
                location = ${details.location.value},
                substrate = ${details.substrate.asJson.noSpaces},
                status = ${details.status.toString}
-           where id = ${plant.id.value} and status = ${details.status.toString}"""
+           where id = ${plant.id.value} and (status = ${details.status.toString} or (status = 'Active' and ${details.status.toString} = 'Archived'))"""
 
     private def updateOperationRow(operationId: String, details: OperationDetails) =
       val (operationKind, payload) = encodeOperationDetails(details)

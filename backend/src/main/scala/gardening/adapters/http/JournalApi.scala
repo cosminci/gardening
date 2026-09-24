@@ -19,7 +19,6 @@ import sttp.tapir.server.ServerEndpoint
 import java.time.Instant
 import scala.deriving.Mirror
 import scala.util.Try
-import scala.util.chaining.scalaUtilChainingOps
 
 final private case class LoggedOperation(id: String) derives Codec.AsObject
 final private case class ArchivedPlantCount(count: Long) derives Codec.AsObject
@@ -36,24 +35,24 @@ object JournalApi:
   private val getArchivedCountEndpoint =
     journalEndpoint.get.in("plants" / "archived" / "count").out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
   private val archivePlantEndpoint =
-    endpoint.post.in("plants" / path[String]("plantId") / "archive").errorOut(JournalError.plantRequest)
+    endpoint.post.in("plants" / path[String]("plantId") / "archivals").errorOut(JournalError.plantRequest)
       .out(statusCode(StatusCode.NoContent)).summary("Permanently archive an active plant")
   private val getOperationsEndpoint =
     journalEndpoint.get
-      .in("plants" / path[String]("plantId") / "operations")
+      .in("operations" / "plants" / path[String]("plantId"))
       .in(query[OperationOffset]("offset").default(0))
       .in(query[OperationPageSize]("pageSize").default(3))
       .out(jsonBody[OperationPage])
       .summary("List a bounded page of plant operations")
 
   private val getOperationDateRangeEndpoint =
-    endpoint.get.in("plants" / path[String]("plantId") / "operation-date-range")
+    endpoint.get.in("operations" / "plants" / path[String]("plantId") / "date-range")
       .errorOut(JournalError.plantRead)
       .out(jsonBody[OperationDateRange])
       .summary("Read the first and last recorded operation dates")
 
   private val logOperationEndpoint =
-    endpoint.post.in("plants" / path[String]("plantId") / "operations").in(jsonBody[LogOperationRequest])
+    endpoint.post.in("operations" / "plants" / path[String]("plantId")).in(jsonBody[LogOperationRequest])
       .errorOut(JournalError.plantRequest)
       .out(statusCode(StatusCode.Created)).out(jsonBody[LoggedOperation]).summary("Log a plant operation")
 
@@ -80,7 +79,9 @@ object JournalApi:
       archivePlantEndpoint.handle: plantId =>
         val id = PlantId(plantId)
         journal.archivePlant(id) match
-          case ArchivePlantResult.Archived         => attention.removeArchivedPlant(id).pipe(_.asRight)
+          case ArchivePlantResult.Archived =>
+            val _ = attention.refreshAll
+            ().asRight
           case ArchivePlantResult.PlantMissing     => JournalError.plantMissing.asLeft
           case ArchivePlantResult.AlreadyArchived  => JournalError.plantArchived.asLeft
           case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft,

@@ -60,10 +60,8 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
 
   private def buildServer(refs: Refs) =
     val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection           = refs.projection
-      override def refreshAll: RefreshAttentionResult     = fail("HTTP must not refresh attention")
-      override def removeArchivedPlant(id: PlantId): Unit =
-        fail("reading attention must not remove plants")
+      override def current: AttentionProjection       = refs.projection
+      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(AttentionApi.serverEndpoints(using attention))
       .backend()

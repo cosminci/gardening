@@ -37,7 +37,7 @@ export const makeHttpJournalClient = (
 
     async getOperationDates(id): Promise<Journal.GetOperationDatesResult> {
       try {
-        const { data, error } = await client.GET("/plants/{plantId}/operation-date-range", {
+        const { data, error } = await client.GET("/operations/plants/{plantId}/date-range", {
           params: { path: { plantId: id } },
         });
         if (data === undefined) return { kind: "readFailed", reason: requestFailure(error) };
@@ -64,7 +64,7 @@ export const makeHttpJournalClient = (
 
     async archivePlant(id): Promise<Journal.ArchivePlantResult> {
       try {
-        const { error, response } = await client.POST("/plants/{plantId}/archive", {
+        const { error, response } = await client.POST("/plants/{plantId}/archivals", {
           params: { path: { plantId: id } },
         });
         if (response.status === 204) return { kind: "archived" };
@@ -78,7 +78,7 @@ export const makeHttpJournalClient = (
 
     async getOperations(id, window): Promise<Journal.GetOperationsResult> {
       try {
-        const { data, error } = await client.GET("/plants/{plantId}/operations", {
+        const { data, error } = await client.GET("/operations/plants/{plantId}", {
           params: {
             path: { plantId: id },
             query: { offset: window.offset, pageSize: window.size },
@@ -100,7 +100,7 @@ export const makeHttpJournalClient = (
 
     async logOperation(id, date, details): Promise<Journal.LogOperationResult> {
       try {
-        const { data, error, response } = await client.POST("/plants/{plantId}/operations", {
+        const { data, error, response } = await client.POST("/operations/plants/{plantId}", {
           params: { path: { plantId: id } },
           body: { date, details: toWireDetails(details) },
         });

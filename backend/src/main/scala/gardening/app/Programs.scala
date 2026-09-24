@@ -1,6 +1,6 @@
 package gardening.app
 
-import gardening.adapters.persistence.{SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateComponentStore}
+import gardening.adapters.persistence.{SqlitePesticideStore, SqlitePlantJournalStore, SqliteSubstrateComponentStore}
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.domain.attention.PlantAttentionMonitor
 import gardening.domain.journal.PlantJournal
@@ -17,7 +17,7 @@ final case class Programs(
 object Programs:
 
   def make(resources: AppResources): Either[Throwable, Programs] =
-    val store          = SqlitePlantStore.make(resources.transactor)
+    val store          = SqlitePlantJournalStore.make(resources.transactor)
     val substrateStore = SqliteSubstrateComponentStore.make(resources.transactor)
     val pesticideStore = SqlitePesticideStore.make(resources.transactor)
     PlantAttentionMonitor.make(using store, SystemClock).map: attention =>

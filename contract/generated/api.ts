@@ -55,7 +55,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/archive": {
+    "/plants/{plantId}/archivals": {
         parameters: {
             query?: never;
             header?: never;
@@ -65,7 +65,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Permanently archive an active plant */
-        post: operations["postPlantsPlantidArchive"];
+        post: operations["postPlantsPlantidArchivals"];
         delete?: never;
         options?: never;
         head?: never;
@@ -89,7 +89,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operations": {
+    "/operations/plants/{plantId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -97,17 +97,17 @@ export interface paths {
             cookie?: never;
         };
         /** List a bounded page of plant operations */
-        get: operations["getPlantsPlantidOperations"];
+        get: operations["getOperationsPlantsPlantid"];
         put?: never;
         /** Log a plant operation */
-        post: operations["postPlantsPlantidOperations"];
+        post: operations["postOperationsPlantsPlantid"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operation-date-range": {
+    "/operations/plants/{plantId}/date-range": {
         parameters: {
             query?: never;
             header?: never;
@@ -115,7 +115,7 @@ export interface paths {
             cookie?: never;
         };
         /** Read the first and last recorded operation dates */
-        get: operations["getPlantsPlantidOperation-date-range"];
+        get: operations["getOperationsPlantsPlantidDate-range"];
         put?: never;
         post?: never;
         delete?: never;
@@ -514,7 +514,7 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidArchive: {
+    postPlantsPlantidArchivals: {
         parameters: {
             query?: never;
             header?: never;
@@ -576,7 +576,7 @@ export interface operations {
             };
         };
     };
-    getPlantsPlantidOperations: {
+    getOperationsPlantsPlantid: {
         parameters: {
             query?: {
                 offset?: number;
@@ -617,7 +617,7 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidOperations: {
+    postOperationsPlantsPlantid: {
         parameters: {
             query?: never;
             header?: never;
@@ -675,7 +675,7 @@ export interface operations {
             };
         };
     };
-    "getPlantsPlantidOperation-date-range": {
+    "getOperationsPlantsPlantidDate-range": {
         parameters: {
             query?: never;
             header?: never;
