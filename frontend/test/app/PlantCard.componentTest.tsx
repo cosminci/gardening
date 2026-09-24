@@ -56,6 +56,7 @@ const emptyCardProps = {
     Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
   onLog: () => undefined,
   onArchive: () => undefined,
+  onEditPlant: () => undefined,
   onEdit: () => undefined,
   operationChange: undefined,
 };
@@ -107,6 +108,7 @@ describe("plant cards", () => {
         operationChange={undefined}
         onLog={() => undefined}
         onArchive={() => undefined}
+        onEditPlant={() => undefined}
         onEdit={onEdit}
       />
     ));
@@ -157,6 +159,7 @@ describe("plant cards", () => {
         Promise.resolve({ kind: "read", page: { operations: [], hasNextPage: false } } as const),
       onLog: () => undefined,
       onArchive: () => undefined,
+      onEditPlant: () => undefined,
       onEdit: () => undefined,
       operationChange: undefined,
     };
@@ -227,6 +230,25 @@ describe("plant cards", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
 
     expect(onArchive).toHaveBeenCalledOnce();
+  });
+
+  it("should offer editing from an active plant summary", () => {
+    const onEditPlant = vi.fn();
+
+    render(() => (
+      <PlantCard {...emptyCardProps} attention={currentFicusAttention} onEditPlant={onEditPlant} />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+
+    expect(onEditPlant).toHaveBeenCalledOnce();
+    expect(onEditPlant).toHaveBeenCalledWith(ficusPlant);
+  });
+
+  it("should not offer editing or archiving a cemetery plant", () => {
+    render(() => <PlantCard {...archivedCardProps} />);
+
+    expect(screen.queryByRole("button", { name: "Edit Fern" })).not.toBeInTheDocument();
   });
 
   it(`should render ${unknownFicusAttention.watering.kind} watering with an unavailable cadence`, () => {

@@ -73,6 +73,36 @@ export const makeHttpPlantClient = (
         return { kind: "archiveFailed", reason: requestFailure(error) };
       }
     },
+
+    async editPlant(plantId, details): Promise<Journal.EditPlantResult> {
+      try {
+        const { error, response } = await client.PATCH("/plants/{plantId}", {
+          params: { path: { plantId } },
+          headers: { "Content-Type": "application/json-patch+json" },
+          body: [
+            {
+              op: "replace",
+              path: "/details",
+              value: {
+                species: details.species,
+                nickname: details.maybeNickname,
+                location: details.location,
+                substrate: toWireSubstrate(details.substrate),
+              },
+            },
+          ],
+        });
+        if (response.status === 204) return { kind: "edited" };
+        if (response.status === 404) return { kind: "plantMissing" };
+        if (response.status === 409) return { kind: "plantArchived" };
+        if (response.status === 422) return { kind: "unknownComponent" };
+        if (response.status === 503)
+          return { kind: "catalogReadFailed", reason: requestFailure(error) };
+        return { kind: "editFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "editFailed", reason: requestFailure(error) };
+      }
+    },
   };
 };
 

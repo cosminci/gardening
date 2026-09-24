@@ -9,7 +9,13 @@ import "./form-fields.css";
 import "./operation-form.css";
 import "./sheet.css";
 
+export type PlantTarget =
+  { readonly kind: "add" } | { readonly kind: "edit"; readonly plant: Journal.Plant };
+
+export const editPlantControlId = (plantId: Journal.PlantId) => `edit-plant-${plantId}`;
+
 interface PlantSheetProps {
+  readonly target: PlantTarget;
   readonly components: readonly Journal.SubstrateComponent[];
   readonly saveError: string | undefined;
   readonly completed: boolean;
@@ -28,12 +34,20 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   let dialog!: HTMLElement;
   let collapseButton!: HTMLButtonElement;
   let saveButton!: HTMLButtonElement;
+  const isEdit = untrack(() => props.target.kind === "edit");
+  const initialDetails = untrack(() =>
+    props.target.kind === "edit" ? props.target.plant.details : undefined,
+  );
   const firstComponent = untrack(() => props.components[0]);
-  const [species, setSpecies] = createSignal("");
-  const [nickname, setNickname] = createSignal("");
-  const [location, setLocation] = createSignal("");
+  const [species, setSpecies] = createSignal(initialDetails?.species ?? "");
+  const [nickname, setNickname] = createSignal(initialDetails?.maybeNickname ?? "");
+  const [location, setLocation] = createSignal(initialDetails?.location ?? "");
   const [parts, setParts] = createSignal<SubstratePartInput[]>(
-    firstComponent === undefined ? [] : [{ component: firstComponent.id, share: 100 }],
+    initialDetails !== undefined
+      ? initialDetails.substrate.map((part) => ({ component: part.component, share: part.share }))
+      : firstComponent === undefined
+        ? []
+        : [{ component: firstComponent.id, share: 100 }],
   );
   const [validationError, setValidationError] = createSignal<string>();
   const [submitting, setSubmitting] = createSignal(false);
@@ -145,7 +159,13 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
       element.inert = false;
     });
     window.removeEventListener("keydown", onKeyDown);
-    document.getElementById(props.completed ? "garden-toggle" : "add-plant")?.focus();
+    const returnFocusId =
+      props.target.kind === "edit"
+        ? editPlantControlId(props.target.plant.id)
+        : props.completed
+          ? "garden-toggle"
+          : "add-plant";
+    document.getElementById(returnFocusId)?.focus();
   });
 
   return (
@@ -168,12 +188,12 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
       >
         <form
           class="operation-form"
-          aria-label="Add plant"
+          aria-label={isEdit ? "Edit plant" : "Add plant"}
           noValidate
           onSubmit={(event) => void submit(event)}
         >
           <header class="operation-form__header">
-            <h2>Add plant</h2>
+            <h2>{isEdit ? "Edit plant" : "Add plant"}</h2>
             <button
               ref={(element) => {
                 collapseButton = element;
@@ -244,7 +264,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
                 type="submit"
                 disabled={submitting()}
               >
-                {submitting() ? "Saving…" : "Save plant"}
+                {submitting() ? "Saving…" : isEdit ? "Save changes" : "Save plant"}
               </button>
             </footer>
           </div>

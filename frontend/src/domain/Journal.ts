@@ -196,6 +196,14 @@ export type ArchivePlantResult =
   | { readonly kind: "alreadyArchived" }
   | { readonly kind: "archiveFailed"; readonly reason: Error };
 
+export type EditPlantResult =
+  | { readonly kind: "edited" }
+  | { readonly kind: "plantMissing" }
+  | { readonly kind: "plantArchived" }
+  | { readonly kind: "unknownComponent" }
+  | { readonly kind: "catalogReadFailed"; readonly reason: Error }
+  | { readonly kind: "editFailed"; readonly reason: Error };
+
 export type GetOperationsResult =
   | { readonly kind: "read"; readonly page: OperationPage }
   | { readonly kind: "readFailed"; readonly reason: Error };

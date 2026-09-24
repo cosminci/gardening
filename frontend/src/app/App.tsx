@@ -22,7 +22,7 @@ import { recentOperationCount, type OperationHistoryChange } from "./OperationHi
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { orderPlantAttention } from "./PlantAttentionOrdering";
 import { PlantCard } from "./PlantCard";
-import { PlantSheet } from "./PlantSheet";
+import { PlantSheet, editPlantControlId, type PlantTarget } from "./PlantSheet";
 import "./app.css";
 
 interface AppProps {
@@ -68,7 +68,7 @@ export const App: Component<AppProps> = (props) => {
   const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
-  const [plantSheetOpen, setPlantSheetOpen] = createSignal(false);
+  const [plantTarget, setPlantTarget] = createSignal<PlantTarget>();
   const [plantSheetCompleted, setPlantSheetCompleted] = createSignal(false);
   const [plantSaveError, setPlantSaveError] = createSignal<string>();
   const [creationReloadFailed, setCreationReloadFailed] = createSignal(false);
@@ -251,7 +251,14 @@ export const App: Component<AppProps> = (props) => {
     return undefined;
   };
 
-  const savePlant = async (details: Journal.NewPlantDetails) => {
+  const catalogErrorMessage = (result: { kind: string }) =>
+    result.kind === "unknownComponent"
+      ? "Choose known substrate components."
+      : result.kind === "catalogReadFailed"
+        ? "The substrate catalog could not be read. Try again."
+        : undefined;
+
+  const createNewPlant = async (details: Journal.NewPlantDetails) => {
     setPlantSaveError(undefined);
     let result: Journal.CreatePlantResult;
     try {
@@ -261,22 +268,41 @@ export const App: Component<AppProps> = (props) => {
       return;
     }
     if (result.kind !== "created") {
-      setPlantSaveError(
-        result.kind === "unknownComponent"
-          ? "Choose known substrate components."
-          : result.kind === "catalogReadFailed"
-            ? "The substrate catalog could not be read. Try again."
-            : "The plant could not be saved.",
-      );
+      setPlantSaveError(catalogErrorMessage(result) ?? "The plant could not be saved.");
       return;
     }
     setPlantSheetCompleted(true);
-    setPlantSheetOpen(false);
+    setPlantTarget(undefined);
     selectView("garden");
     setCreationReloadFailed(false);
     await loadJournal(false, latestAttention).catch(() => setView("failed"));
     if (view() === "failed") setCreationReloadFailed(true);
     document.getElementById("garden-toggle")?.focus();
+  };
+
+  const editExistingPlant = async (plant: Journal.Plant, details: Journal.NewPlantDetails) => {
+    setPlantSaveError(undefined);
+    let result: Journal.EditPlantResult;
+    try {
+      result = await props.plants.editPlant(plant.id, details);
+    } catch {
+      setPlantSaveError("The plant could not be saved.");
+      return;
+    }
+    if (result.kind !== "edited") {
+      setPlantSaveError(
+        catalogErrorMessage(result) ??
+          (result.kind === "plantMissing"
+            ? "This plant no longer exists."
+            : result.kind === "plantArchived"
+              ? "This plant is archived and can no longer be edited."
+              : "The plant could not be saved."),
+      );
+      return;
+    }
+    setPlantTarget(undefined);
+    await loadJournal().catch(() => setView("failed"));
+    document.getElementById(editPlantControlId(plant.id))?.focus();
   };
 
   const saveOperation = async (
@@ -402,7 +428,7 @@ export const App: Component<AppProps> = (props) => {
         onAddPlant={() => {
           setPlantSaveError(undefined);
           setPlantSheetCompleted(false);
-          setPlantSheetOpen(true);
+          setPlantTarget({ kind: "add" });
         }}
       />
       <Switch>
@@ -450,6 +476,10 @@ export const App: Component<AppProps> = (props) => {
                             setArchiveCompleted(false);
                             setArchiveTarget(entry().attention.plant);
                           }}
+                          onEditPlant={(plant) => {
+                            setPlantSaveError(undefined);
+                            setPlantTarget({ kind: "edit", plant });
+                          }}
                           onEdit={(operation) => {
                             setSaveError(undefined);
                             setFormTarget({ kind: "edit", operation });
@@ -484,16 +514,25 @@ export const App: Component<AppProps> = (props) => {
           </section>
         </Match>
       </Switch>
-      <Show when={plantSheetOpen()}>
-        <PlantSheet
-          components={substrateComponents()}
-          saveError={plantSaveError()}
-          completed={plantSheetCompleted()}
-          onSubmit={savePlant}
-          onAddComponent={addSubstrateComponent}
-          onEditComponent={editSubstrateComponent}
-          onCancel={() => setPlantSheetOpen(false)}
-        />
+      <Show when={plantTarget()} keyed>
+        {(target) => (
+          <PlantSheet
+            target={target}
+            components={substrateComponents()}
+            saveError={plantSaveError()}
+            completed={plantSheetCompleted()}
+            onSubmit={(details) =>
+              target.kind === "add"
+                ? createNewPlant(details)
+                : editExistingPlant(target.plant, details)
+            }
+            onAddComponent={addSubstrateComponent}
+            onEditComponent={editSubstrateComponent}
+            onCancel={() => {
+              setPlantTarget(undefined);
+            }}
+          />
+        )}
       </Show>
       <Show when={formTarget()} keyed>
         {(target) => (

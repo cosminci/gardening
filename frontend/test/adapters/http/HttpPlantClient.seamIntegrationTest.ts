@@ -198,4 +198,72 @@ describe("HttpPlantClient", () => {
     );
     expect(offlineResult).toMatchObject({ kind: "archiveFailed" });
   });
+
+  it("should patch a plant's details directly without logging an operation", async () => {
+    const requests: Request[] = [];
+    const client = makeHttpPlantClient(
+      respondingWith([new Response(null, { status: 204 })], requests),
+    );
+    const plantId = Journal.plantId("p1");
+    const details: Journal.NewPlantDetails = {
+      species: Journal.species("Monstera deliciosa"),
+      maybeNickname: Journal.nickname("Monty"),
+      location: Journal.location("Living room"),
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    };
+
+    const result = await client.editPlant(plantId, details);
+    const body: unknown = await requests[0]?.json();
+
+    expect(result).toEqual({ kind: "edited" });
+    expect(requests[0]?.method).toBe("PATCH");
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe("/plants/p1");
+    expect(requests[0]?.headers.get("content-type")).toBe("application/json-patch+json");
+    expect(body).toEqual([
+      {
+        op: "replace",
+        path: "/details",
+        value: {
+          species: "Monstera deliciosa",
+          nickname: "Monty",
+          location: "Living room",
+          substrate: [{ componentId: perliteId, share: 100 }],
+        },
+      },
+    ]);
+  });
+
+  it("should distinguish missing, not-active, and validation failures when editing", async () => {
+    const client = makeHttpPlantClient(
+      respondingWith([
+        jsonResponse({ message: "missing" }, 404),
+        jsonResponse({ message: "already archived" }, 409),
+        jsonResponse({ message: "unknown substrate component" }, 422),
+        jsonResponse({ message: "catalog unavailable" }, 503),
+        jsonResponse({ message: "edit unavailable" }, 500),
+      ]),
+    );
+    const offline = makeHttpPlantClient(respondingWith([new Error("offline")]));
+    const plantId = Journal.plantId("p1");
+    const details: Journal.NewPlantDetails = {
+      species: Journal.species("Aloe"),
+      maybeNickname: null,
+      location: Journal.location("Office"),
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    };
+
+    const missing = await client.editPlant(plantId, details);
+    const archived = await client.editPlant(plantId, details);
+    const unknown = await client.editPlant(plantId, details);
+    const catalogFailure = await client.editPlant(plantId, details);
+    const failed = await client.editPlant(plantId, details);
+    const offlineResult = await offline.editPlant(plantId, details);
+
+    expect(missing).toEqual({ kind: "plantMissing" });
+    expect(archived).toEqual({ kind: "plantArchived" });
+    expect(unknown).toEqual({ kind: "unknownComponent" });
+    expect(catalogFailure).toMatchObject({ kind: "catalogReadFailed" });
+    expect(failed).toMatchObject({ kind: "editFailed" });
+    expect(offlineResult).toMatchObject({ kind: "editFailed" });
+  });
 });
