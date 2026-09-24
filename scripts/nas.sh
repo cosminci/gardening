@@ -23,9 +23,11 @@ fi
 if [[ ! $port =~ ^[1-9][0-9]*$ || ! $health_attempts =~ ^[1-9][0-9]*$ ]]; then
   fail 'port and health attempts must be positive integers'
 fi
-if [[ $data_dir != /* || $data_dir == / || -L $data_dir ]]; then
+if [[ $data_dir != /* || $data_dir == / || -L $data_dir ||
+  $data_dir =~ (^|/)\.\.?(/|$) ]]; then
   fail 'journal data must be an absolute, non-symlink directory'
 fi
+data_dir=${data_dir%/}
 if [[ $action == deploy && $# -ne 2 || $action == recover && $# -ne 3 ]]; then
   fail 'usage: nas.sh deploy VERSION | nas.sh recover VERSION APPDATA_BACKUP_ARCHIVE'
 fi
@@ -51,18 +53,19 @@ wait_for_health() {
     fi
     if ((attempt < health_attempts)); then sleep 2; fi
   done
-  fail "version $version did not become healthy; inspect the container before recovery"
+  printf 'plant-journal: version %s did not become healthy\n' "$version" >&2
+  return 1
 }
 
 start_container() {
-  mkdir -p "$data_dir"
-  chown 1000:1000 "$data_dir"
+  mkdir -p "$data_dir" || return 1
+  chown 1000:1000 "$data_dir" || return 1
   docker run --detach --name "$name" --restart unless-stopped --network bridge \
     --publish "$port:8080" --volume "$data_dir:/data:rw" \
     --label "wud.watch=$watch" \
     --label 'wud.tag.include=^\d+\.\d+\.\d+$' \
     --label wud.trigger.exclude=docker.local \
-    "$image" >/dev/null
+    "$image" >/dev/null || return 1
   wait_for_health
 }
 
@@ -88,7 +91,9 @@ if [[ $action == deploy ]]; then
     docker rename "$name" "$name-previous"
     had_previous=true
   fi
-  start_container
+  if ! start_container; then
+    fail 'deployment failed; the previous container is retained for recovery'
+  fi
   if [[ $had_previous == true ]]; then docker rm "$name-previous" >/dev/null; fi
   exit 0
 fi
@@ -96,33 +101,60 @@ fi
 archive=$3
 if [[ ! -f $archive ]]; then fail "recovery backup not found: $archive"; fi
 entries=$(tar -tzf "$archive") || fail "cannot read recovery backup: $archive"
+relative_data_dir=${data_dir#/}
+IFS='/' read -r -a data_path_parts <<< "$relative_data_dir"
+strip_components=${#data_path_parts[@]}
 has_database=false
 while IFS= read -r entry; do
   entry=${entry#/}
   entry=${entry#./}
-  if [[ $entry != mnt/user/appdata/plant-journal &&
-    $entry != mnt/user/appdata/plant-journal/* || $entry =~ (^|/)\.\.(/|$) ]]; then
+  if [[ $entry != "$relative_data_dir" &&
+    $entry != "$relative_data_dir/"* || $entry =~ (^|/)\.\.(/|$) ]]; then
     fail 'recovery archive contains files outside the plant-journal appdata directory'
   fi
-  if [[ $entry == mnt/user/appdata/plant-journal/gardening.db ]]; then has_database=true; fi
+  if [[ $entry == "$relative_data_dir/gardening.db" ]]; then has_database=true; fi
 done <<< "$entries"
 if [[ $has_database != true ]]; then fail 'recovery archive has no journal database'; fi
+if container_exists "$name-before-recovery"; then
+  fail 'an earlier recovery is unfinished; inspect plant-journal-before-recovery first'
+fi
 
 docker pull "$image"
 if container_exists "$name"; then docker stop "$name" >/dev/null; fi
 mkdir -p "$data_dir"
-safety_dir=$data_dir.before-restore.$(date +%s)
+safety_dir=$data_dir.before-restore.$(date +%s).$$
 if [[ -e $safety_dir ]]; then fail "prior data preservation directory already exists: $safety_dir"; fi
 mv "$data_dir" "$safety_dir"
 mkdir -p "$data_dir"
-if ! tar -xzf "$archive" -C "$data_dir" --strip-components=4; then
+if ! tar -xzf "$archive" -C "$data_dir" --strip-components="$strip_components"; then
   mv "$data_dir" "$data_dir.failed-restore.$(date +%s)"
   mv "$safety_dir" "$data_dir"
   if container_exists "$name"; then docker start "$name" >/dev/null; fi
   fail 'backup extraction failed; original journal data was restored'
 fi
 chown -R 1000:1000 "$data_dir"
-if container_exists "$name"; then docker rm "$name" >/dev/null; fi
-if container_exists "$name-previous"; then docker rm "$name-previous" >/dev/null; fi
-start_container
+had_current=false
+had_previous=false
+if container_exists "$name"; then
+  docker rename "$name" "$name-before-recovery"
+  had_current=true
+fi
+if container_exists "$name-previous"; then had_previous=true; fi
+if ! start_container; then
+  if container_exists "$name"; then docker rm -f "$name" >/dev/null; fi
+  failed_dir=$data_dir.failed-recovery.$(date +%s).$$
+  mv "$data_dir" "$failed_dir"
+  mv "$safety_dir" "$data_dir"
+  if [[ $had_previous == true ]]; then
+    docker rename "$name-previous" "$name"
+    docker start "$name" >/dev/null || fail 'recovery failed; previous container could not restart'
+    if [[ $had_current == true ]]; then docker rm "$name-before-recovery" >/dev/null; fi
+  elif [[ $had_current == true ]]; then
+    docker rename "$name-before-recovery" "$name"
+    docker start "$name" >/dev/null || fail 'recovery failed; original container could not restart'
+  fi
+  fail "recovery failed; original journal restored, failed data retained at $failed_dir"
+fi
+if [[ $had_current == true ]]; then docker rm "$name-before-recovery" >/dev/null; fi
+if [[ $had_previous == true ]]; then docker rm "$name-previous" >/dev/null; fi
 printf 'plant-journal: data before restore remains at %s\n' "$safety_dir"

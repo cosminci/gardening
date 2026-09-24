@@ -81,17 +81,8 @@ describe("NAS deployment script", () => {
 
   it("should restore a selected periodic appdata backup before starting an older version", () => {
     const workspace = buildNasWorkspace();
-    const backupDir = join(workspace, "backup", "mnt", "user", "appdata", "plant-journal");
-    const archive = join(workspace, "plant-journal.tar.gz");
-    mkdirSync(backupDir, { recursive: true });
-    writeFileSync(join(backupDir, "gardening.db"), "compatible-backup");
+    const archive = buildBackupArchive(workspace, "compatible-backup");
     writeFileSync(join(workspace, "data", "gardening.db"), "current-journal");
-    const tar = spawnSync(
-      "tar",
-      ["-czf", archive, "-C", join(workspace, "backup"), "mnt/user/appdata/plant-journal"],
-      { encoding: "utf8" },
-    );
-    expect(tar.status).toBe(0);
 
     const result = runNas(workspace, ["recover", "0.9.0", archive], {
       existing: true,
@@ -107,6 +98,23 @@ describe("NAS deployment script", () => {
     expect(readFileSync(join(workspace, preservedDir ?? "", "gardening.db"), "utf8")).toBe(
       "current-journal",
     );
+  });
+
+  it("should restore the running container and journal when recovered health fails", () => {
+    const workspace = buildNasWorkspace();
+    const archive = buildBackupArchive(workspace, "compatible-backup");
+    writeFileSync(join(workspace, "data", "gardening.db"), "current-journal");
+
+    const result = runNas(workspace, ["recover", "0.9.0", archive], {
+      existing: true,
+      healthVersion: "incorrect-version",
+    });
+
+    const commands = readCommands(workspace);
+    expect(result.status).not.toBe(0);
+    expect(commands).toContain("docker rename plant-journal-before-recovery plant-journal");
+    expect(commands).toContain("docker start plant-journal");
+    expect(readFileSync(join(workspace, "data", "gardening.db"), "utf8")).toBe("current-journal");
   });
 
   it("should refuse invalid versions and missing recovery backups before replacing anything", () => {
@@ -151,6 +159,21 @@ afterEach(() => {
   workspaces.length = 0;
 });
 
+function buildBackupArchive(workspace: string, journal: string): string {
+  const relativeDataDir = join(workspace, "data").replace(/^\//, "");
+  const backupDir = join(workspace, "backup", relativeDataDir);
+  const archive = join(workspace, "plant-journal.tar.gz");
+  mkdirSync(backupDir, { recursive: true });
+  writeFileSync(join(backupDir, "gardening.db"), journal);
+  const result = spawnSync(
+    "tar",
+    ["-czf", archive, "-C", join(workspace, "backup"), relativeDataDir],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error(`Cannot make test backup: ${result.stderr}`);
+  return archive;
+}
+
 function buildNasWorkspace(): string {
   const workspace = mkdtempSync(join(tmpdir(), "plant-journal-nas-"));
   workspaces.push(workspace);
@@ -161,7 +184,12 @@ function buildNasWorkspace(): string {
     `#!/bin/sh
 printf "docker %s\\n" "$*" >> "$NAS_LOG"
 if [ "$1" = "container" ] && [ "$2" = "inspect" ]; then
-  if [ "$3" = "plant-journal-previous" ]; then [ "$NAS_PREVIOUS" = "true" ]; else [ "$NAS_EXISTING" = "true" ]; fi
+  case "$3" in
+    plant-journal-previous) [ "$NAS_PREVIOUS" = "true" ] ;;
+    plant-journal-before-recovery) [ "$NAS_BEFORE_RECOVERY" = "true" ] ;;
+    plant-journal) [ "$NAS_EXISTING" = "true" ] ;;
+    *) exit 1 ;;
+  esac
 elif [ "$1" = "inspect" ]; then
   case "$3" in
     *Mounts*) printf "%s\\n" "$NAS_DATA_DIR" ;;
@@ -211,6 +239,7 @@ function runNas(
       NAS_DATA_DIR: join(workspace, "data"),
       NAS_EXISTING: String(options.existing ?? false),
       NAS_PREVIOUS: String(options.previous ?? false),
+      NAS_BEFORE_RECOVERY: "false",
       NAS_FAIL_PULL: String(options.failPull ?? false),
       NAS_HEALTH_VERSION: options.healthVersion ?? "",
       PLANT_JOURNAL_DATA_DIR: join(workspace, "data"),
