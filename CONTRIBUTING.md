@@ -12,6 +12,10 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 **Exposure.** Runs on the home NAS, reachable over LAN and Tailscale only, with no application authentication; no secrets are committed.
 
+**Local app.** Run `mise install`, then `cd frontend && npm ci && cd ..`; with Java 25 active, start both services using `python3 scripts/local.py` (or `mise exec -- python3 scripts/local.py`). Python 3, sbt, npm, Node, and free ports 8080 and 5173 are required. Open `http://127.0.0.1:5173`; the dev server proxies same-origin API calls to the backend. Ctrl-C stops both services. The first start creates an isolated journal in ignored `.local/`; subsequent starts retain local edits without NAS access. Set `GARDENING_PORT` and `GARDENING_DEV_PORT` to distinct free ports if the defaults are occupied.
+
+**Seed from NAS (optional).** The NAS must have SQLite's `sqlite3` CLI and SSH access. Supply the SSH destination and absolute database path as local environment variables, for example `GARDENING_NAS_SSH=tower.lan GARDENING_NAS_DB_PATH=/mnt/user/appdata/plant-journal/gardening.db mise exec -- python3 scripts/local.py --refresh`. Authenticate through your local SSH setup, not a committed config. If a local journal already exists, type `replace` when prompted to discard its edits; `--yes` confirms non-interactively. A failed refresh leaves the prior journal usable: check SSH access, the configured source path and NAS `sqlite3`, then retry or start without `--refresh`. See [runtime dependencies](specs/operational.md#runtime-dependencies) for snapshot and failure semantics.
+
 | Task | Command |
 | --- | --- |
 | Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
