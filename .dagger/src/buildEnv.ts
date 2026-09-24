@@ -26,4 +26,5 @@ export const WORKSPACE_IGNORE = [
   "**/.bsp",
   "**/.scala-build",
   ".dagger/sdk",
+  ".local",
 ];
