@@ -106,8 +106,13 @@ describe("HttpJournalClient", () => {
 
     expect(recordedResult).toEqual({ kind: "read", dates: expectedDates });
     expect(emptyResult).toEqual({ kind: "read", dates: { kind: "empty" } });
-    const paths = requests.map((request) => new URL(request.url).pathname);
-    expect(paths).toEqual(["/operations/plants/p1/date-range", "/operations/plants/p1/date-range"]);
+    const urls = requests.map(
+      (request) => `${new URL(request.url).pathname}${new URL(request.url).search}`,
+    );
+    expect(urls).toEqual([
+      "/operations/date-range?plantId=p1",
+      "/operations/date-range?plantId=p1",
+    ]);
   });
 
   it("should report invalid or unavailable archived counts", async () => {
@@ -173,8 +178,25 @@ describe("HttpJournalClient", () => {
     expect(missing).toEqual({ kind: "plantMissing" });
     expect(alreadyArchived).toEqual({ kind: "alreadyArchived" });
     expect(failed).toMatchObject({ kind: "archiveFailed" });
-    const paths = requests.map((request) => new URL(request.url).pathname);
-    expect(paths).toEqual(Array(4).fill("/plants/p1/archivals"));
+    const requestsMade = await Promise.all(
+      requests.map(async (request) => {
+        const body: unknown = await request.json();
+        return {
+          method: request.method,
+          path: new URL(request.url).pathname,
+          contentType: request.headers.get("content-type"),
+          body,
+        };
+      }),
+    );
+    expect(requestsMade).toEqual(
+      Array(4).fill({
+        method: "PATCH",
+        path: "/plants/p1",
+        contentType: "application/json-patch+json",
+        body: [{ op: "replace", path: "/details/status", value: "archived" }],
+      }),
+    );
     expect(offlineResult).toMatchObject({ kind: "archiveFailed" });
   });
 
@@ -272,7 +294,7 @@ describe("HttpJournalClient", () => {
       page: { operations: expectedOperations, hasNextPage: true },
     };
     expect(operationsResult).toEqual(expectedResult);
-    expect(requests[0]?.url).toContain("/operations/plants/p1?offset=0&pageSize=3");
+    expect(requests[0]?.url).toContain("/operations?plantId=p1&offset=0&pageSize=3");
   });
 
   it("should send operation details and preserve write outcomes", async () => {
@@ -333,13 +355,14 @@ describe("HttpJournalClient", () => {
 
     const expectedLogged = { kind: "logged", id: Journal.operationId("logged") };
     const expectedPaths = [
-      "POST /operations/plants/p1",
+      "POST /operations",
       "PUT /operations/o1",
       "PUT /operations/o1",
       "PUT /operations/o1",
     ];
     const expectedRequests = [
       {
+        plantId: "p1",
         date: "2026-01-01T00:00:00Z",
         details: {
           kind: "care",

@@ -37,8 +37,8 @@ export const makeHttpJournalClient = (
 
     async getOperationDates(id): Promise<Journal.GetOperationDatesResult> {
       try {
-        const { data, error } = await client.GET("/operations/plants/{plantId}/date-range", {
-          params: { path: { plantId: id } },
+        const { data, error } = await client.GET("/operations/date-range", {
+          params: { query: { plantId: id } },
         });
         if (data === undefined) return { kind: "readFailed", reason: requestFailure(error) };
         if (data.kind === "empty") return { kind: "read", dates: { kind: "empty" } };
@@ -64,8 +64,10 @@ export const makeHttpJournalClient = (
 
     async archivePlant(id): Promise<Journal.ArchivePlantResult> {
       try {
-        const { error, response } = await client.POST("/plants/{plantId}/archivals", {
+        const { error, response } = await client.PATCH("/plants/{plantId}", {
           params: { path: { plantId: id } },
+          headers: { "Content-Type": "application/json-patch+json" },
+          body: [{ op: "replace", path: "/details/status", value: "archived" }],
         });
         if (response.status === 204) return { kind: "archived" };
         if (response.status === 404) return { kind: "plantMissing" };
@@ -78,10 +80,9 @@ export const makeHttpJournalClient = (
 
     async getOperations(id, window): Promise<Journal.GetOperationsResult> {
       try {
-        const { data, error } = await client.GET("/operations/plants/{plantId}", {
+        const { data, error } = await client.GET("/operations", {
           params: {
-            path: { plantId: id },
-            query: { offset: window.offset, pageSize: window.size },
+            query: { plantId: id, offset: window.offset, pageSize: window.size },
           },
         });
         return data === undefined
@@ -100,9 +101,8 @@ export const makeHttpJournalClient = (
 
     async logOperation(id, date, details): Promise<Journal.LogOperationResult> {
       try {
-        const { data, error, response } = await client.POST("/operations/plants/{plantId}", {
-          params: { path: { plantId: id } },
-          body: { date, details: toWireDetails(details) },
+        const { data, error, response } = await client.POST("/operations", {
+          body: { plantId: id, date, details: toWireDetails(details) },
         });
         if (response.status === 409) return { kind: "plantArchived" };
         return data === undefined

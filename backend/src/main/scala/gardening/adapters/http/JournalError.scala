@@ -11,15 +11,17 @@ final private[http] case class ApiError(message: String) derives Codec.AsObject
 private[http] object JournalError:
   val generic = statusCode.and(jsonBody[ApiError])
 
-  val operationMissing      = ApiError("operation not found")
-  val operationTypeMismatch = ApiError("operation type cannot be changed")
-  val editFailed            = ApiError("operation could not be edited")
-  val plantMissing          = ApiError("plant not found")
-  val plantArchived         = ApiError("plant already archived")
-  val catalogRecordMissing  = ApiError("nomenclature not found")
-  val catalogInvalidId      = ApiError("invalid nomenclature id")
-  val catalogReadFailed     = ApiError("nomenclatures could not be read")
-  val catalogWriteFailed    = ApiError("nomenclature could not be saved")
+  val operationMissing          = ApiError("operation not found")
+  val operationTypeMismatch     = ApiError("operation type cannot be changed")
+  val editFailed                = ApiError("operation could not be edited")
+  val plantMissing              = ApiError("plant not found")
+  val plantArchived             = ApiError("plant already archived")
+  val unsupportedPlantPatch     = "unsupported plant patch"
+  val unsupportedPatchMediaType = ApiError("unsupported patch media type")
+  val catalogRecordMissing      = ApiError("nomenclature not found")
+  val catalogInvalidId          = ApiError("invalid nomenclature id")
+  val catalogReadFailed         = ApiError("nomenclatures could not be read")
+  val catalogWriteFailed        = ApiError("nomenclature could not be saved")
 
   val edit =
     oneOf[ApiError](
@@ -28,10 +30,19 @@ private[http] object JournalError:
       oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
     )
 
-  val plantRequest =
+  val logOperation =
     oneOf[ApiError](
       oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
       oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
+
+  val plantPatch =
+    oneOf[ApiError | String](
+      oneOfVariantExactMatcher(StatusCode.BadRequest, stringBody)(unsupportedPlantPatch),
+      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
+      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
+      oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedPatchMediaType),
       oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
     )
 

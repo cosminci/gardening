@@ -34,7 +34,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   private val careRequest    = """{"kind":"care","actions":["watered","pruned"],"pesticides":[],"moisture":"wet","notes":"dry"}"""
   private val repotRequest   =
     """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}"""
-  private val loggedCareRequest = s"""{"date":"$date","details":$careRequest}"""
+  private val loggedCareRequest = s"""{"plantId":"${plant.id.value}","date":"$date","details":$careRequest}"""
   private val operationsJson    =
     s"""{"operations":[{"id":"care","plantId":"p1","date":"2026-01-01T00:00:00Z","details":{"kind":"care","actions":["pruned","watered"],"pesticides":["${pesticideId.value}"],"moisture":"wet","notes":"dry"}},{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}],"hasNextPage":true}"""
   private val repotJson =
@@ -54,6 +54,8 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   test("should reject invalid operation windows"):
     val server = buildServer(Refs())
 
+    assertEquals(get("/operations?offset=0&pageSize=3", server).code, StatusCode.BadRequest)
+    assertEquals(get("/operations?plantId=", server).code, StatusCode.BadRequest)
     assertEquals(getOperations(server, offset = -1, pageSize = 3).code, StatusCode.BadRequest)
     assertEquals(getOperations(server, offset = 0, pageSize = 0).code, StatusCode.BadRequest)
     assertEquals(getOperations(server, offset = 0, pageSize = 10).code, StatusCode.Ok)
@@ -61,14 +63,14 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should use the recent-operation window by default"):
     val refs     = Refs()
-    val response = get(s"/operations/plants/${plant.id.value}", buildServer(refs))
+    val response = get(s"/operations?plantId=${plant.id.value}", buildServer(refs))
 
     assertEquals(response.code, StatusCode.Ok)
     assertEquals(refs.requestedWindows.get(), Vector(OperationWindow(offset = 0, size = 3)))
 
   test("should expose the entire recorded date range or an explicit empty history"):
     val lastDate      = date.plusSeconds(60)
-    val rangePath     = s"/operations/plants/${plant.id.value}/date-range"
+    val rangePath     = s"/operations/date-range?plantId=${plant.id.value}"
     val recordedRange = OperationDateRange.Recorded(date, lastDate)
 
     val recordedRefs     = Refs(operationDateRangeResult = GetOperationDateRangeResult.Read(recordedRange))
@@ -87,7 +89,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(recordedRefs.requestedWindows.get(), Vector.empty)
 
   test("should distinguish an unknown plant from a failed date-range read"):
-    val rangePath   = s"/operations/plants/${plant.id.value}/date-range"
+    val rangePath   = s"/operations/date-range?plantId=${plant.id.value}"
     val missingRefs = Refs(operationDateRangeResult = GetOperationDateRangeResult.PlantMissing)
     val failedRefs  = Refs(operationDateRangeResult = GetOperationDateRangeResult.ReadFailed(RuntimeException("secret")))
 
@@ -156,18 +158,19 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should archive a plant and distinguish missing, already archived, and failed writes"):
-    val archivePath       = s"/plants/${plant.id.value}/archivals"
+    val archivePath       = s"/plants/${plant.id.value}"
+    val archivePatch      = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
     val archivedRefs      = Refs()
     val missingRefs       = Refs(archivePlantResult = ArchivePlantResult.PlantMissing)
     val repeatRefs        = Refs(archivePlantResult = ArchivePlantResult.AlreadyArchived)
     val failedRefs        = Refs(archivePlantResult = ArchivePlantResult.ArchiveFailed(RuntimeException("secret")))
     val refreshFailedRefs = Refs(refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
 
-    val archived      = post(archivePath, body = "", buildServer(archivedRefs))
-    val missing       = post(archivePath, body = "", buildServer(missingRefs))
-    val repeat        = post(archivePath, body = "", buildServer(repeatRefs))
-    val failed        = post(archivePath, body = "", buildServer(failedRefs))
-    val refreshedLate = post(archivePath, body = "", buildServer(refreshFailedRefs))
+    val archived      = patch(archivePath, archivePatch, buildServer(archivedRefs))
+    val missing       = patch(archivePath, archivePatch, buildServer(missingRefs))
+    val repeat        = patch(archivePath, archivePatch, buildServer(repeatRefs))
+    val failed        = patch(archivePath, archivePatch, buildServer(failedRefs))
+    val refreshedLate = patch(archivePath, archivePatch, buildServer(refreshFailedRefs))
 
     val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
     val expectedRepeat  = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
@@ -183,17 +186,53 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(repeatRefs.refreshCalls.get(), 0)
     assertEquals(failedRefs.refreshCalls.get(), 0)
 
+  test("should reject unsupported plant patches without archiving or refreshing"):
+    val refs   = Refs()
+    val server = buildServer(refs)
+    val path   = s"/plants/${plant.id.value}"
+
+    val responses = List(
+      """[{"op":"replace","path":"/details/status","value":"active"}]""",
+      """[{"op":"replace","path":"/details/status","value":true}]""",
+      """[{"op":"remove","path":"/details/status"}]""",
+      """[{"op":"replace","path":"/details/location","value":"Kitchen"}]""",
+      """[{"op":"replace","path":"/details/status","value":"archived"},{"op":"replace","path":"/details/location","value":"Kitchen"}]""",
+      """{"status":"archived"}""",
+      "[]",
+      ""
+    )
+      .map(body => patch(path, body, server).code)
+
+    assertEquals(responses, List.fill(8)(StatusCode.BadRequest))
+    val unsupported = patch(path, """[{"op":"replace","path":"/details/status","value":"active"}]""", server)
+    val malformed   = patch(path, """{"status":"archived"}""", server)
+    assertEquals(unsupported.body.merge, "unsupported plant patch")
+    assert(malformed.body.merge.contains("Invalid value for: body"))
+    assertEquals(refs.refreshCalls.get(), 0)
+
+  test("should require the JSON Patch media type for plant updates"):
+    val refs     = Refs()
+    val response = basicRequest
+      .patch(Uri.unsafeParse(s"http://test/plants/${plant.id.value}"))
+      .body("""[{"op":"replace","path":"/details/status","value":"archived"}]""")
+      .contentType("application/json")
+      .send(buildServer(refs))
+
+    val expected = StatusCode.UnsupportedMediaType -> json("""{"message":"unsupported patch media type"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+    assertEquals(refs.refreshCalls.get(), 0)
+
   test("should reject new operations on archived plants with a conflict"):
     val refs = Refs(logOperationResult = LogOperationResult.PlantArchived)
 
-    val response = post(s"/operations/plants/${plant.id.value}", loggedCareRequest, buildServer(refs))
+    val response = post("/operations", loggedCareRequest, buildServer(refs))
 
     val expected = StatusCode.Conflict -> json("""{"message":"plant already archived"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should report when logging is attempted for an unknown plant"):
     val refs     = Refs(logOperationResult = LogOperationResult.PlantMissing)
-    val response = post(s"/operations/plants/${plant.id.value}", loggedCareRequest, buildServer(refs))
+    val response = post("/operations", loggedCareRequest, buildServer(refs))
 
     val expected = StatusCode.NotFound -> json("""{"message":"plant not found"}""")
     assertEquals(response.code -> jsonBody(response), expected)
@@ -205,7 +244,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
     )
     val server = buildServer(refs)
 
-    val logResponse   = post(s"/operations/plants/${plant.id.value}", loggedCareRequest, server)
+    val logResponse   = post("/operations", loggedCareRequest, server)
     val editResponse  = put(s"/operations/${repotOperation.id.value}", repotRequest, server)
     assertEquals(logResponse.code  -> jsonBody(logResponse), StatusCode.Created -> json("""{"id":"logged"}"""))
     assertEquals(editResponse.code -> jsonBody(editResponse), StatusCode.Ok     -> json(repotJson))
@@ -222,18 +261,24 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
       """{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":60},{"componentId":"00000000-0000-4000-8000-000000000004","share":60}],"notes":null}""",
       """{"kind":"fertilize","actions":[],"pesticides":[],"moisture":"wet","notes":null}"""
     )
-    val invalidDates = List(
-      s"""{"details":$careRequest}""",
-      s"""{"date":"tomorrow","details":$careRequest}""",
-      s"""{"date":"2026-01-01T00:00","details":$careRequest}"""
+    val malformedDate = s"""{"plantId":"${plant.id.value}","date":"tomorrow","details":$careRequest}"""
+    val invalidDates  = List(
+      s"""{"plantId":"${plant.id.value}","details":$careRequest}""",
+      malformedDate,
+      s"""{"plantId":"${plant.id.value}","date":"2026-01-01T00:00","details":$careRequest}"""
     )
-    val invalidBodies = invalidDates ++ invalidDetails.map(details => s"""{"date":"$date","details":$details}""")
-    val refs          = Refs()
-    val server        = buildServer(refs)
+    val invalidBodies =
+      invalidDates ++ invalidDetails.map(details => s"""{"plantId":"${plant.id.value}","date":"$date","details":$details}""") :+
+        s"""{"date":"$date","details":$careRequest}""" :+
+        s"""{"plantId":"","date":"$date","details":$careRequest}"""
+    val refs   = Refs()
+    val server = buildServer(refs)
 
-    val responses = invalidBodies.map(body => post(s"/operations/plants/${plant.id.value}", body, server).code)
+    val responses = invalidBodies.map(body => post("/operations", body, server).code)
 
     assertEquals(responses, List.fill(invalidBodies.size)(StatusCode.BadRequest))
+    val malformed = post("/operations", malformedDate, server)
+    assert(malformed.body.merge.contains("Invalid value for: body"))
     assertEquals(refs.loggedOperations.get(), Vector.empty)
 
   test("should hide storage failures returned by read operations"):
@@ -247,7 +292,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
   test("should hide the cause when logging an operation fails"):
     val refs     = Refs(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
     val server   = buildServer(refs)
-    val response = post(s"/operations/plants/${plant.id.value}", loggedCareRequest, server)
+    val response = post("/operations", loggedCareRequest, server)
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be logged"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -316,7 +361,7 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   private def getOperations(server: TestServer, offset: Int = 3, pageSize: Int = 10) =
     basicRequest
-      .get(uri"http://test/operations/plants/${plant.id.value}?offset=$offset&pageSize=$pageSize")
+      .get(uri"http://test/operations?plantId=${plant.id.value}&offset=$offset&pageSize=$pageSize")
       .send(server)
 
   private def get(path: String, server: TestServer) =
@@ -324,6 +369,9 @@ class JournalApiSeamIntegrationTest extends munit.FunSuite:
 
   private def post(path: String, body: String, server: TestServer) =
     basicRequest.post(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
+
+  private def patch(path: String, body: String, server: TestServer) =
+    basicRequest.patch(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json-patch+json").send(server)
 
   private def put(path: String, body: String, server: TestServer) =
     basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)

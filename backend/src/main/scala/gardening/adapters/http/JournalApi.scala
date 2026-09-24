@@ -5,9 +5,10 @@ import gardening.domain.*
 import gardening.domain.attention.PlantAttentionMonitor
 import gardening.domain.journal.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
-import io.circe.{Codec, Decoder, Encoder}
+import io.circe.{Codec, Decoder, Encoder, Json}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
+import sttp.model.MediaType
 import sttp.model.StatusCode
 import sttp.shared.Identity
 import sttp.tapir.*
@@ -22,38 +23,50 @@ import scala.util.Try
 
 final private case class LoggedOperation(id: String) derives Codec.AsObject
 final private case class ArchivedPlantCount(count: Long) derives Codec.AsObject
+final private case class PlantPatchOperation(op: String, path: String, value: Json) derives Codec.AsObject
 
 object JournalApi:
 
-  final private case class LogOperationRequest(date: Instant, details: OperationDetails)
+  final private case class LogOperationRequest(plantId: String, date: Instant, details: OperationDetails)
+  final private case class JsonPatchFormat() extends CodecFormat:
+    override val mediaType: MediaType = MediaType.unsafeApply("application", "json-patch+json")
 
-  private val journalEndpoint   = endpoint.errorOut(JournalError.generic)
+  private val plantPatchBody =
+    stringBodyUtf8AnyFormat(
+      summon[TapirCodec.JsonCodec[Vector[PlantPatchOperation]]]
+        .schema(_.copy(isOptional = false))
+        .format(JsonPatchFormat())
+    )
+
+  private val journalEndpoint = endpoint.errorOut(JournalError.generic)
+
+  private val getPlantsQuery    = query[PlantStatus]("status").default(PlantStatus.Active)
   private val getPlantsEndpoint =
-    journalEndpoint.get.in(
-      "plants"
-    ).in(query[PlantStatus]("status").default(PlantStatus.Active)).out(jsonBody[Vector[Plant]]).summary("List plants by status")
+    journalEndpoint.get.in("plants").in(getPlantsQuery).out(jsonBody[Vector[Plant]]).summary("List plants by status")
   private val getArchivedCountEndpoint =
     journalEndpoint.get.in("plants" / "archived" / "count").out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
-  private val archivePlantEndpoint =
-    endpoint.post.in("plants" / path[String]("plantId") / "archivals").errorOut(JournalError.plantRequest)
-      .out(statusCode(StatusCode.NoContent)).summary("Permanently archive an active plant")
+  private val patchPlantEndpoint =
+    endpoint.patch.in("plants" / path[String]("plantId")).in(extractFromRequest(_.contentTypeParsed)).in(plantPatchBody)
+      .errorOut(JournalError.plantPatch)
+      .out(statusCode(StatusCode.NoContent)).summary("Patch a plant")
   private val getOperationsEndpoint =
     journalEndpoint.get
-      .in("operations" / "plants" / path[String]("plantId"))
+      .in("operations")
+      .in(query[String]("plantId").validate(Validator.minLength(1)))
       .in(query[OperationOffset]("offset").default(0))
       .in(query[OperationPageSize]("pageSize").default(3))
       .out(jsonBody[OperationPage])
       .summary("List a bounded page of plant operations")
 
   private val getOperationDateRangeEndpoint =
-    endpoint.get.in("operations" / "plants" / path[String]("plantId") / "date-range")
+    endpoint.get.in("operations" / "date-range").in(query[String]("plantId").validate(Validator.minLength(1)))
       .errorOut(JournalError.plantRead)
       .out(jsonBody[OperationDateRange])
       .summary("Read the first and last recorded operation dates")
 
   private val logOperationEndpoint =
-    endpoint.post.in("operations" / "plants" / path[String]("plantId")).in(jsonBody[LogOperationRequest])
-      .errorOut(JournalError.plantRequest)
+    endpoint.post.in("operations").in(jsonBody[LogOperationRequest])
+      .errorOut(JournalError.logOperation)
       .out(statusCode(StatusCode.Created)).out(jsonBody[LoggedOperation]).summary("Log a plant operation")
 
   private val editOperationEndpoint =
@@ -62,7 +75,7 @@ object JournalApi:
       .out(jsonBody[Operation]).summary("Edit a plant operation")
 
   private[http] val plantEndpoints: List[AnyEndpoint] =
-    List(getPlantsEndpoint, getArchivedCountEndpoint, archivePlantEndpoint)
+    List(getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
   private[http] val operationEndpoints: List[AnyEndpoint] =
     List(getOperationsEndpoint, getOperationDateRangeEndpoint, logOperationEndpoint, editOperationEndpoint)
 
@@ -76,15 +89,22 @@ object JournalApi:
         journal.getArchivedCount match
           case ArchivedCountResult.Counted(count) => ArchivedPlantCount(count).asRight
           case ArchivedCountResult.ReadFailed(_)  => (StatusCode.InternalServerError, ApiError("archived count could not be read")).asLeft,
-      archivePlantEndpoint.handle: plantId =>
-        val id = PlantId(plantId)
-        journal.archivePlant(id) match
-          case ArchivePlantResult.Archived =>
-            val _ = attention.refreshAll
-            ().asRight
-          case ArchivePlantResult.PlantMissing     => JournalError.plantMissing.asLeft
-          case ArchivePlantResult.AlreadyArchived  => JournalError.plantArchived.asLeft
-          case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft,
+      patchPlantEndpoint.handle: (plantId, contentType, patch) =>
+        val isJsonPatch = contentType.exists(mediaType =>
+          mediaType.mainType.equals("application") && mediaType.subType.equals("json-patch+json")
+        )
+        if !isJsonPatch then JournalError.unsupportedPatchMediaType.asLeft
+        else
+          patch match
+            case Vector(PlantPatchOperation("replace", "/details/status", value)) if value.equals(Json.fromString("archived")) =>
+              journal.archivePlant(PlantId(plantId)) match
+                case ArchivePlantResult.Archived =>
+                  val _ = attention.refreshAll
+                  ().asRight
+                case ArchivePlantResult.PlantMissing     => JournalError.plantMissing.asLeft
+                case ArchivePlantResult.AlreadyArchived  => JournalError.plantArchived.asLeft
+                case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft
+            case _ => JournalError.unsupportedPlantPatch.asLeft,
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
@@ -94,8 +114,8 @@ object JournalApi:
           case GetOperationDateRangeResult.Read(range)   => range.asRight
           case GetOperationDateRangeResult.PlantMissing  => JournalError.plantMissing.asLeft
           case GetOperationDateRangeResult.ReadFailed(_) => ApiError("operation dates could not be read").asLeft,
-      logOperationEndpoint.handle: (plantId, request) =>
-        journal.logOperation(PlantId(plantId), request.date, request.details) match
+      logOperationEndpoint.handle: request =>
+        journal.logOperation(PlantId(request.plantId), request.date, request.details) match
           case LogOperationResult.Logged(id)       => LoggedOperation(id.value).asRight
           case LogOperationResult.PlantMissing     => JournalError.plantMissing.asLeft
           case LogOperationResult.PlantArchived    => JournalError.plantArchived.asLeft
@@ -113,6 +133,7 @@ object JournalApi:
       .withTransformMemberNames(encodedFieldName)
       .withTransformConstructorNames(lowerCamel)
       .withDiscriminator("kind")
+  private given Schema[Json]                           = Schema.any
   private given tapirConfiguration: TapirConfiguration =
     TapirConfiguration.default.copy(
       toEncodedName = encodedFieldName,
@@ -257,7 +278,8 @@ object JournalApi:
   private given Schema[OperationPage] = Schema
     .derived[OperationPage]
     .modify(_.operations)(_.copy(isOptional = false))
-  private given Schema[LogOperationRequest] = Schema.derived
+  private given Schema[LogOperationRequest] = Schema.derived[LogOperationRequest]
+    .modify(_.plantId)(_.validate(Validator.minLength(1)))
 
   private def stringCodec[A](decode: String => A, encode: A => String) =
     Codec.from(Decoder.decodeString.map(decode), Encoder.encodeString.contramap(encode))

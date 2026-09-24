@@ -63,19 +63,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /plants/{plantId}/archivals:
-    post:
-      summary: Permanently archive an active plant
-      operationId: postPlantsPlantidArchivals
+  /plants/{plantId}:
+    patch:
+      summary: Patch a plant
+      operationId: patchPlantsPlantid
       parameters:
       - name: plantId
         in: path
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlantPatchOperation'
+        required: true
       responses:
         '204':
           description: ''
+        '400':
+          description: ''
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: ''
           content:
@@ -83,6 +97,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
           description: ''
           content:
             application/json:
@@ -105,16 +125,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttentionProjection'
-  /operations/plants/{plantId}:
+  /operations:
     get:
       summary: List a bounded page of plant operations
-      operationId: getOperationsPlantsPlantid
+      operationId: getOperations
       parameters:
       - name: plantId
-        in: path
+        in: query
         required: true
         schema:
           type: string
+          minLength: 1
       - name: offset
         in: query
         required: false
@@ -140,8 +161,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/OperationPage'
         '400':
-          description: 'Invalid value for: query parameter offset, Invalid value for:
-            query parameter pageSize'
+          description: 'Invalid value for: query parameter plantId, Invalid value
+            for: query parameter offset, Invalid value for: query parameter pageSize'
           content:
             text/plain:
               schema:
@@ -154,13 +175,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       summary: Log a plant operation
-      operationId: postOperationsPlantsPlantid
-      parameters:
-      - name: plantId
-        in: path
-        required: true
-        schema:
-          type: string
+      operationId: postOperations
       requestBody:
         content:
           application/json:
@@ -198,16 +213,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /operations/plants/{plantId}/date-range:
+  /operations/date-range:
     get:
       summary: Read the first and last recorded operation dates
-      operationId: getOperationsPlantsPlantidDate-range
+      operationId: getOperationsDate-range
       parameters:
       - name: plantId
-        in: path
+        in: query
         required: true
         schema:
           type: string
+          minLength: 1
       responses:
         '200':
           description: ''
@@ -215,6 +231,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationDateRange'
+        '400':
+          description: 'Invalid value for: query parameter plantId'
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: ''
           content:
@@ -546,9 +568,13 @@ components:
       title: LogOperationRequest
       type: object
       required:
+      - plantId
       - date
       - details
       properties:
+        plantId:
+          type: string
+          minLength: 1
         date:
           type: string
           format: date-time
@@ -704,6 +730,19 @@ components:
             $ref: '#/components/schemas/SubstratePart'
         status:
           $ref: '#/components/schemas/PlantStatus'
+    PlantPatchOperation:
+      title: PlantPatchOperation
+      type: object
+      required:
+      - op
+      - path
+      - value
+      properties:
+        op:
+          type: string
+        path:
+          type: string
+        value: {}
     PlantStatus:
       title: PlantStatus
       type: string
