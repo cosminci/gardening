@@ -1,16 +1,14 @@
 import type * as Dagger from "@dagger.io/dagger";
-import { argument, dag, func, object } from "@dagger.io/dagger";
-import { GHCR_REPOSITORY, GHCR_USER, TARGET_PLATFORM, WORKSPACE_IGNORE } from "./buildEnv";
+import { argument, func, object } from "@dagger.io/dagger";
+import { GHCR_REPOSITORY, GHCR_USER, WORKSPACE_IGNORE } from "./buildEnv";
 import { backendCheck } from "./hooks/backend";
 import { contractDrift } from "./hooks/contract";
 import * as Git from "./hooks/git";
 import { frontendCheck } from "./hooks/frontend";
 import { runtimeImage } from "./hooks/image";
 import { pipelineCheck } from "./hooks/pipeline";
-import { publishedImageDigest, publishedTags } from "./hooks/registry";
-import { assertSameImage } from "./registryClient";
 import * as Selection from "./selection";
-import { assertReleaseSource, deriveVersion, planLatestRepair, planPublication } from "./version";
+import { assertReleaseVersion, deriveVersion, releaseVersion } from "./version";
 
 /** CI pipeline for the plant-journal app. One composable module over three components — backend,
  * frontend, and the pipeline itself — plus the contract that binds the app halves. Verifying and
@@ -112,25 +110,13 @@ export class Gardening {
     });
   }
 
-  /** Refuses to release anything except the explicitly selected annotated tag at HEAD. */
+  /** Creates a UTC release version, once per manually dispatched publish. */
   @func({ cache: "never" })
-  async releaseGuard(
-    @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
-    tag: string,
-  ): Promise<string> {
-    planPublication(tag, []);
-    assertReleaseSource({
-      tag,
-      clean: await Git.isClean(source),
-      tagType: (await Git.tagType(source, tag)).trim(),
-      headRevision: (await Git.headSha(source)).trim(),
-      tagRevision: (await Git.tagRevision(source, tag)).trim(),
-      mainAncestor: (await Git.mainAncestor(source)).trim(),
-    });
-    return `release ok: ${tag}`;
+  releaseVersion(): string {
+    return releaseVersion(new Date());
   }
 
-  /** Verifies and publishes a guarded release, without overwriting an existing version. */
+  /** Publishes the selected version; the manual release check verifies first and refuses existing tags. */
   @func({ cache: "never" })
   async publish(
     @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
@@ -138,67 +124,12 @@ export class Gardening {
     token: Dagger.Secret,
     registryUser = GHCR_USER,
   ): Promise<string> {
-    await this.releaseGuard(source, tag);
-    const plan = planPublication(tag, await publishedTags(source, token, registryUser));
-    await this.verify(source, "", true);
+    assertReleaseVersion(tag);
     const image = runtimeImage(source, {
-      version: plan.version,
+      version: tag,
       revision: (await Git.headSha(source)).trim(),
       created: new Date().toISOString(),
     }).withRegistryAuth("ghcr.io", registryUser, token);
-    const versioned = await image.publish(`${GHCR_REPOSITORY}:${plan.version}`);
-    if (!plan.updateLatest) return `published ${versioned}`;
-    const otherTags = (await publishedTags(source, token, registryUser)).filter(
-      (existing) => existing !== plan.version,
-    );
-    if (!planPublication(tag, otherTags).updateLatest) return `published ${versioned}`;
-    const versionedDigest = await publishedImageDigest(source, token, registryUser, plan.version);
-    const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
-    assertSameImage(
-      versionedDigest,
-      await publishedImageDigest(source, token, registryUser, "latest"),
-    );
-    return `published ${versioned} and ${latest}`;
-  }
-
-  /** Repairs a partially published stable release without replacing its versioned image. */
-  @func({ cache: "never" })
-  async repairLatest(
-    @argument({ defaultPath: "/", ignore: WORKSPACE_IGNORE }) source: Dagger.Directory,
-    tag: string,
-    token: Dagger.Secret,
-    registryUser = GHCR_USER,
-  ): Promise<string> {
-    await this.releaseGuard(source, tag);
-    const version = planLatestRepair(tag, await publishedTags(source, token, registryUser));
-    await this.verify(source, "", true);
-    const image = dag
-      .container({ platform: TARGET_PLATFORM as Dagger.Platform })
-      .withRegistryAuth("ghcr.io", registryUser, token)
-      .from(`${GHCR_REPOSITORY}:${version}`);
-    const revision = (await Git.headSha(source)).trim();
-    if (
-      (await image.label("org.opencontainers.image.revision")) !== revision ||
-      (await image.envVariable("GARDENING_APP_VERSION")) !== version
-    ) {
-      throw new Error("release refused: published image provenance differs from selected tag");
-    }
-    const versionedDigest = await publishedImageDigest(source, token, registryUser, version);
-    const latest = await image.publish(`${GHCR_REPOSITORY}:latest`);
-    assertSameImage(
-      versionedDigest,
-      await publishedImageDigest(source, token, registryUser, "latest"),
-    );
-    return latest;
-  }
-
-  /** Prints the NAS deployment command for an explicitly selected release. */
-  @func()
-  deploy(version: string): string {
-    planPublication(`v${version}`, []);
-    return [
-      "# WUD reports stable updates without deploying them.",
-      `ssh root@tower 'bash -s -- deploy ${version}' < scripts/nas.sh`,
-    ].join("\n");
+    return image.publish(`${GHCR_REPOSITORY}:${tag}`);
   }
 }

@@ -1,6 +1,5 @@
 import * as Dagger from "@dagger.io/dagger";
 import * as BuildEnv from "../buildEnv";
-import { isStableReleaseVersion } from "../version";
 import { backendStage } from "./backend";
 import { frontendBuild } from "./frontend";
 
@@ -44,8 +43,5 @@ export function runtimeImage(source: Dagger.Directory, info: ImageInfo): Dagger.
       .withLabel("org.opencontainers.image.revision", info.revision)
       .withLabel("org.opencontainers.image.created", info.created)
       .withLabel("org.opencontainers.image.source", BuildEnv.SOURCE_URL)
-      .withLabel("wud.watch", String(isStableReleaseVersion(info.version)))
-      .withLabel("wud.tag.include", "^\\d+\\.\\d+\\.\\d+$")
-      .withLabel("wud.trigger.exclude", "docker.local")
   );
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Container version="2">
   <Name>plant-journal</Name>
-  <Repository>ghcr.io/cosminci/plant-journal:1.0.0</Repository>
+  <Repository>ghcr.io/cosminci/plant-journal:REPLACE_WITH_PUBLISHED_VERSION</Repository>
   <Registry>https://ghcr.io</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/cosminci/gardening/issues</Support>
   <Project>https://github.com/cosminci/gardening</Project>
-  <Overview>Private household plant journal. Log in to GHCR before installation. WUD reports newer stable versions but cannot automatically update this container.</Overview>
+  <Overview>Private household plant journal. Log in to GHCR and set watch-only labels in the saved Unraid template before installation.</Overview>
   <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/cosminci/gardening/main/unraid/plant-journal.xml</TemplateURL>
@@ -17,7 +17,4 @@
   <PostArgs/>
   <Config Name="Journal data" Target="/data" Default="/mnt/user/appdata/plant-journal" Mode="rw" Description="Persistent SQLite journal; include this directory in periodic Unraid appdata backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/plant-journal</Config>
   <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="LAN and tailnet access; do not forward this port on the public router." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="WUD watch" Target="wud.watch" Default="true" Mode="" Description="Stable releases only; set false for a prerelease trial." Type="Label" Display="always" Required="true" Mask="false">true</Config>
-  <Config Name="WUD stable tags" Target="wud.tag.include" Default="^\d+\.\d+\.\d+$" Mode="" Description="Exclude prerelease and mutable latest tags." Type="Label" Display="always" Required="true" Mask="false">^\d+\.\d+\.\d+$</Config>
-  <Config Name="WUD trigger exclusion" Target="wud.trigger.exclude" Default="docker.local" Mode="" Description="Leave WUD's Docker updater enabled for other containers, but never automatically replace this one." Type="Label" Display="always" Required="true" Mask="false">docker.local</Config>
 </Container>

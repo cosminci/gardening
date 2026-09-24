@@ -1,8 +1,7 @@
-name: release
+name: publish
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions: {}
 
@@ -12,9 +11,12 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish GHCR image
+    name: Verify and publish GHCR image
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
     permissions:
       contents: read
       packages: write
@@ -23,6 +25,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require main
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "Publish must be dispatched from main" >&2
+            exit 1
+          fi
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -34,24 +43,26 @@ jobs:
           curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.21.9 sh
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      - name: Restore annotated release tag
+      - name: Verify and publish
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          credential=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
-          GIT_CONFIG_COUNT=1 \
-            GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
-            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $credential" \
-            git fetch --force --no-tags origin \
-              "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = tag
-
-      - name: Prepare pipeline
+          GITHUB_ACTOR: ${{ github.actor }}
         run: |
           npm ci --prefix .dagger --no-audit --no-fund
           dagger develop
-
-      - name: Verify and publish annotated release tag
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/release.sh "$GITHUB_REF_NAME"
+          npm --prefix .dagger run verify
+          dagger call verify --all
+          tag=$(dagger call release-version)
+          registry_token=$(curl -fsS -u "$GITHUB_ACTOR:$GITHUB_TOKEN" -G \
+            --data-urlencode 'scope=repository:cosminci/plant-journal:pull' \
+            --data-urlencode 'service=ghcr.io' https://ghcr.io/token | jq -er '.token | select(length > 0)')
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -I \
+            -H "Authorization: Bearer $registry_token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/cosminci/plant-journal/manifests/$tag")
+          case "$status" in
+            404) ;;
+            200) echo "Version $tag is already published" >&2; exit 1 ;;
+            *) echo "GHCR lookup failed: HTTP $status" >&2; exit 1 ;;
+          esac
+          dagger call publish --tag="$tag" --token=env:GITHUB_TOKEN --registry-user="$GITHUB_ACTOR"

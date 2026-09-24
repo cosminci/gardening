@@ -11,8 +11,9 @@ function gitContainer(source: Directory): Container {
  */
 export async function changedPaths(source: Directory, base: string): Promise<string> {
   const ref = base === "" ? "origin/main" : base;
-  const script = `git diff --name-only "$(git merge-base ${ref} HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)" HEAD`;
-  return gitContainer(source).withExec(["sh", "-c", script]).stdout();
+  const script =
+    'git diff --name-only "$(git merge-base "$1" HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)" HEAD';
+  return gitContainer(source).withExec(["sh", "-c", script, "sh", ref]).stdout();
 }
 
 export async function gitDescribe(source: Directory): Promise<string> {
@@ -23,25 +24,4 @@ export async function gitDescribe(source: Directory): Promise<string> {
 
 export async function headSha(source: Directory): Promise<string> {
   return gitContainer(source).withExec(["git", "rev-parse", "HEAD"]).stdout();
-}
-
-export async function isClean(source: Directory): Promise<boolean> {
-  const status = await gitContainer(source).withExec(["git", "status", "--porcelain"]).stdout();
-  return status.trim() === "";
-}
-
-export async function tagType(source: Directory, tag: string): Promise<string> {
-  return gitContainer(source)
-    .withExec(["git", "cat-file", "-t", `refs/tags/${tag}`])
-    .stdout();
-}
-
-export async function tagRevision(source: Directory, tag: string): Promise<string> {
-  return gitContainer(source)
-    .withExec(["git", "rev-parse", "--verify", `refs/tags/${tag}^{commit}`])
-    .stdout();
-}
-
-export async function mainAncestor(source: Directory): Promise<string> {
-  return gitContainer(source).withExec(["git", "merge-base", "origin/main", "HEAD"]).stdout();
 }

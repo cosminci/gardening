@@ -1,42 +1,46 @@
-# Versioned GHCR releases and Unraid deployment
+# Timestamped GHCR releases and Unraid deployment
 
 > Standard: [Agentic Engineering Standards](https://github.com/Adobe-AIFoundations/agentic-workflow-standards) v1.2.0.
 > Lifetime: open from creation through implementation, archived in the [sync docs & archive step](../../agentic-workflows.md#a-structured-development-skills).
 
 **Date:** 2026-09-24
 
-Publish the first versioned plant-journal image and make its NAS rollout and recovery reproducible without an agent.
+Build only affected components during review; publish timestamped plant-journal images on demand and let the operator manage the NAS installation in Unraid.
 
 ## What & Why
 
-- The pipeline can build and publish a private image from a guarded tag, but there is no completed release or repeatable first-deploy and recovery path for the household NAS.
-- A release has an explicit SemVer identity tied to a specific commit and image. A prerelease proves the real registry-to-NAS path during implementation review; the first stable release is `v1.0.0` from merged main.
-- The NAS runs the same image on Unraid and retains the journal across container replacement. WUD shows available stable releases without installing them; operators choose when to deploy and recover using documented, deterministic commands without an agent.
+- Pull requests need automatic checks scoped to changed components. Publishing should instead be an explicit operator action on merged main, with full verification before a private image is released.
+- Release identities are UTC date-and-time stamps in `YYYY.M.D-THHMMSS` form, not semantic versions or Git release tags. The operator imports an Unraid template once, then edits its image tag when WUD reports an update.
+
+## Domain / Design Notes
+
+- Review checks identify the affected backend, frontend, and pipeline components; contract changes affect both app components. Publication uses a separate full-system gate.
+- Publishing owns image provenance and registry delivery. Unraid and the operator own image selection, container lifecycle, persistent data, and recovery from existing backups; WUD only reports availability.
 
 ## Invariants
 
-- Full verification precedes publication; packaging and publishing do not silently substitute for verification.
+- Packaging and publishing do not silently substitute for verification.
 - The runtime serves the frontend and API together as a non-root process.
 - The unauthenticated service remains reachable only on the household LAN and tailnet. Credentials and journal data never enter the published image or repository.
 
 ## Tradeoffs Accepted
 
-- Updates wait for an operator even when WUD reports a new version; this avoids unattended migration and rollout.
-- A previous image alone may not read a database migrated by a newer release. Recovery uses the existing periodic Unraid backups rather than a release-time backup, so restoring may lose care entries recorded since the last backup.
+- Manual recovery from an existing periodic backup may lose entries recorded after it; a previous image alone may not read a database migrated by a newer version.
 
 ## Acceptance Criteria
 
-- Releases use explicit annotated `vMAJOR.MINOR.PATCH` stable tags or `vMAJOR.MINOR.PATCH-rc.N` prerelease tags, with SemVer major for incompatible changes, minor for backward-compatible features, and patch for fixes. Pushing a selected tag starts a dedicated publishing check that fully verifies the system before publishing the image. The selected tag must identify HEAD unambiguously even when prerelease and stable tags share a commit; dirty, untagged, mistagged, or already published versions fail without replacing an existing image. An implementation-review `v1.0.0-rc.1` can be published and deployed before its PR merges; stable `v1.0.0` is published only from merged main.
-- An authenticated publish makes a private GHCR image available for the NAS architecture under write-once version tags and immutable image digests, with commit/version provenance available to operators. `latest` points to the highest published stable SemVer version, including when an older maintenance release is published later; prereleases never change it. Missing or invalid credentials fail visibly and are never printed.
-- An operator can import an Unraid template, supply read-only registry credentials, select the prerelease for a real pre-merge trial or a stable version for normal use, and start one container with a persistent writable journal volume and a health response reporting the selected version. First-deploy checks confirm LAN and tailnet reachability without public-internet exposure.
-- WUD authenticates to the private registry and shows only newer stable SemVer releases for the running service, without automatically pulling, replacing, or restarting it. The prerelease trial does not enter the stable update channel. An available update remains visible until an operator chooses to deploy; unrelated containers keep their existing update behavior.
-- Deterministic operator commands cover first deploy, prerelease smoke testing, manual deployment of an explicitly selected version, and recovery to a previous image with an available compatible Unraid backup when needed. After a successful replacement, existing journal entries remain available and the healthy service reports the selected version. A failed pull, startup, health check, or missing recovery backup is visibly reported with a nonzero exit status. These actions need no coding-agent service or runtime.
+- Every pull request runs an affected-component Dagger check. Backend, frontend, pipeline, or any combination selected by changed paths receives its applicable checks; backend/contract changes also check contract drift. Review checks never publish.
+- A manually dispatched publishing check runs only from merged main, fully verifies the system, assigns one UTC timestamp version, and refuses already-published versions before publication. Failure in verification or registry authentication prevents publication.
+- Authenticated publication provides a private `linux/amd64` GHCR image under only its timestamp tag, carrying version and commit provenance and an immutable digest. No `latest` alias or Git release tag is maintained; credentials are not exposed.
+- The operator imports the Unraid template once, supplies read-only registry credentials, selects an existing published version, and applies it to run one container with persistent writable journal data. Unraid reports pull and startup failures; the operator verifies that the service reports the selected version and is reachable on the LAN and tailnet, not the public internet.
+- WUD is configured once on the NAS to report newer timestamped versions of this service without updating it; no WUD configuration is persisted in the repository. The operator edits the existing Unraid template's version and applies it when ready; journal entries remain available after replacement. Other containers retain their existing update behavior.
+- The already-published trial remains runnable and its version checkable until the operator moves to a timestamped image. For incompatible images, the operator stops the service and manually restores a compatible existing Unraid backup before applying a selected version.
 
 ## Doc Sync
 
-- `ci/specs/design.md` — Processing rules, Edge cases, and Invariants for releases and manual rollout.
-- `ci/specs/contracts.md` — Version, Publish, and Runtime image contracts for prereleases, stable tags, and provenance.
-- `ci/specs/testing.md` — Traceability and Pipeline validation for the publishing check and deployment behavior.
-- `ci/specs/operational.md` — Versioning & release provenance, Publishing, and Deployment including the publishing check, credentials, pre-merge trial, watch-only WUD, manual rollout, existing Unraid backups, and recovery.
+- `ci/specs/design.md` — Processing rules, Edge cases, and Invariants for affected PR checks, on-demand publication, and operator-owned rollout.
+- `ci/specs/contracts.md` — Version, Publish, and Runtime image contracts for timestamp tags and provenance.
+- `ci/specs/testing.md` — Traceability and Pipeline validation for PR checks, manual publication, and deployment.
+- `ci/specs/operational.md` — Versioning & release provenance, Publishing, and Deployment for both checks, one-time Unraid/WUD setup, manual updates, and recovery.
 - `specs/operational.md` — Deployment topology for the running NAS service, volume, network, and health.
-- `CONTRIBUTING.md` — Working in the repo: release and deploy commands.
+- `CONTRIBUTING.md` — Working in the repo: build and release commands.
