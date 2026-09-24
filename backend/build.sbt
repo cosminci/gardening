@@ -14,7 +14,7 @@ val catsV     = "2.13.0"
 val circeV    = "0.14.16"
 val monocleV  = "3.3.0"
 val slf4jV    = "2.0.18"
-val oxV       = "1.0.2"
+val oxV       = "1.0.7"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
