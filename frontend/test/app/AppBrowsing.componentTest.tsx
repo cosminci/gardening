@@ -100,7 +100,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     const card = await screen.findByRole("article", { name: "Fern" });
@@ -215,7 +221,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     const articles = await screen.findAllByRole("article");
@@ -234,7 +246,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     const heading = await screen.findByRole("heading", { name: "Plant Journal" });
@@ -253,7 +271,13 @@ describe("browsing the journal", () => {
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
 
@@ -275,7 +299,13 @@ describe("browsing the journal", () => {
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const mounted = render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByRole("region", { name: "Garden" });
 
@@ -286,7 +316,13 @@ describe("browsing the journal", () => {
 
     mounted.unmount();
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     const restoredCemetery = await screen.findByRole("region", { name: "Cemetery" });
     const selectedCemetery = screen.getByRole("button", { name: /Cemetery/ });
@@ -318,7 +354,13 @@ describe("browsing the journal", () => {
     };
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -375,7 +417,13 @@ describe("browsing the journal", () => {
     };
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*2 plants/ });
@@ -425,7 +473,13 @@ describe("browsing the journal", () => {
       },
     };
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByRole("article", { name: "Fern" });
 
@@ -471,7 +525,13 @@ describe("browsing the journal", () => {
       getOperationDates,
     };
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*1 plant/ });
 
@@ -501,7 +561,13 @@ describe("browsing the journal", () => {
           : base.getPlants(),
     };
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
 
@@ -526,7 +592,13 @@ describe("browsing the journal", () => {
       getPlants: (status?: string) => (status === "archived" ? archivedRequest : base.getPlants()),
     };
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByRole("article", { name: "Fern" });
 
@@ -576,7 +648,13 @@ describe("browsing the journal", () => {
         id === archivedPlant.id ? pendingHistory : base.getOperations(id, window),
     };
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await screen.findByRole("article", { name: "Fern" });
 
@@ -611,7 +689,13 @@ describe("browsing the journal", () => {
     };
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -625,7 +709,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -665,7 +755,8 @@ describe("browsing the journal", () => {
       });
       const view = render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
@@ -687,7 +778,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -701,7 +798,13 @@ describe("browsing the journal", () => {
     };
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -717,7 +820,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
@@ -733,7 +842,13 @@ describe("browsing the journal", () => {
     });
 
     render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");

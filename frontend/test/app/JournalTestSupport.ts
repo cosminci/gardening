@@ -1,5 +1,7 @@
 import * as Journal from "../../src/domain/Journal";
+import type { OperationClient } from "../../src/domain/Operation";
 import type { PesticideClient } from "../../src/domain/PesticideCatalog";
+import type { PlantClient } from "../../src/domain/Plant";
 import type { PlantAttentionClient } from "../../src/domain/PlantAttention";
 import type { SubstrateComponentClient } from "../../src/domain/SubstrateComponentCatalog";
 
@@ -125,7 +127,8 @@ export const buildJournal = ({
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
-} = {}): Journal.JournalClient &
+} = {}): PlantClient &
+  OperationClient &
   PlantAttentionClient &
   SubstrateComponentClient &
   PesticideClient => {

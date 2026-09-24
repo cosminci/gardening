@@ -30,8 +30,7 @@ object AttentionApi:
         case _: WateringAttention.RedAlert    => "redAlert"
   // $COVERAGE-ON$
 
-  private val getAttentionEndpoint =
-    endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
+  private val getAttentionEndpoint = endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
   private[http] val publicEndpoints: List[AnyEndpoint] = List(getAttentionEndpoint)
 
@@ -39,10 +38,7 @@ object AttentionApi:
     List(getAttentionEndpoint.handleSuccess(_ => attention.current))
 
   private given circeConfiguration: CirceConfiguration =
-    CirceConfiguration.default
-      .withTransformMemberNames(encodedFieldName)
-      .withTransformConstructorNames(lowerCamel)
-      .withDiscriminator("kind")
+    CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")
   private given tapirConfiguration: TapirConfiguration =
     TapirConfiguration.default.copy(
       toEncodedName = encodedFieldName,
@@ -53,34 +49,16 @@ object AttentionApi:
       // $COVERAGE-ON$
     )
 
-  private given Codec[PlantId] = Codec.from(
-    // Plant identifiers appear only in response bodies; no request decodes them here.
-    // $COVERAGE-OFF$
-    Decoder.decodeString.map(PlantId.apply),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[Instant] = Codec.from(
-    // Attention timestamps appear only in response bodies.
-    // $COVERAGE-OFF$
-    Decoder.decodeString.emapTry(value => Try(Instant.parse(value))),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.toString)
-  )
-  private given Codec[WateringSampleCount] = Codec.from(
-    // Attention sample counts appear only in response bodies.
-    // $COVERAGE-OFF$
-    Decoder.failedWithMessage("watering attention is output-only"),
-    // $COVERAGE-ON$
-    Encoder.encodeInt.contramap(value => value)
-  )
-  private given Codec[FiniteDuration] = Codec.from(
-    // Attention durations appear only in response bodies.
-    // $COVERAGE-OFF$
-    Decoder.failedWithMessage("watering duration is output-only"),
-    // $COVERAGE-ON$
-    Encoder.encodeString.contramap(_.toMillis.toString)
-  )
+  // Types appear only in response bodies; no request decodes them here.
+  // $COVERAGE-OFF$
+  private given Codec[PlantId] = Codec.from(Decoder.decodeString.map(PlantId.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[Instant] =
+    Codec.from(Decoder.decodeString.emapTry(value => Try(Instant.parse(value))), Encoder.encodeString.contramap(_.toString))
+  private given Codec[WateringSampleCount] =
+    Codec.from(Decoder.failedWithMessage("watering attention is output-only"), Encoder.encodeInt.contramap(value => value))
+  private given Codec[FiniteDuration] =
+    Codec.from(Decoder.failedWithMessage("watering duration is output-only"), Encoder.encodeString.contramap(_.toMillis.toString))
+  // $COVERAGE-ON$
   private given Codec.AsObject[WateringAttention]   = ConfiguredCodec.derived
   private given Codec.AsObject[PlantAttention]      = ConfiguredCodec.derived
   private given Codec.AsObject[AttentionProjection] = ConfiguredCodec.derived
@@ -122,5 +100,4 @@ object AttentionApi:
       case "elapsed"         => "elapsedMillis"
       case _                 => name
 
-  private def lowerCamel(name: String) =
-    name.substring(0, 1).toLowerCase + name.substring(1)
+  private def lowerCamel(name: String) = name.substring(0, 1).toLowerCase + name.substring(1)

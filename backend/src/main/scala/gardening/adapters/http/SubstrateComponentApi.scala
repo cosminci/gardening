@@ -16,7 +16,18 @@ import sttp.tapir.server.ServerEndpoint
 
 object SubstrateComponentApi:
 
-  private val catalogEndpoint       = endpoint.errorOut(JournalError.generic)
+  private val recordMissing = ApiError("nomenclature not found")
+  private val invalidId     = ApiError("invalid nomenclature id")
+  private val readFailed    = ApiError("nomenclatures could not be read")
+  private val writeFailed   = ApiError("nomenclature could not be saved")
+  private val editErrors    =
+    oneOf[ApiError](
+      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidId),
+      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(recordMissing),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
+
+  private val catalogEndpoint       = endpoint.errorOut(ApiError.generic)
   private val getComponentsEndpoint =
     catalogEndpoint.get.in("substrate" / "components").out(jsonBody[Vector[SubstrateComponent]]).summary("List substrate components")
   private val addComponentEndpoint =
@@ -24,7 +35,7 @@ object SubstrateComponentApi:
       .out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateComponent]).summary("Add a substrate component")
   private val editComponentEndpoint =
     endpoint.put.in("substrate" / "components" / path[String]("componentId")).in(jsonBody[SubstrateComponentData])
-      .errorOut(JournalError.catalogEdit).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
+      .errorOut(editErrors).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(getComponentsEndpoint, addComponentEndpoint, editComponentEndpoint)
@@ -34,17 +45,17 @@ object SubstrateComponentApi:
       getComponentsEndpoint.handle: _ =>
         catalog.getSubstrateComponents match
           case CatalogReadResult.Read(components) => components.asRight
-          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
+          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, readFailed).asLeft,
       addComponentEndpoint.handle: data =>
         catalog.addSubstrateComponent(data) match
           case CatalogAddResult.Added(component) => component.asRight
-          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
+          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, writeFailed).asLeft,
       editComponentEndpoint.handle: (encodedId, data) =>
-        SubstrateComponentId.parse(encodedId).fold(JournalError.catalogInvalidId.asLeft): id =>
+        SubstrateComponentId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
             case CatalogEditResult.Edited(component) => component.asRight
-            case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
-            case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft
+            case CatalogEditResult.RecordMissing     => recordMissing.asLeft
+            case CatalogEditResult.EditFailed(_)     => writeFailed.asLeft
     )
 
   private given Configuration = Configuration.default.withTransformMemberNames:
@@ -55,14 +66,8 @@ object SubstrateComponentApi:
     case name        => name
   })
 
-  private given Codec[NomenclatureName] = Codec.from(
-    Decoder.decodeString.map(NomenclatureName.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
-  private given Codec[NomenclatureInfo] = Codec.from(
-    Decoder.decodeString.map(NomenclatureInfo.apply),
-    Encoder.encodeString.contramap(_.value)
-  )
+  private given Codec[NomenclatureName]     = Codec.from(Decoder.decodeString.map(NomenclatureName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[NomenclatureInfo]     = Codec.from(Decoder.decodeString.map(NomenclatureInfo.apply), Encoder.encodeString.contramap(_.value))
   private given Codec[SubstrateComponentId] = Codec.from(
     // Component identifiers appear only in response bodies.
     // $COVERAGE-OFF$

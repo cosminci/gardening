@@ -35,7 +35,13 @@ Vitest.describe("operation failures", () => {
       logOperationResult: { kind: "loggingFailed", reason },
     });
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -65,7 +71,8 @@ Vitest.describe("operation failures", () => {
       });
       Testing.render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
@@ -96,7 +103,13 @@ Vitest.describe("operation failures", () => {
       logOperation: () => Promise.reject(new Error("private details")),
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -122,7 +135,13 @@ Vitest.describe("operation failures", () => {
         attentionReads++ === 0 ? base.getAttention() : Promise.reject(new Error("private details")),
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -167,7 +186,8 @@ Vitest.describe("operation failures", () => {
       };
       Testing.render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
@@ -232,7 +252,13 @@ Vitest.describe("operation failures", () => {
       logOperation: () => saving,
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 

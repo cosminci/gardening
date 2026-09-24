@@ -286,7 +286,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
     assertEquals(monitor.refreshAll, expectedRefreshResult)
     assertEquals(monitor.current, initialProjection)
 
-  test("should stop serving an archived plant from cached attention before the next refresh"):
+  test("should exclude an archived plant after refreshing attention from active samples"):
     val wateringHistory = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
     val remainingPlant  = plant.copy(id = PlantId("still-active"))
     val initialSamples  = GetAttentionSamplesResult.Read(
@@ -296,15 +296,16 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
     val refs             = Refs(getAttentionSamplesResults = Vector(initialSamples, refreshedSamples))
     val monitor          = buildMonitor(refs).getOrElse(fail("initial attention failed"))
 
-    monitor.removeArchivedPlant(plant.id)
-    val currentProjection = monitor.current
+    val initialProjection = monitor.current
     val refreshed         = monitor.refreshAll
+    val currentProjection = monitor.current
 
     val remainingAttention = PlantAttention(remainingPlant.id, WateringAttention.Unavailable(0, none))
     val expectedProjection = AttentionProjection(referenceTime, Vector(remainingAttention))
 
-    assertEquals(currentProjection, expectedProjection)
+    assertEquals(initialProjection.plants.map(_.plantId), Vector(plant.id, remainingPlant.id))
     assertEquals(refreshed, RefreshAttentionResult.Refreshed(expectedProjection))
+    assertEquals(currentProjection, expectedProjection)
 
   test("should fail construction when the initial projection cannot be materialized"):
     val failure           = RuntimeException("store down")

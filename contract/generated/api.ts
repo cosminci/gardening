@@ -55,7 +55,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/archive": {
+    "/plants/{plantId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -64,12 +64,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Permanently archive an active plant */
-        post: operations["postPlantsPlantidArchive"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch a plant */
+        patch: operations["patchPlantsPlantid"];
         trace?: never;
     };
     "/attention": {
@@ -89,7 +89,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operations": {
+    "/operations": {
         parameters: {
             query?: never;
             header?: never;
@@ -97,17 +97,17 @@ export interface paths {
             cookie?: never;
         };
         /** List a bounded page of plant operations */
-        get: operations["getPlantsPlantidOperations"];
+        get: operations["getOperations"];
         put?: never;
         /** Log a plant operation */
-        post: operations["postPlantsPlantidOperations"];
+        post: operations["postOperations"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operation-date-range": {
+    "/operations/date-range": {
         parameters: {
             query?: never;
             header?: never;
@@ -115,7 +115,7 @@ export interface paths {
             cookie?: never;
         };
         /** Read the first and last recorded operation dates */
-        get: operations["getPlantsPlantidOperation-date-range"];
+        get: operations["getOperationsDate-range"];
         put?: never;
         post?: never;
         delete?: never;
@@ -262,6 +262,7 @@ export interface components {
         };
         /** LogOperationRequest */
         LogOperationRequest: {
+            plantId: string;
             /** Format: date-time */
             date: string;
             details: components["schemas"]["OperationDetails"];
@@ -326,6 +327,12 @@ export interface components {
             location: string;
             substrate: components["schemas"]["SubstratePart"][];
             status: components["schemas"]["PlantStatus"];
+        };
+        /** PlantPatchOperation */
+        PlantPatchOperation: {
+            op: string;
+            path: string;
+            value: unknown;
         };
         /**
          * PlantStatus
@@ -514,7 +521,7 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidArchive: {
+    patchPlantsPlantid: {
         parameters: {
             query?: never;
             header?: never;
@@ -523,13 +530,25 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json-patch+json": components["schemas"]["PlantPatchOperation"][];
+            };
+        };
         responses: {
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
             };
             404: {
                 headers: {
@@ -540,6 +559,14 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -576,16 +603,15 @@ export interface operations {
             };
         };
     };
-    getPlantsPlantidOperations: {
+    getOperations: {
         parameters: {
-            query?: {
+            query: {
+                plantId: string;
                 offset?: number;
                 pageSize?: number;
             };
             header?: never;
-            path: {
-                plantId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -598,7 +624,7 @@ export interface operations {
                     "application/json": components["schemas"]["OperationPage"];
                 };
             };
-            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            /** @description Invalid value for: query parameter plantId, Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -617,13 +643,11 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidOperations: {
+    postOperations: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                plantId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -675,13 +699,13 @@ export interface operations {
             };
         };
     };
-    "getPlantsPlantidOperation-date-range": {
+    "getOperationsDate-range": {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 plantId: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -692,6 +716,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationDateRange"];
+                };
+            };
+            /** @description Invalid value for: query parameter plantId */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
             404: {

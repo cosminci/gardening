@@ -43,7 +43,13 @@ Vitest.describe("animating operation changes", () => {
         operationReads++ === 0 ? base.getOperations(plantId, window) : refresh,
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -92,7 +98,13 @@ Vitest.describe("animating operation changes", () => {
           : base.getPlants(),
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 

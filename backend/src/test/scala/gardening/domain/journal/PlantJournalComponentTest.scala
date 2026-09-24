@@ -123,23 +123,31 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(refs.requestedStatuses.get(), Vector.empty)
 
   test("should archive an active plant exactly once and preserve distinct failure results"):
-    val failure = RuntimeException("write unavailable")
+    val failure       = RuntimeException("write unavailable")
+    val archivedPlant = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
 
     val activeRefs   = Refs()
-    val missingRefs  = Refs(archivePlantResult = ArchivePlantResult.PlantMissing)
-    val archivedRefs = Refs(archivePlantResult = ArchivePlantResult.AlreadyArchived)
-    val failedRefs   = Refs(archivePlantResult = ArchivePlantResult.ArchiveFailed(failure))
+    val missingRefs  = Refs(getPlantResult = GetPlantResult.RecordMissing)
+    val archivedRefs = Refs(getPlantResult = GetPlantResult.Read(archivedPlant))
+    val failedRefs   = Refs(updatePlantResult = UpdatePlantResult.UpdateFailed(failure))
+    val readFailure  = RuntimeException("read unavailable")
+    val unreadable   = Refs(getPlantResult = GetPlantResult.ReadFailed(readFailure))
 
     val activeResult  = buildJournal(activeRefs).archivePlant(plant.id)
     val missingResult = buildJournal(missingRefs).archivePlant(plant.id)
     val repeatResult  = buildJournal(archivedRefs).archivePlant(plant.id)
     val failedResult  = buildJournal(failedRefs).archivePlant(plant.id)
+    val readResult    = buildJournal(unreadable).archivePlant(plant.id)
 
     assertEquals(activeResult, ArchivePlantResult.Archived)
     assertEquals(missingResult, ArchivePlantResult.PlantMissing)
     assertEquals(repeatResult, ArchivePlantResult.AlreadyArchived)
     assertEquals(failedResult, ArchivePlantResult.ArchiveFailed(failure))
-    assertEquals(activeRefs.archivedPlants.get(), Vector(plant.id))
+    assertEquals(readResult, ArchivePlantResult.ArchiveFailed(readFailure))
+    assertEquals(activeRefs.updatedPlants.get(), Vector(archivedPlant))
+    assertEquals(missingRefs.updatedPlants.get(), Vector.empty)
+    assertEquals(archivedRefs.updatedPlants.get(), Vector.empty)
+    assertEquals(unreadable.updatedPlants.get(), Vector.empty)
 
   test("should validate catalog references before writing operations"):
     val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
@@ -496,7 +504,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
   final private case class Refs(
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
-      archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
       getPlantResultAfterLog: Option[GetPlantResult] = none,
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
@@ -515,7 +522,6 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val operationReads: AtomicInteger                                                  = AtomicInteger(0)
     val plantReads: AtomicInteger                                                      = AtomicInteger(0)
     val requestedStatuses: AtomicReference[Vector[PlantStatus]]                        = AtomicReference(Vector.empty)
-    val archivedPlants: AtomicReference[Vector[PlantId]]                               = AtomicReference(Vector.empty)
     val requestedOperationWindows: AtomicReference[Vector[(PlantId, OperationWindow)]] = AtomicReference(Vector.empty)
     val requestedDateRanges: AtomicReference[Vector[PlantId]]                          = AtomicReference(Vector.empty)
     val recordedOperations: AtomicReference[Vector[Operation]]                         = new AtomicReference(Vector.empty)
@@ -529,9 +535,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         refs.getPlantsResult
-      override def getArchivedCount: ArchivedCountResult         = refs.archivedCountResult
-      override def archivePlant(id: PlantId): ArchivePlantResult =
-        refs.archivedPlants.updateAndGet(_ :+ id).pipe(_ => refs.archivePlantResult)
+      override def getArchivedCount: ArchivedCountResult = refs.archivedCountResult
       override def getPlant(id: PlantId): GetPlantResult =
         if refs.plantReads.getAndIncrement().equals(0) then refs.getPlantResult
         else refs.getPlantResultAfterLog.getOrElse(refs.getPlantResult)

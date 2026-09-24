@@ -212,17 +212,3 @@ export type CatalogEditResult<A> =
   | { readonly kind: "edited"; readonly entry: A }
   | { readonly kind: "recordMissing" }
   | { readonly kind: "editFailed"; readonly reason: Error };
-
-export interface JournalClient {
-  getPlants(status?: PlantStatus): Promise<GetPlantsResult>;
-  getArchivedCount(): Promise<GetArchivedCountResult>;
-  getOperationDates(plantId: PlantId): Promise<GetOperationDatesResult>;
-  archivePlant(plantId: PlantId): Promise<ArchivePlantResult>;
-  getOperations(plantId: PlantId, window: OperationWindow): Promise<GetOperationsResult>;
-  logOperation(
-    plantId: PlantId,
-    date: Instant,
-    details: OperationDetails,
-  ): Promise<LogOperationResult>;
-  editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
-}

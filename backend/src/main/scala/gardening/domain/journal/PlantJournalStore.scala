@@ -7,7 +7,6 @@ trait PlantJournalStore:
   def getArchivedCount: ArchivedCountResult
   def getPlant(id: PlantId): GetPlantResult
   def updatePlant(plant: Plant): UpdatePlantResult
-  def archivePlant(id: PlantId): ArchivePlantResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def getOperation(id: OperationId): GetOperationResult
