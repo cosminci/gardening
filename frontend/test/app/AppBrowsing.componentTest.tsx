@@ -6,9 +6,11 @@ import {
   milliseconds,
   nickname,
   nomenclatureName,
+  operationId,
   pesticideId,
   plantId,
 } from "../../src/domain/Journal";
+import type * as Journal from "../../src/domain/Journal";
 import type {
   GetAttentionResult,
   GetOperationsResult,
@@ -16,6 +18,7 @@ import type {
   OperationWindow,
   AttentionSample,
   PlantId,
+  NewPlantDetails,
 } from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
 
@@ -722,6 +725,400 @@ describe("browsing the journal", () => {
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
 
+  it("should show an active plant without a measured sample when its watering history is insufficient", async () => {
+    const missing = JournalFixtures.monstera();
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), missing] }],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [JournalFixtures.operationsPage()],
+      },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+
+    const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
+    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
+    expect(within(newCard).getByText("No operations yet.")).toBeInTheDocument();
+  });
+
+  it("should create a plant from the cemetery without logging care or measuring attention", async () => {
+    const added = JournalFixtures.monstera();
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [JournalFixtures.ficus()] },
+        { kind: "read", plants: [JournalFixtures.ficus(), added] },
+      ],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [JournalFixtures.operationsPage()],
+      },
+    });
+    const createPlant = vi
+      .fn<(_details: NewPlantDetails) => Promise<Journal.CreatePlantResult>>()
+      .mockResolvedValue({ kind: "created", plant: added });
+    const getAttention = vi.fn(() => base.getAttention());
+    const logOperation = vi.fn(
+      (id: PlantId, date: Journal.Instant, details: Journal.OperationDetails) =>
+        base.logOperation(id, date, details),
+    );
+    const journal = {
+      ...base,
+      createPlant,
+      getAttention,
+      logOperation,
+      getPlants: (status?: "active" | "archived") =>
+        status === "archived"
+          ? Promise.resolve({ kind: "read" as const, plants: [] })
+          : base.getPlants(),
+    };
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    const addPlant = screen.getByRole("button", { name: "Add plant" });
+    expect(addPlant.nextElementSibling).toHaveAttribute("aria-label", "Plant views");
+    fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: "  Monstera deliciosa  " },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: " Kitchen " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+
+    const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
+    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Garden.*2 plants/ })).toHaveFocus();
+    expect(createPlant).toHaveBeenCalledOnce();
+    expect(createPlant.mock.calls[0]?.[0]).toMatchObject({
+      species: "Monstera deliciosa",
+      location: "Kitchen",
+      substrate: [{ share: 100 }],
+    });
+    expect(getAttention).toHaveBeenCalledOnce();
+    expect(logOperation).not.toHaveBeenCalled();
+  });
+
+  it("should keep invalid and failed plant creation editable without duplicating a saved plant", async () => {
+    const added = JournalFixtures.monstera();
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [JournalFixtures.ficus()] },
+        { kind: "readFailed", reason: new Error("offline") },
+      ],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const createPlant = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "createFailed", reason: new Error("offline") })
+      .mockResolvedValueOnce({ kind: "created", plant: added });
+    const journal = { ...base, createPlant };
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Enter a species.");
+    expect(createPlant).not.toHaveBeenCalled();
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: "Monstera deliciosa" },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Kitchen" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    expect(await within(dialog).findByText("The plant could not be saved.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Species" })).toHaveValue(
+      "Monstera deliciosa",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Plant was saved, but the garden could not be loaded.",
+      );
+    });
+    expect(screen.queryByRole("dialog", { name: "Plant editor" })).not.toBeInTheDocument();
+    expect(createPlant).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: /Garden.*1 plant/ })).toHaveFocus();
+  });
+
+  it("should show unavailable cadence after four waterings across history pages", async () => {
+    const added = JournalFixtures.monstera();
+    const watered = JournalFixtures.care({
+      id: "o1",
+      date: "2026-01-01T00:00:00Z",
+      moisture: "wet",
+    });
+    const operations = Array.from({ length: 4 }, (_, index) => ({
+      ...watered,
+      id: operationId(`watering-${String(index)}`),
+      plantId: added.id,
+    }));
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), added] }],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [
+          JournalFixtures.operationsPage(operations.slice(0, 3), true),
+          JournalFixtures.operationsPage(operations.slice(3)),
+        ],
+      },
+    });
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+
+    const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
+    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
+  });
+
+  it.each([
+    [{ kind: "unknownComponent" as const }, "Choose known substrate components."],
+    [
+      { kind: "catalogReadFailed" as const, reason: new Error("private catalog") },
+      "The substrate catalog could not be read. Try again.",
+    ],
+    [new Error("private connection"), "The plant could not be saved."],
+  ])("should keep the plant sheet open after creation cannot proceed", async (outcome, message) => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const journal = {
+      ...base,
+      createPlant: () =>
+        outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome),
+    };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: "Aloe" },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Office" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(message);
+    expect(within(dialog).getByRole("textbox", { name: "Species" })).toHaveValue("Aloe");
+    expect(dialog).toHaveFocus();
+    expect(screen.queryByText("private connection")).not.toBeInTheDocument();
+  });
+
+  it("should fail a missing sample when older pages contain five waterings", async () => {
+    const missing = JournalFixtures.monstera();
+    const watered = JournalFixtures.care({
+      id: "o1",
+      date: "2026-01-01T00:00:00Z",
+      moisture: "wet",
+    });
+    const olderWaterings = Array.from({ length: 5 }, (_, index) => ({
+      ...watered,
+      id: operationId(`water-${String(index)}`),
+      plantId: missing.id,
+    }));
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), missing] }],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [
+          JournalFixtures.operationsPage(olderWaterings.slice(0, 3), true),
+          JournalFixtures.operationsPage(olderWaterings.slice(3)),
+        ],
+      },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+  });
+
+  it.each([
+    [[JournalFixtures.operationsPage([], true)], "an incomplete empty page"],
+    [
+      [
+        JournalFixtures.operationsPage([JournalFixtures.repot("o1", "2026-01-01T00:00:00Z")], true),
+        { kind: "readFailed" as const, reason: new Error("private history") },
+      ],
+      "an unreadable older page",
+    ],
+  ])("should reject %s for a missing attention sample", async (pages) => {
+    const journal = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [JournalFixtures.ficus(), JournalFixtures.monstera()] },
+      ],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: pages as [GetOperationsResult, ...GetOperationsResult[]],
+      },
+    });
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+  });
+
+  it("should cancel plant creation without a write and return focus to Add plant", async () => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const createPlant = vi.fn((details: NewPlantDetails) => base.createPlant(details));
+    const journal = { ...base, createPlant };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse plant editor" }));
+
+    expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
+    expect(createPlant).not.toHaveBeenCalled();
+  });
+
+  it("should ignore an obsolete missing-attention history read after switching views", async () => {
+    const added = JournalFixtures.monstera();
+    let finishHistory: (result: GetOperationsResult) => void = () => undefined;
+    const olderHistory = new Promise<GetOperationsResult>((resolve) => {
+      finishHistory = resolve;
+    });
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [
+        { kind: "read", plants: [JournalFixtures.ficus()] },
+        { kind: "read", plants: [JournalFixtures.ficus(), added] },
+      ],
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [
+          JournalFixtures.operationsPage(
+            [JournalFixtures.repot("o1", "2026-01-01T00:00:00Z")],
+            true,
+          ),
+        ],
+      },
+    });
+    let finishRequestedHistory: () => void = () => undefined;
+    const journal = {
+      ...base,
+      createPlant: () => Promise.resolve({ kind: "created" as const, plant: added }),
+      getPlants: (status?: "active" | "archived") =>
+        status === "archived"
+          ? Promise.resolve({ kind: "read" as const, plants: [] })
+          : base.getPlants(),
+      getOperations: (id: PlantId, window: OperationWindow) => {
+        if (id === added.id && window.offset > 0) {
+          finishRequestedHistory();
+          return olderHistory;
+        }
+        return base.getOperations(id, window);
+      },
+    };
+    const requestedHistory = new Promise<void>((resolve) => {
+      finishRequestedHistory = resolve;
+    });
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: "Monstera" },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Kitchen" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    await requestedHistory;
+    fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+    finishHistory({ kind: "readFailed", reason: new Error("obsolete read") });
+    await olderHistory;
+
+    expect(screen.getByRole("button", { name: /Cemetery.*0 plants/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("should fail the journal load when current plants cannot be read or attention is unmatched", async () => {
     const unrelatedSample = {
       plantId: JournalFixtures.monstera().id,
@@ -737,10 +1134,6 @@ describe("browsing the journal", () => {
     const cases = [
       {
         plants: { kind: "readFailed" as const, reason: new Error("private plant details") },
-        attention: unavailableFicusAttentionResult,
-      },
-      {
-        plants: { kind: "read" as const, plants: [JournalFixtures.monstera()] },
         attention: unavailableFicusAttentionResult,
       },
       {

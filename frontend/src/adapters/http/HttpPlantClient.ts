@@ -2,7 +2,7 @@ import type { components, paths } from "@contract";
 import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PlantClient } from "../../domain/Plant";
-import { fromWireSubstrate } from "./Codecs";
+import { fromWireSubstrate, toWireSubstrate } from "./Codecs";
 
 type Wire = components["schemas"];
 
@@ -12,6 +12,27 @@ export const makeHttpPlantClient = (
   const client = createClient<paths>({ baseUrl: globalThis.location.origin, fetch });
 
   return {
+    async createPlant(details): Promise<Journal.CreatePlantResult> {
+      try {
+        const { data, error, response } = await client.POST("/plants", {
+          body: {
+            species: details.species,
+            nickname: details.maybeNickname,
+            location: details.location,
+            substrate: toWireSubstrate(details.substrate),
+          },
+        });
+        if (response.status === 201 && data !== undefined)
+          return { kind: "created", plant: toPlant(data) };
+        if (response.status === 422) return { kind: "unknownComponent" };
+        if (response.status === 503)
+          return { kind: "catalogReadFailed", reason: requestFailure(error) };
+        return { kind: "createFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "createFailed", reason: requestFailure(error) };
+      }
+    },
+
     async getPlants(status): Promise<Journal.GetPlantsResult> {
       try {
         const { data, error } = await client.GET("/plants", {

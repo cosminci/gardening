@@ -1,0 +1,196 @@
+import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
+import { describe, expect, it, vi } from "vitest";
+import { PlantSheet } from "../../src/app/PlantSheet";
+import * as Journal from "../../src/domain/Journal";
+
+const perlite: Journal.SubstrateComponent = {
+  id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000003"),
+  data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null },
+};
+
+describe("PlantSheet", () => {
+  it("should validate details and substrate before submitting a new plant", () => {
+    const onSubmit = vi
+      .fn<(_details: Journal.NewPlantDetails) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const { unmount } = render(() => (
+      <PlantSheet
+        components={[perlite]}
+        saveError={undefined}
+        completed={false}
+        onSubmit={onSubmit}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onCancel={() => undefined}
+      />
+    ));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    expect(dialog).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Enter a species.");
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: " Aloe vera " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("Enter a location.");
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: " Office " },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Nickname (optional)" }), {
+      target: { value: " Spike " },
+    });
+    fireEvent.input(within(dialog).getByRole("spinbutton", { name: "Component 1 share" }), {
+      target: { value: "101" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Each substrate share must be a whole number from 1 to 100%.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.input(within(dialog).getByRole("spinbutton", { name: "Component 1 share" }), {
+      target: { value: "100" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+
+    const expectedDetails: Journal.NewPlantDetails = {
+      species: Journal.species("Aloe vera"),
+      maybeNickname: Journal.nickname("Spike"),
+      location: Journal.location("Office"),
+      substrate: Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+    };
+    expect(onSubmit).toHaveBeenCalledWith(expectedDetails);
+    unmount();
+  });
+
+  it("should let a plant with no catalog entries define its first substrate component", async () => {
+    const [components, setComponents] = createSignal<readonly Journal.SubstrateComponent[]>([]);
+    const onAddComponent = vi.fn<
+      (
+        _data: Journal.SubstrateComponentData,
+      ) => Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>>
+    >(() => {
+      setComponents([perlite]);
+      return Promise.resolve({ kind: "added", entry: perlite });
+    });
+    render(() => (
+      <PlantSheet
+        components={components()}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={onAddComponent}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onCancel={() => undefined}
+      />
+    ));
+    fireEvent.input(screen.getByRole("textbox", { name: "Species" }), {
+      target: { value: "Aloe" },
+    });
+    fireEvent.input(screen.getByRole("textbox", { name: "Location" }), {
+      target: { value: "Office" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save plant" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Add at least one substrate component.");
+    fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
+    const reopenedEditor = screen.getByRole("dialog", { name: "Substrate component editor" });
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(
+      within(reopenedEditor).getByRole("heading", { name: "Add substrate component" }),
+    ).toBeInTheDocument();
+    fireEvent.input(within(reopenedEditor).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Perlite" },
+    });
+    fireEvent.click(within(reopenedEditor).getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => {
+      expect(onAddComponent).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(perlite.id);
+  });
+
+  it("should reject components removed from the catalog and let users edit the mix", async () => {
+    const [components, setComponents] = createSignal<readonly Journal.SubstrateComponent[]>([
+      perlite,
+    ]);
+    const onEditComponent = vi.fn(() =>
+      Promise.resolve({ kind: "edited" as const, entry: perlite }),
+    );
+    render(() => (
+      <PlantSheet
+        components={components()}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={onEditComponent}
+        onCancel={() => undefined}
+      />
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
+    const editor = screen.getByRole("dialog", { name: "Substrate component editor" });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => {
+      expect(onEditComponent).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+
+    setComponents([]);
+    fireEvent.input(screen.getByRole("textbox", { name: "Species" }), {
+      target: { value: "Aloe" },
+    });
+    fireEvent.input(screen.getByRole("textbox", { name: "Location" }), {
+      target: { value: "Office" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save plant" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose known substrate components.");
+  });
+
+  it("should dismiss with Escape and restore focus to Add plant", () => {
+    const [open, setOpen] = createSignal(false);
+    render(() => (
+      <>
+        <header class="masthead">
+          <button id="add-plant" onClick={() => setOpen(true)}>
+            Add plant
+          </button>
+        </header>
+        {open() && (
+          <PlantSheet
+            components={[perlite]}
+            saveError={undefined}
+            completed={false}
+            onSubmit={() => Promise.resolve()}
+            onAddComponent={() =>
+              Promise.resolve({ kind: "addFailed", reason: new Error("offline") })
+            }
+            onEditComponent={() =>
+              Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+            }
+            onCancel={() => {
+              setOpen(false);
+            }}
+          />
+        )}
+      </>
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(within(dialog).getByRole("button", { name: "Save plant" })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(within(dialog).getByRole("button", { name: "Collapse plant editor" })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Plant editor" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
+  });
+});

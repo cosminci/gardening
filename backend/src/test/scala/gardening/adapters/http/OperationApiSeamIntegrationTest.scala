@@ -211,6 +211,8 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
 
   private def buildOperationApi(refs: Refs) =
     val journal = new PlantJournal:
+      override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
+        fail("operation HTTP must not create plants")
       override def getPlants(status: PlantStatus): GetPlantsResult                               = fail("operation HTTP must not read plants")
       override def getArchivedCount: ArchivedCountResult                                         = fail("operation HTTP must not count plants")
       override def archivePlant(id: PlantId): ArchivePlantResult                                 = fail("operation HTTP must not archive plants")

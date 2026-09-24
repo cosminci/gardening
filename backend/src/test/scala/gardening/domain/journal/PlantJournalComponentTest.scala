@@ -56,6 +56,33 @@ class PlantJournalComponentTest extends munit.FunSuite:
   private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
     .map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
 
+  test("should create an active plant with initial substrate independently of operations"):
+    val refs    = Refs()
+    val journal = buildJournal(refs)
+
+    val result = journal.createPlant(plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+
+    val expectedPlant = plant.copy(id = PlantId("id-1"))
+    assertEquals(result, CreatePlantResult.Created(expectedPlant))
+    assertEquals(refs.createdPlants.get(), Vector(expectedPlant))
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
+
+  test("should distinguish unknown substrate components, catalog reads, and failed writes"):
+    val failure         = RuntimeException("unavailable")
+    val missingRefs     = Refs(componentReadResult = CatalogReadResult.Read(Vector.empty))
+    val readFailedRefs  = Refs(componentReadResult = CatalogReadResult.ReadFailed(failure))
+    val writeFailedRefs = Refs(addPlantResult = AddPlantResult.AddFailed(failure))
+
+    val missing     = buildJournal(missingRefs).createPlant(plant.details.species, none, plant.details.location, substrate)
+    val readFailed  = buildJournal(readFailedRefs).createPlant(plant.details.species, none, plant.details.location, substrate)
+    val writeFailed = buildJournal(writeFailedRefs).createPlant(plant.details.species, none, plant.details.location, substrate)
+
+    assertEquals(missing, CreatePlantResult.UnknownComponent)
+    assertEquals(readFailed, CreatePlantResult.CatalogReadFailed(failure))
+    assertEquals(writeFailed, CreatePlantResult.CreateFailed(failure))
+    assertEquals(missingRefs.createdPlants.get(), Vector.empty)
+    assertEquals(readFailedRefs.createdPlants.get(), Vector.empty)
+
   test("should return operation history while preserving read failures"):
     val readFailure = RuntimeException("store down")
 
@@ -502,6 +529,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(buildJournal(refs).editOperation(operation.id, care), EditOperationResult.EditFailed(cause))
 
   final private case class Refs(
+      addPlantResult: AddPlantResult = AddPlantResult.Added,
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
@@ -519,6 +547,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
       pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
       nextId: () => String = () => "id-1"
   ):
+    val createdPlants: AtomicReference[Vector[Plant]]                                  = new AtomicReference(Vector.empty)
     val operationReads: AtomicInteger                                                  = AtomicInteger(0)
     val plantReads: AtomicInteger                                                      = AtomicInteger(0)
     val requestedStatuses: AtomicReference[Vector[PlantStatus]]                        = AtomicReference(Vector.empty)
@@ -532,6 +561,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
   private def buildJournal(refs: Refs) =
     val store = new PlantJournalStore:
+      override def addPlant(plant: Plant): AddPlantResult =
+        refs.createdPlants.updateAndGet(_ :+ plant).pipe(_ => refs.addPlantResult)
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         refs.getPlantsResult

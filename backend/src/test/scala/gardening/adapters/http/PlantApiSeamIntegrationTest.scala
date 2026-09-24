@@ -26,6 +26,38 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     PlantDetails(Species("Ficus lyrata"), Nickname("Fern").some, Location("Balcony"), substrate, PlantStatus.Active)
   )
 
+  test("should create a plant without refreshing attention and distinguish creation errors"):
+    val body = s"""{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}]}"""
+    val createdRefs = Refs(createPlantResult = CreatePlantResult.Created(plant))
+    val unknownRefs = Refs(createPlantResult = CreatePlantResult.UnknownComponent)
+    val catalogRefs = Refs(createPlantResult = CreatePlantResult.CatalogReadFailed(RuntimeException("secret")))
+    val failedRefs  = Refs(createPlantResult = CreatePlantResult.CreateFailed(RuntimeException("secret")))
+
+    val created = post(body, buildPlantApi(createdRefs))
+    val unknown = post(body, buildPlantApi(unknownRefs))
+    val catalog = post(body, buildPlantApi(catalogRefs))
+    val failed  = post(body, buildPlantApi(failedRefs))
+
+    val expectedPlant = json(
+      s"""{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}"""
+    )
+    assertEquals(created.code -> jsonBody(created), StatusCode.Created             -> expectedPlant)
+    assertEquals(unknown.code -> jsonBody(unknown), StatusCode.UnprocessableEntity -> json("""{"message":"unknown substrate component"}"""))
+    assertEquals(catalog.code -> jsonBody(catalog), StatusCode.ServiceUnavailable  -> json("""{"message":"substrate catalog could not be read"}"""))
+    assertEquals(failed.code  -> jsonBody(failed), StatusCode.InternalServerError  -> json("""{"message":"plant could not be created"}"""))
+    assertEquals(createdRefs.refreshCalls.get(), 0)
+    assertEquals(createdRefs.createdDetails.get(), Vector(plant.details))
+
+  test("should reject invalid creation input before reaching the journal"):
+    val refs    = Refs()
+    val invalid =
+      """{"species":" ","nickname":null,"location":"Balcony","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}]}"""
+
+    val response = post(invalid, buildPlantApi(refs))
+
+    assertEquals(response.code -> jsonBody(response), StatusCode.BadRequest -> json("""{"message":"plant details must not be blank"}"""))
+    assertEquals(refs.createdDetails.get(), Vector.empty)
+
   test("should list active plants by default and archived plants on request"):
     val archived     = plant.copy(id = PlantId("archived"), details = plant.details.copy(status = PlantStatus.Archived))
     val activeRefs   = Refs(plantsResult = GetPlantsResult.Read(Vector(plant)))
@@ -140,16 +172,21 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(refs.refreshCalls.get(), 0)
 
   private case class Refs(
+      createPlantResult: CreatePlantResult = CreatePlantResult.Created(plant),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
       archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
       refreshResult: RefreshAttentionResult = RefreshAttentionResult.Refreshed(AttentionProjection(date, Vector.empty)),
       requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
       refreshCalls: AtomicInteger = AtomicInteger(0)
-  )
+  ):
+    val createdDetails: AtomicReference[Vector[PlantDetails]] = AtomicReference(Vector.empty)
 
   private def buildPlantApi(refs: Refs) =
     val journal = new PlantJournal:
+      override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
+        refs.createdDetails.updateAndGet(_ :+ PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
+        refs.createPlantResult
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         refs.plantsResult
@@ -176,6 +213,9 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
 
   private def get(path: String, server: TestServer) =
     basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(server)
+
+  private def post(body: String, server: TestServer) =
+    basicRequest.post(Uri.unsafeParse("http://test/plants")).body(body).contentType("application/json").send(server)
 
   private def patch(path: String, body: String, server: TestServer) =
     basicRequest.patch(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json-patch+json").send(server)

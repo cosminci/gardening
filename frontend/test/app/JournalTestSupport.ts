@@ -145,6 +145,8 @@ export const buildJournal = ({
 
   return {
     getPlants: () => Promise.resolve(queuedResult(plantResponses, plantReads++)),
+    createPlant: () =>
+      Promise.resolve({ kind: "createFailed", reason: new Error("unexpected write") }),
     getArchivedCount: () => Promise.resolve({ kind: "read", count: 0 }),
     getOperationDates: () => Promise.resolve({ kind: "read", dates: { kind: "empty" } }),
     archivePlant: () =>

@@ -31,6 +31,16 @@ enum GetPlantsResult:
   case Read(plants: Vector[Plant])
   case ReadFailed(reason: Throwable)
 
+enum CreatePlantResult:
+  case Created(plant: Plant)
+  case UnknownComponent
+  case CatalogReadFailed(reason: Throwable)
+  case CreateFailed(reason: Throwable)
+
+enum AddPlantResult:
+  case Added
+  case AddFailed(reason: Throwable)
+
 sealed trait ArchivedCountResult
 
 object ArchivedCountResult:

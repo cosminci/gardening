@@ -20,6 +20,7 @@ import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantJournal:
+  def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult
   def getPlants(status: PlantStatus): GetPlantsResult
   def getArchivedCount: ArchivedCountResult
   def archivePlant(id: PlantId): ArchivePlantResult
@@ -45,6 +46,18 @@ object PlantJournal:
       idGen: IdGenerator^
   ) extends PlantJournal:
     private val operationMutex = ReentrantLock()
+
+    override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
+      substrateStore.getSubstrateComponents match
+        case CatalogReadResult.ReadFailed(reason) => CreatePlantResult.CatalogReadFailed(reason)
+        case CatalogReadResult.Read(components)   =>
+          val known = components.map(_.id).toSet
+          if !substrate.parts.forall(part => known.contains(part.componentId)) then CreatePlantResult.UnknownComponent
+          else
+            val plant = Plant(PlantId(idGen.nextId()), PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
+            store.addPlant(plant) match
+              case AddPlantResult.Added             => CreatePlantResult.Created(plant)
+              case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason)
 
     override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
 

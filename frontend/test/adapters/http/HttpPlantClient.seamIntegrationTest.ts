@@ -29,6 +29,64 @@ const wirePlant = (value: Journal.Plant) => ({
 });
 
 describe("HttpPlantClient", () => {
+  it("should create one active plant with its initial substrate and no operation request", async () => {
+    const createdPlant = plant("p3", "Fern");
+    const requests: Request[] = [];
+    const client = makeHttpPlantClient(
+      respondingWith([jsonResponse(wirePlant(createdPlant), 201)], requests),
+    );
+    const details: Journal.NewPlantDetails = {
+      species: createdPlant.details.species,
+      maybeNickname: createdPlant.details.maybeNickname,
+      location: createdPlant.details.location,
+      substrate: createdPlant.details.substrate,
+    };
+
+    const result = await client.createPlant(details);
+    const body: unknown = await requests[0]?.json();
+
+    expect(result).toEqual({ kind: "created", plant: createdPlant });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.method).toBe("POST");
+    expect(new URL(requests[0]?.url ?? "").pathname).toBe("/plants");
+    expect(body).toEqual({
+      species: "Ficus lyrata",
+      nickname: "Fern",
+      location: "Balcony",
+      substrate: [{ componentId: perliteId, share: 100 }],
+    });
+  });
+
+  it("should distinguish invalid substrate, unreadable catalog, write failure, and transport failure", async () => {
+    const client = makeHttpPlantClient(
+      respondingWith([
+        jsonResponse({ message: "unknown substrate component" }, 422),
+        jsonResponse({ message: "catalog unavailable" }, 503),
+        jsonResponse({ message: "invalid plant" }, 400),
+        jsonResponse({ message: "write unavailable" }, 500),
+        new Error("offline"),
+      ]),
+    );
+    const details: Journal.NewPlantDetails = {
+      species: Journal.species("Aloe"),
+      maybeNickname: null,
+      location: Journal.location("Office"),
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    };
+
+    const unknown = await client.createPlant(details);
+    const catalogFailure = await client.createPlant(details);
+    const invalid = await client.createPlant(details);
+    const writeFailure = await client.createPlant(details);
+    const offline = await client.createPlant(details);
+
+    expect(unknown).toEqual({ kind: "unknownComponent" });
+    expect(catalogFailure).toMatchObject({ kind: "catalogReadFailed" });
+    expect(invalid).toMatchObject({ kind: "createFailed" });
+    expect(writeFailure).toMatchObject({ kind: "createFailed" });
+    expect(offline).toMatchObject({ kind: "createFailed" });
+  });
+
   it("should read current plants with active default and archived status filtering", async () => {
     const activePlant = plant("p1", "Fern");
     const archivedPlant = {

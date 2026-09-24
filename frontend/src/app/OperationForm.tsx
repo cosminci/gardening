@@ -2,7 +2,7 @@ import { Show, createSignal, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
 import { CareFields } from "./CareFields";
-import { SubstrateFields } from "./SubstrateFields";
+import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
 import "./form-fields.css";
 import "./operation-form.css";
@@ -224,15 +224,4 @@ const parseLocalMinute = (value: string): Journal.Instant | undefined => {
   const date = new Date(value);
   if (formatLocalMinute(date) !== value) return undefined;
   return Journal.instant(date.toISOString());
-};
-
-const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
-  if (parts.length === 0) return "Add at least one substrate component.";
-  if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
-    return "Each substrate share must be a whole number from 1 to 100%.";
-  if (new Set(parts.map((part) => part.component)).size !== parts.length)
-    return "Each substrate component can only be used once.";
-  if (parts.reduce((total, part) => total + part.share, 0) > 100)
-    return "Substrate shares cannot total more than 100%.";
-  return undefined;
 };

@@ -18,10 +18,23 @@ import scala.util.chaining.*
 import Codecs.given
 
 final private case class ArchivedPlantCount(count: Long) derives Codec.AsObject
+final private case class PlantCreation(species: String, maybeNickname: Option[String], location: String, substrate: Substrate)
+    derives Codec.AsObject
 final private case class PlantPatchOperation(op: String, path: String, value: Json) derives Codec.AsObject
 
 object PlantApi:
 
+  private val invalidPlantDetails = ApiError("plant details must not be blank")
+  private val unknownComponent    = ApiError("unknown substrate component")
+  private val catalogReadFailed   = ApiError("substrate catalog could not be read")
+  private val plantCreationFailed = ApiError("plant could not be created")
+  private val plantCreationErrors =
+    oneOf[ApiError](
+      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidPlantDetails),
+      oneOfVariantExactMatcher(StatusCode.UnprocessableEntity, jsonBody[ApiError])(unknownComponent),
+      oneOfVariantExactMatcher(StatusCode.ServiceUnavailable, jsonBody[ApiError])(catalogReadFailed),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
   private val plantMissing              = ApiError("plant not found")
   private val plantArchived             = ApiError("plant already archived")
   private val unsupportedPlantPatch     = "unsupported plant patch"
@@ -45,7 +58,10 @@ object PlantApi:
         .format(JsonPatchFormat())
     )
 
-  private val plantEndpoint     = endpoint.errorOut(ApiError.generic)
+  private val plantEndpoint       = endpoint.errorOut(ApiError.generic)
+  private val createPlantEndpoint =
+    endpoint.post.in("plants").in(jsonBody[PlantCreation]).errorOut(plantCreationErrors)
+      .out(statusCode(StatusCode.Created)).out(jsonBody[Plant]).summary("Create an active plant")
   private val getPlantsEndpoint =
     plantEndpoint.get.in("plants").in(query[PlantStatus]("status").default(PlantStatus.Active))
       .out(jsonBody[Vector[Plant]]).summary("List plants by status")
@@ -57,10 +73,19 @@ object PlantApi:
       .out(statusCode(StatusCode.NoContent)).summary("Patch a plant")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
-    List(getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
+    List(createPlantEndpoint, getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
 
   def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
+      createPlantEndpoint.handle: input =>
+        if input.species.trim.isEmpty || input.location.trim.isEmpty || input.maybeNickname.exists(_.trim.isEmpty) then
+          invalidPlantDetails.asLeft
+        else
+          journal.createPlant(Species(input.species), input.maybeNickname.map(Nickname.apply), Location(input.location), input.substrate) match
+            case CreatePlantResult.Created(plant)       => plant.asRight
+            case CreatePlantResult.UnknownComponent     => unknownComponent.asLeft
+            case CreatePlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
+            case CreatePlantResult.CreateFailed(_)      => plantCreationFailed.asLeft,
       getPlantsEndpoint.handle: status =>
         journal.getPlants(status) match
           case GetPlantsResult.Read(plants)  => plants.asRight
@@ -104,6 +129,10 @@ object PlantApi:
   // $COVERAGE-ON$
   private given Codec.AsObject[PlantDetails] = ConfiguredCodec.derived
   private given Codec.AsObject[Plant]        = ConfiguredCodec.derived
+  private given Schema[PlantCreation]        = Schema
+    .derived[PlantCreation]
+    .modify(_.maybeNickname)(_.copy(isOptional = false).nullable)
+    .modify(_.substrate)(_.copy(isOptional = false))
 
   private type PlantText = Species | Nickname | Location
   private given [A <: PlantText]: Schema[A] = Schema.string
