@@ -46,7 +46,7 @@ Vitest.describe("changing the journal", () => {
         getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: countReads++ }),
         archivePlant,
       };
-      Testing.render(() => <App journal={journal} />);
+      Testing.render(() => <App journal={journal} substrates={journal} />);
       const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
 
       Testing.fireEvent.click(archiveControl);
@@ -81,7 +81,7 @@ Vitest.describe("changing the journal", () => {
       }),
       archivePlant,
     };
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
     archiveControl.focus();
 
@@ -145,7 +145,7 @@ Vitest.describe("changing the journal", () => {
       logOperation: () =>
         Promise.resolve({ kind: "logged" as const, id: Journal.operationId("recorded") }),
     };
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
     archiveControl.focus();
 
@@ -198,7 +198,7 @@ Vitest.describe("changing the journal", () => {
         archivePlant: () =>
           outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome),
       };
-      const view = Testing.render(() => <App journal={journal} />);
+      const view = Testing.render(() => <App journal={journal} substrates={journal} />);
       await Testing.screen.findByRole("button", { name: "Archive Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
@@ -228,7 +228,7 @@ Vitest.describe("changing the journal", () => {
           plantReads++ === 0 ? base.getPlants() : Promise.reject(new Error("offline")),
         archivePlant: () => Promise.resolve({ kind: "archived" as const }),
       };
-      Testing.render(() => <App journal={journal} />);
+      Testing.render(() => <App journal={journal} substrates={journal} />);
       await Testing.screen.findByRole("article", { name: "Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
@@ -281,7 +281,7 @@ Vitest.describe("changing the journal", () => {
           },
         }),
     };
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     Testing.fireEvent.click(
       await Testing.screen.findByRole("button", { name: /Cemetery.*1 plant/ }),
     );
@@ -328,7 +328,7 @@ Vitest.describe("changing the journal", () => {
       logOperationResult: { kind: "logged", id: Journal.operationId("new") },
       logged,
     });
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     const trigger = Testing.screen.getByRole("button", { name: "Log operation for Fern" });
@@ -394,7 +394,7 @@ Vitest.describe("changing the journal", () => {
       edited,
     });
 
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     await Testing.screen.findByText("3rd of March");
 
     const trigger = Testing.screen.getByRole("button", {
@@ -456,7 +456,7 @@ Vitest.describe("changing the journal", () => {
       logOperationResult: { kind: "logged", id: Journal.operationId("new") },
     });
 
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     const card = await Testing.screen.findByRole("article", { name: "Fern" });
     Vitest.expect(Testing.within(card).getByText("Perlite 100%")).toBeInTheDocument();
 
@@ -487,7 +487,7 @@ Vitest.describe("changing the journal", () => {
       },
       logOperationResult: { kind: "logged", id: Journal.operationId("old") },
     });
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -509,7 +509,7 @@ Vitest.describe("changing the journal", () => {
       getAttentionResults: [unavailableFicusAttentionResult],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
-    const { container } = Testing.render(() => <App journal={journal} />);
+    const { container } = Testing.render(() => <App journal={journal} substrates={journal} />);
     const current = Testing.within(container);
     await current.findByRole("article", { name: "Fern" });
     const header = current.getByRole("heading", { name: "Plant Journal" }).closest("header");
@@ -552,7 +552,7 @@ Vitest.describe("changing the journal", () => {
       addedComponents,
       editedComponents,
     });
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -642,7 +642,7 @@ Vitest.describe("changing the journal", () => {
       addedPesticides,
       editedPesticides,
     });
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
@@ -790,7 +790,7 @@ Vitest.describe("changing the journal", () => {
       },
       logOperationResult: { kind: "logged", id: Journal.operationId("new") },
     });
-    Testing.render(() => <App journal={journal} />);
+    Testing.render(() => <App journal={journal} substrates={journal} />);
 
     const initialArticles = await Testing.screen.findAllByRole("article");
     Vitest.expect(initialArticles.map((article) => article.getAttribute("aria-label"))).toEqual([

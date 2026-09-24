@@ -274,94 +274,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /substrate-components:
-    get:
-      summary: List substrate components
-      operationId: getSubstrate-components
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/SubstrateComponent'
-        default:
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-    post:
-      summary: Add a substrate component
-      operationId: postSubstrate-components
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SubstrateComponentData'
-        required: true
-      responses:
-        '201':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SubstrateComponent'
-        '400':
-          description: 'Invalid value for: body'
-          content:
-            text/plain:
-              schema:
-                type: string
-        default:
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-  /substrate-components/{componentId}:
-    put:
-      summary: Edit a substrate component
-      operationId: putSubstrate-componentsComponentid
-      parameters:
-      - name: componentId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SubstrateComponentData'
-        required: true
-      responses:
-        '200':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SubstrateComponent'
-        '400':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '404':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
-        '500':
-          description: ''
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
   /pesticides:
     get:
       summary: List pesticides
@@ -432,6 +344,94 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pesticide'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrate/components:
+    get:
+      summary: List substrate components
+      operationId: getSubstrateComponents
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubstrateComponent'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Add a substrate component
+      operationId: postSubstrateComponents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateComponentData'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateComponent'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrate/components/{componentId}:
+    put:
+      summary: Edit a substrate component
+      operationId: putSubstrateComponentsComponentid
+      parameters:
+      - name: componentId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateComponentData'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateComponent'
         '400':
           description: ''
           content:

@@ -3,6 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.attention.*
+import gardening.domain.catalog.*
 import gardening.domain.journal.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
@@ -76,15 +77,6 @@ object JournalApi:
       .errorOut(JournalError.edit)
       .out(jsonBody[Operation]).summary("Edit a plant operation")
 
-  private val getComponentsEndpoint =
-    journalEndpoint.get.in("substrate-components").out(jsonBody[Vector[SubstrateComponent]]).summary("List substrate components")
-  private val addComponentEndpoint =
-    journalEndpoint.post.in("substrate-components").in(jsonBody[SubstrateComponentData])
-      .out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateComponent]).summary("Add a substrate component")
-  private val editComponentEndpoint =
-    endpoint.put.in("substrate-components" / path[String]("componentId")).in(jsonBody[SubstrateComponentData])
-      .errorOut(JournalError.catalogEdit).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
-
   private val getPesticidesEndpoint =
     journalEndpoint.get.in("pesticides").out(jsonBody[Vector[Pesticide]]).summary("List pesticides")
   private val addPesticideEndpoint =
@@ -104,9 +96,6 @@ object JournalApi:
       getOperationDateRangeEndpoint,
       logOperationEndpoint,
       editOperationEndpoint,
-      getComponentsEndpoint,
-      addComponentEndpoint,
-      editComponentEndpoint,
       getPesticidesEndpoint,
       addPesticideEndpoint,
       editPesticideEndpoint
@@ -151,20 +140,6 @@ object JournalApi:
           case EditOperationResult.OperationMissing      => JournalError.operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch => JournalError.operationTypeMismatch.asLeft
           case EditOperationResult.EditFailed(_)         => JournalError.editFailed.asLeft,
-      getComponentsEndpoint.handle: _ =>
-        journal.getSubstrateComponents match
-          case CatalogReadResult.Read(components) => components.asRight
-          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, JournalError.catalogReadFailed).asLeft,
-      addComponentEndpoint.handle: data =>
-        journal.addSubstrateComponent(data) match
-          case CatalogAddResult.Added(component) => component.asRight
-          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, JournalError.catalogWriteFailed).asLeft,
-      editComponentEndpoint.handle: (encodedId, data) =>
-        SubstrateComponentId.parse(encodedId).fold(JournalError.catalogInvalidId.asLeft): id =>
-          journal.editSubstrateComponent(id, data) match
-            case CatalogEditResult.Edited(component) => component.asRight
-            case CatalogEditResult.RecordMissing     => JournalError.catalogRecordMissing.asLeft
-            case CatalogEditResult.EditFailed(_)     => JournalError.catalogWriteFailed.asLeft,
       getPesticidesEndpoint.handle: _ =>
         journal.getPesticides match
           case CatalogReadResult.Read(pesticides) => pesticides.asRight
@@ -333,10 +308,8 @@ object JournalApi:
   private given Schema[OperationPage] = Schema
     .derived[OperationPage]
     .modify(_.operations)(_.copy(isOptional = false))
-  private given Schema[LogOperationRequest]    = Schema.derived
-  private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
-    .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
-  private given Schema[PesticideData] = Schema.derived[PesticideData]
+  private given Schema[LogOperationRequest] = Schema.derived
+  private given Schema[PesticideData]       = Schema.derived[PesticideData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
   private def stringCodec[A](decode: String => A, encode: A => String) =

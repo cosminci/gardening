@@ -226,14 +226,6 @@ export interface JournalClient {
     details: OperationDetails,
   ): Promise<LogOperationResult>;
   editOperation(operationId: OperationId, details: OperationDetails): Promise<EditOperationResult>;
-  getSubstrateComponents(): Promise<CatalogReadResult<SubstrateComponent>>;
-  addSubstrateComponent(
-    data: SubstrateComponentData,
-  ): Promise<CatalogAddResult<SubstrateComponent>>;
-  editSubstrateComponent(
-    id: SubstrateComponentId,
-    data: SubstrateComponentData,
-  ): Promise<CatalogEditResult<SubstrateComponent>>;
   getPesticides(): Promise<CatalogReadResult<Pesticide>>;
   addPesticide(data: PesticideData): Promise<CatalogAddResult<Pesticide>>;
   editPesticide(id: PesticideId, data: PesticideData): Promise<CatalogEditResult<Pesticide>>;

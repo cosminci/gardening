@@ -1,7 +1,7 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{HealthApi, JournalApi, StaticSite}
+import gardening.adapters.http.{HealthApi, JournalApi, StaticSite, SubstrateComponentApi}
 import gardening.adapters.persistence.SqliteLocation
 import gardening.domain.attention.PlantAttentionMonitor
 import org.flywaydb.core.Flyway
@@ -26,9 +26,10 @@ object Main:
       val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
       Programs.make(resources).flatMap: programs =>
         val endpoints =
-          JournalApi
-            .serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor)
-            .pipe(List(HealthApi.serverEndpoint(version)) ++ _ :+ StaticSite.endpoint(staticDir))
+          List(HealthApi.serverEndpoint(version)) ++
+            JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
+            SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) :+
+            StaticSite.endpoint(staticDir)
         run(programs.plantAttentionMonitor):
           val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
       .orThrow

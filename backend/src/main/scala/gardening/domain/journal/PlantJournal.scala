@@ -4,6 +4,8 @@ import cats.syntax.either.*
 import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
+import gardening.domain.catalog.*
+import gardening.domain.substrate.SubstrateComponentStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.numeric.GreaterEqual
@@ -24,19 +26,21 @@ trait PlantJournal:
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
-  def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
-  def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent]
-  def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent]
   def getPesticides: CatalogReadResult[Pesticide]
   def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]
   def editPesticide(id: PesticideId, data: PesticideData): CatalogEditResult[Pesticide]
 
 object PlantJournal:
 
-  def make(using store: PlantJournalStore^, idGen: IdGenerator^): PlantJournal^{store, idGen} =
+  def make(using
+      store: PlantJournalStore^,
+      substrateStore: SubstrateComponentStore^,
+      idGen: IdGenerator^
+  ): PlantJournal^{store, substrateStore, idGen} =
     new LivePlantJournal
 
-  private class LivePlantJournal(using store: PlantJournalStore^, idGen: IdGenerator^) extends PlantJournal:
+  private class LivePlantJournal(using store: PlantJournalStore^, substrateStore: SubstrateComponentStore^, idGen: IdGenerator^)
+      extends PlantJournal:
     private val operationMutex = ReentrantLock()
 
     override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
@@ -51,14 +55,6 @@ object PlantJournal:
 
     override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
       store.getOperationDateRange(plantId)
-
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] = store.getSubstrateComponents
-
-    override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
-      store.addSubstrateComponent(SubstrateComponent(SubstrateComponentId(java.util.UUID.fromString(idGen.nextId())), data))
-
-    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-      store.editSubstrateComponent(id, data)
 
     override def getPesticides: CatalogReadResult[Pesticide] = store.getPesticides
 
@@ -124,7 +120,7 @@ object PlantJournal:
           case CatalogReadResult.ReadFailed(reason) => reason.asLeft
 
     private def validateSubstrateComponents(substrate: Substrate) =
-      store.getSubstrateComponents match
+      substrateStore.getSubstrateComponents match
         case CatalogReadResult.Read(components) =>
           val known   = components.map(_.id).toSet
           val missing = substrate.parts.map(_.componentId).toSet.diff(known)
