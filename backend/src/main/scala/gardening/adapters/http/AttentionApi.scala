@@ -88,21 +88,15 @@ object AttentionApi:
   private given Schema[PlantId]             = Schema.string
   private given Schema[WateringSampleCount] = Schema.schemaForInt
     .validate(Validator.min(0).and(Validator.max(20)))
-    .map(
-      // Tapir never decodes output-only attention sample counts through their schema.
-      // $COVERAGE-OFF$
-      _.refineOption[Interval.Closed[0, 20]]
-      // $COVERAGE-ON$
-    )(value => value)
+    // Tapir never decodes output-only attention sample counts through their schema.
+    // $COVERAGE-OFF$
+    .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
+  // $COVERAGE-ON$
   private given Schema[FiniteDuration] = Schema.schemaForString
-    .map(
-      // Tapir only invokes duration schema mappings while generating OpenAPI.
-      // $COVERAGE-OFF$
-      value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption
-    )(
-      _.toMillis.toString
-        // $COVERAGE-ON$
-    )
+    // Tapir only invokes duration schema mappings while generating OpenAPI.
+    // $COVERAGE-OFF$
+    .map(value => Try(FiniteDuration(value.toLong, MILLISECONDS)).toOption)(_.toMillis.toString)
+  // $COVERAGE-ON$
   private given Schema[WateringAttention.Current]     = Schema.derived[WateringAttention.Current].name(Schema.SName("WateringCurrent"))
   private given Schema[WateringAttention.Overdue]     = Schema.derived[WateringAttention.Overdue].name(Schema.SName("WateringOverdue"))
   private given Schema[WateringAttention.RedAlert]    = Schema.derived[WateringAttention.RedAlert].name(Schema.SName("WateringRedAlert"))

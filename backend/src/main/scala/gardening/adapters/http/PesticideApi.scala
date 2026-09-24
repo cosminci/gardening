@@ -80,25 +80,14 @@ object PesticideApi:
   private given Codec.AsObject[Pesticide]     = ConfiguredCodec.derived
 
   private given Schema[PesticideId] = Schema.string
-    .map(
-      // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
-      // $COVERAGE-OFF$
-      PesticideId.parse
-    )(
-      _.value.toString
-        // $COVERAGE-ON$
-    )
-    .format("uuid")
+    // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+    // $COVERAGE-OFF$
+    .map(PesticideId.parse)(_.value.toString).format("uuid")
+  // $COVERAGE-ON$
   private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType]
-    .apply(encode =
-      Some(
-        // OpenAPI uses this pesticide-type schema encoder; JSON responses use Circe.
-        // $COVERAGE-OFF$
-        value =>
-          lowerCamel(value.productPrefix)
-          // $COVERAGE-ON$
-      )
-    )
+    // OpenAPI uses this pesticide-type schema encoder; JSON responses use Circe.
+    // $COVERAGE-OFF$
+    .apply(encode = Some(value => lowerCamel(value.productPrefix)))
   private given Schema[NomenclatureName] = Schema.string
   private given Schema[NomenclatureInfo] = Schema.string
   private given Schema[PesticideData]    = Schema.derived[PesticideData]

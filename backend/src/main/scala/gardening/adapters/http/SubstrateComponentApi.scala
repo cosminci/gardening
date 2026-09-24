@@ -74,15 +74,10 @@ object SubstrateComponentApi:
   private given Codec.AsObject[SubstrateComponent]     = ConfiguredCodec.derived
 
   private given Schema[SubstrateComponentId] = Schema.string
-    .map(
-      // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
-      // $COVERAGE-OFF$
-      SubstrateComponentId.parse
-    )(
-      _.value.toString
-        // $COVERAGE-ON$
-    )
-    .format("uuid")
+    // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
+    // $COVERAGE-OFF$
+    .map(SubstrateComponentId.parse)(_.value.toString).format("uuid")
+  // $COVERAGE-ON$
   private given Schema[NomenclatureName]       = Schema.string
   private given Schema[NomenclatureInfo]       = Schema.string
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
