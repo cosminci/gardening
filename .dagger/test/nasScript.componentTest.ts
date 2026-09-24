@@ -125,6 +125,25 @@ describe("NAS deployment script", () => {
     expect(existsSync(join(invalidWorkspace, "steps"))).toBe(false);
     expect(existsSync(join(missingBackupWorkspace, "steps"))).toBe(false);
   });
+
+  it("should reject a backup belonging to another app before stopping the journal", () => {
+    const workspace = buildNasWorkspace();
+    const otherAppDir = join(workspace, "backup", "mnt", "user", "appdata", "another-app");
+    const archive = join(workspace, "another-app.tar.gz");
+    mkdirSync(otherAppDir, { recursive: true });
+    writeFileSync(join(otherAppDir, "gardening.db"), "wrong-app");
+    const tar = spawnSync(
+      "tar",
+      ["-czf", archive, "-C", join(workspace, "backup"), "mnt/user/appdata/another-app"],
+      { encoding: "utf8" },
+    );
+
+    const result = runNas(workspace, ["recover", "0.9.0", archive], { existing: true });
+
+    expect(tar.status).toBe(0);
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(workspace, "steps"))).toBe(false);
+  });
 });
 
 afterEach(() => {
