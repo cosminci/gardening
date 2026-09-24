@@ -46,6 +46,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Create an active plant
+      operationId: postPlants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantCreation'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plant'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '422':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /plants/archived/count:
     get:
       summary: Count archived plants
@@ -705,6 +745,28 @@ components:
           type: string
         watering:
           $ref: '#/components/schemas/WateringAttention'
+    PlantCreation:
+      title: PlantCreation
+      type: object
+      required:
+      - species
+      - nickname
+      - location
+      - substrate
+      properties:
+        species:
+          type: string
+        nickname:
+          type:
+          - string
+          - 'null'
+        location:
+          type: string
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
     PlantDetails:
       title: PlantDetails
       type: object

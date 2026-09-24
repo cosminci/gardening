@@ -32,6 +32,19 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
   private val defaultPlantDetails = PlantDetails(Species("Ficus lyrata"), none, Location("Balcony"), perliteSubstrate, PlantStatus.Active)
   private val care = OperationDetails.Care(Set(ActionType.Watered, ActionType.Fertilized), Set.empty, MoistureLevel.Wet, Note("a little dry").some)
 
+  test("should persist a new active plant without operations"):
+    Using.resource(storeResource): resource =>
+      val store   = resource.store
+      val created = Plant(PlantId("new"), defaultPlantDetails)
+
+      val result     = store.addPlant(created)
+      val plants     = store.getPlants(PlantStatus.Active)
+      val operations = store.getOperations(created.id, fullWindow)
+
+      assertEquals(result, AddPlantResult.Added)
+      assertEquals(plants, GetPlantsResult.Read(Vector(created)))
+      assertEquals(operations, GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)))
+
   test("should return no attention samples when none have been seeded"):
     Using.resource(storeResource): resource =>
       val store = resource.store
@@ -600,6 +613,9 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
   test("should return read failures when the journal schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val store = SqlitePlantJournalStore.make(connection.transactor)
+      store.addPlant(Plant(PlantId("new"), defaultPlantDetails)) match
+        case AddPlantResult.AddFailed(_) => ()
+        case other                       => fail(s"expected AddFailed, got $other")
       store.getOperations(PlantId("p1"), fullWindow) match
         case GetOperationsResult.ReadFailed(_) => ()
         case other                             => fail(s"expected ReadFailed, got $other")

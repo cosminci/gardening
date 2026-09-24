@@ -50,6 +50,12 @@ main {
   margin-bottom: 2rem;
 }
 
+.masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .eyebrow {
   margin: 0 0 0.2rem;
   color: var(--leaf);
@@ -161,8 +167,12 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .masthead__actions {
+    flex-wrap: wrap;
+  }
+
   .plant-views {
-    justify-self: stretch;
+    flex: 1;
   }
 
   .plant-views__button {

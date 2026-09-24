@@ -27,8 +27,7 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
   )
 
   test("should expose the attention projection with its existing wire shape"):
-    val refs   = Refs(projection)
-    val server = buildServer(refs)
+    val server = buildServer(projection)
 
     val response = basicRequest.get(Uri.unsafeParse("http://test/attention")).send(server)
 
@@ -56,11 +55,9 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
          |}""".stripMargin
     assertEquals(response.code -> jsonBody(response), StatusCode.Ok -> json(expected))
 
-  private case class Refs(projection: AttentionProjection)
-
-  private def buildServer(refs: Refs) =
+  private def buildServer(projection: AttentionProjection) =
     val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = refs.projection
+      override def current: AttentionProjection       = projection
       override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(AttentionApi.serverEndpoints(using attention))

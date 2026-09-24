@@ -10,6 +10,17 @@ export interface SubstratePartInput {
   readonly share: number;
 }
 
+export const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
+  if (parts.length === 0) return "Add at least one substrate component.";
+  if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
+    return "Each substrate share must be a whole number from 1 to 100%.";
+  if (new Set(parts.map((part) => part.component)).size !== parts.length)
+    return "Each substrate component can only be used once.";
+  if (parts.reduce((total, part) => total + part.share, 0) > 100)
+    return "Substrate shares cannot total more than 100%.";
+  return undefined;
+};
+
 interface SubstrateFieldsProps {
   readonly parts: readonly SubstratePartInput[];
   readonly components: readonly SubstrateComponent[];

@@ -174,16 +174,25 @@ when the checklist records why.
   A small number of use cases should cover the dominant behavior; add exceptional cases only when
   they represent real user or domain behavior, and fold them into an existing use case when that
   makes the behavior clearer.
+- [ ] Every behavioral test suite must belong to a runtime trait or port (including a concrete
+  adapter tested at that seam). Never create a suite for a result ADT, helper, or one member
+  within a trait; test its relevant behavior through the owning trait's existing suite.
 - [ ] Review each affected suite as a whole against the module's supported behavior. Edit, extend,
   simplify, merge, or remove existing tests as the use cases evolve; add a test only when the
   behavior is not already represented. Do not append cases just to chase coverage.
 - [ ] Order tests, fields, methods, and other declarations from top to bottom and left to right by
   semantic importance and value.
-- [ ] Use this test-suite shape without exception: reusable, non-trivial mock data first; use-case
-  tests second; then `Ref` values and `buildX` helpers, where `X` is the tested trait.
-- [ ] In backend component and HTTP seam tests, configure and observe collaborators through `Refs`;
-  call `buildX(refs)` with no other arguments. Construct port substitutes inside that builder,
-  not in test use cases or separate stub classes.
+- [ ] Use this test-suite shape: reusable, non-trivial mock data first; use-case tests
+  second; then observable `Refs` (only when needed) and `buildX` helpers, where `X`
+  is the tested trait.
+- [ ] In backend component and HTTP seam tests, put only observable mutable effects and call
+  captures in `Refs` (for example, `AtomicReference` or `AtomicInteger` values that tests
+  assert). Pass fixed collaborator responses, failures, clocks, and other stub configuration
+  directly to `buildX(refs, ...)` as parameters with defaults for the ordinary case. Never
+  store or assert mock response values through `Refs`. Construct port substitutes inside
+  that builder, not in test use cases or separate stub classes. If a use case only checks
+  the returned result and does not observe collaborator effects, call `buildX()` without
+  creating `Refs`.
 - [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
   cannot leak beyond its boundary and a codec cannot express the format cleanly.
 - [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need

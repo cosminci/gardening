@@ -86,6 +86,11 @@ export interface Plant {
   readonly details: PlantDetails;
 }
 
+export type NewPlantDetails = Pick<
+  PlantDetails,
+  "species" | "maybeNickname" | "location" | "substrate"
+>;
+
 export type WateringAttention =
   | {
       readonly kind: "unavailable";
@@ -170,6 +175,12 @@ export type GetAttentionResult =
 export type GetPlantsResult =
   | { readonly kind: "read"; readonly plants: readonly Plant[] }
   | { readonly kind: "readFailed"; readonly reason: Error };
+
+export type CreatePlantResult =
+  | { readonly kind: "created"; readonly plant: Plant }
+  | { readonly kind: "unknownComponent" }
+  | { readonly kind: "catalogReadFailed"; readonly reason: Error }
+  | { readonly kind: "createFailed"; readonly reason: Error };
 
 export type GetArchivedCountResult =
   | { readonly kind: "read"; readonly count: number }

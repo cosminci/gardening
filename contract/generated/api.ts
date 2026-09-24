@@ -31,7 +31,8 @@ export interface paths {
         /** List plants by status */
         get: operations["getPlants"];
         put?: never;
-        post?: never;
+        /** Create an active plant */
+        post: operations["postPlants"];
         delete?: never;
         options?: never;
         head?: never;
@@ -320,6 +321,13 @@ export interface components {
             plantId: string;
             watering: components["schemas"]["WateringAttention"];
         };
+        /** PlantCreation */
+        PlantCreation: {
+            species: string;
+            nickname: string | null;
+            location: string;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
         /** PlantDetails */
         PlantDetails: {
             species: string;
@@ -485,6 +493,62 @@ export interface operations {
                 };
             };
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlantCreation"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plant"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

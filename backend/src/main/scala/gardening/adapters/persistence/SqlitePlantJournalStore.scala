@@ -26,6 +26,16 @@ object SqlitePlantJournalStore:
 
   private class LiveSqlitePlantJournalStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
 
+    override def addPlant(plant: Plant): AddPlantResult =
+      try
+        val details = plant.details
+        transact(transactor):
+          sql"""insert into plant (id, species, nickname, location, substrate, status)
+               values (${plant.id.value}, ${details.species.value}, ${details.maybeNickname.map(_.value)},
+                       ${details.location.value}, ${details.substrate.asJson.noSpaces}, ${details.status.toString})""".update.run()
+        AddPlantResult.Added
+      catch case error: SqlException => AddPlantResult.AddFailed(error)
+
     override def getPlants(status: PlantStatus): GetPlantsResult =
       try
         val rows = connect(transactor):
