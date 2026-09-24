@@ -12,6 +12,33 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 **Exposure.** Runs on the home NAS, reachable over LAN and Tailscale only, with no application authentication; no secrets are committed.
 
+### Local development
+
+Prerequisites: Python 3, mise-managed Java 25, sbt, Node and npm; free localhost ports 8080 and 5173. Install frontend dependencies once:
+
+```sh
+mise install
+cd frontend && npm ci && cd ..
+```
+
+Start both services with a persistent, NAS-independent journal in ignored `.local/`:
+
+```sh
+mise exec -- python3 scripts/local.py
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies API requests to the local backend; Ctrl-C stops both. Override occupied ports with `GARDENING_PORT` and `GARDENING_DEV_PORT`.
+
+To seed or refresh from the NAS, configure SSH authentication locally; the NAS needs `sqlite3`. From the repository root:
+
+```sh
+GARDENING_NAS_SSH=tower.lan \
+GARDENING_NAS_DB_PATH=/mnt/user/appdata/plant-journal/gardening.db \
+mise exec -- python3 scripts/local.py --refresh
+```
+
+An existing local journal requires typing `replace` to discard local edits (`--yes` confirms non-interactively). On failure, check SSH access, the source path and NAS `sqlite3`; retry or start without `--refresh` to keep the previous journal. See [runtime dependencies](specs/operational.md#runtime-dependencies) for snapshot semantics.
+
 | Task | Command |
 | --- | --- |
 | Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
