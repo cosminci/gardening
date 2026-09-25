@@ -12,6 +12,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
+import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantAttentionMonitor:
   def current: AttentionProjection
@@ -19,18 +20,23 @@ trait PlantAttentionMonitor:
 
 object PlantAttentionMonitor:
 
-  def make(using store: PlantAttentionStore^, clock: Clock^): Either[Throwable, PlantAttentionMonitor^{store, clock}] =
+  def make(using
+      store: PlantAttentionStore^,
+      clock: Clock^
+  )(using log: Logger^): Either[Throwable, PlantAttentionMonitor^{store, clock, log}] =
     computeProjection.map(new LivePlantAttentionMonitor(_))
 
-  private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using store: PlantAttentionStore^, clock: Clock^)
-      extends PlantAttentionMonitor:
+  private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using
+      store: PlantAttentionStore^,
+      clock: Clock^
+  )(using log: Logger^) extends PlantAttentionMonitor:
     private val currentProjection = AtomicReference(initialProjection)
 
     override def current: AttentionProjection = currentProjection.get()
 
     override def refreshAll: RefreshAttentionResult = synchronized:
       computeProjection match
-        case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason)
+        case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason).tap(_ => log.error("refresh attention", reason))
         case Right(projection) =>
           currentProjection.set(projection)
           RefreshAttentionResult.Refreshed(projection)

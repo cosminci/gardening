@@ -37,7 +37,7 @@ object PlantJournal:
       substrateStore: SubstrateComponentStore^,
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^
-  ): PlantJournal^{store, substrateStore, pesticideStore, idGen} =
+  )(using log: Logger^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log} =
     new LivePlantJournal
 
   private class LivePlantJournal(using
@@ -45,24 +45,30 @@ object PlantJournal:
       substrateStore: SubstrateComponentStore^,
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^
-  ) extends PlantJournal:
+  )(using log: Logger^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
 
     override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
       substrateStore.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(reason) => CreatePlantResult.CatalogReadFailed(reason)
+        case CatalogReadResult.ReadFailed(reason) => CreatePlantResult.CatalogReadFailed(reason).tap(_ => log.error("create plant", reason))
         case CatalogReadResult.Read(components)   =>
           val known = components.map(_.id).toSet
           if !substrate.parts.forall(part => known.contains(part.componentId)) then CreatePlantResult.UnknownComponent
           else
             val plant = Plant(PlantId(idGen.nextId()), PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
             store.addPlant(plant) match
-              case AddPlantResult.Added             => CreatePlantResult.Created(plant)
-              case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason)
+              case AddPlantResult.Added             => CreatePlantResult.Created(plant).tap(_ => log.info(s"plant created id=${plant.id.value}"))
+              case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason).tap(_ => log.error("create plant", reason))
 
-    override def getPlants(status: PlantStatus): GetPlantsResult = store.getPlants(status)
+    override def getPlants(status: PlantStatus): GetPlantsResult =
+      store.getPlants(status).tap:
+        case GetPlantsResult.ReadFailed(reason) => log.error("get plants", reason)
+        case _                                  => ()
 
-    override def getArchivedCount: ArchivedCountResult = store.getArchivedCount
+    override def getArchivedCount: ArchivedCountResult =
+      store.getArchivedCount.tap:
+        case ArchivedCountResult.ReadFailed(reason) => log.error("get archived count", reason)
+        case _                                      => ()
 
     override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = operationMutex.exclusively:
       val outcome =
@@ -71,37 +77,45 @@ object PlantJournal:
           _      <- rejectUnknownSubstrate(edited.details.substrate)
           saved  <- persistEdit(edited)
         yield saved
-      outcome.fold(identity, EditPlantResult.Edited.apply)
+      outcome.fold(identity, EditPlantResult.Edited.apply).tap:
+        case EditPlantResult.Edited(plant) => log.info(s"plant edited id=${plant.id.value}")
+        case _                             => ()
 
     private def readAndRevise(id: PlantId, revise: PlantDetails => PlantDetails): Either[EditPlantResult, Plant] =
       store.getPlant(id) match
-        case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing.asLeft
-        case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason).asLeft
+        case GetPlantResult.RecordMissing      => EditPlantResult.PlantMissing.asLeft
+        case GetPlantResult.ReadFailed(reason) => EditPlantResult.EditFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
         case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived.asLeft
         case GetPlantResult.Read(plant)                                                  => plant.focus(_.details).modify(revise).asRight
 
     private def rejectUnknownSubstrate(substrate: Substrate): Either[EditPlantResult, Unit] =
       substrateStore.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason).asLeft
-        case CatalogReadResult.Read(components)   =>
+        case CatalogReadResult.ReadFailed(reason) =>
+          EditPlantResult.CatalogReadFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
+        case CatalogReadResult.Read(components) =>
           val known = components.map(_.id).toSet
           Either.cond(substrate.parts.forall(part => known.contains(part.componentId)), (), EditPlantResult.UnknownComponent)
 
     private def persistEdit(plant: Plant): Either[EditPlantResult, Plant] =
       store.updatePlant(plant) match
         case UpdatePlantResult.Updated              => plant.asRight
-        case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason).asLeft
+        case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
-      store.getOperations(plantId, window)
+      store.getOperations(plantId, window).tap:
+        case GetOperationsResult.ReadFailed(reason) => log.error("get operations", reason)
+        case _                                      => ()
 
     override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
-      store.getOperationDateRange(plantId)
+      store.getOperationDateRange(plantId).tap:
+        case GetOperationDateRangeResult.ReadFailed(reason) => log.error("get operation date range", reason)
+        case _                                              => ()
 
     override def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult = operationMutex.exclusively:
       store.getPlant(plantId) match
-        case GetPlantResult.RecordMissing                                                => LogOperationResult.PlantMissing
-        case GetPlantResult.ReadFailed(reason)                                           => LogOperationResult.LoggingFailed(reason)
+        case GetPlantResult.RecordMissing      => LogOperationResult.PlantMissing
+        case GetPlantResult.ReadFailed(reason) =>
+          LogOperationResult.LoggingFailed(reason).tap(_ => log.error("log operation", reason))
         case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => LogOperationResult.PlantArchived
         case GetPlantResult.Read(_)                                                      =>
           val operation = Operation(OperationId(idGen.nextId()), plantId, date, op)
@@ -110,16 +124,18 @@ object PlantJournal:
             case Right(_)     =>
               store.addOperation(operation) match
                 case res: LogOperationResult.Logged =>
+                  log.info(s"operation logged id=${res.id.value}")
                   updatePlantIfOperationIsLatestRepot(operation)
                     .compensateWith(store.removeOperation(operation.id))
-                    .leftMap(LogOperationResult.LoggingFailed.apply)
-                    .fold(identity, _ => res)
-                case failure => failure
+                    .tap(_.left.foreach(reason => log.error("log operation", reason)))
+                    .fold(LogOperationResult.LoggingFailed.apply, _ => res)
+                case failure: LogOperationResult.LoggingFailed => failure.tap(_ => log.error("log operation", failure.reason))
+                case other                                     => other
 
     override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = operationMutex.exclusively:
       store.getOperation(id) match
-        case GetOperationResult.ReadFailed(reason)                                       => EditOperationResult.EditFailed(reason)
-        case GetOperationResult.RecordMissing                                            => EditOperationResult.OperationMissing
+        case GetOperationResult.ReadFailed(reason) => EditOperationResult.EditFailed(reason).tap(_ => log.error("edit operation", reason))
+        case GetOperationResult.RecordMissing      => EditOperationResult.OperationMissing
         case GetOperationResult.Read(operation) if !sameType(operation.details, details) =>
           EditOperationResult.OperationTypeMismatch
         case GetOperationResult.Read(operation) =>
@@ -128,11 +144,13 @@ object PlantJournal:
             case Right(_)     =>
               store.updateOperation(id, details) match
                 case res @ EditOperationResult.Edited(edited) =>
+                  log.info(s"operation edited id=${edited.id.value}")
                   updatePlantIfOperationIsLatestRepot(edited)
                     .compensateWith(store.restoreOperation(operation))
-                    .leftMap(EditOperationResult.EditFailed.apply)
-                    .fold(identity, _ => res)
-                case failure => failure
+                    .tap(_.left.foreach(reason => log.error("edit operation", reason)))
+                    .fold(EditOperationResult.EditFailed.apply, _ => res)
+                case failure: EditOperationResult.EditFailed => failure.tap(_ => log.error("edit operation", failure.reason))
+                case other                                   => other
 
     override def deleteOperation(id: OperationId): DeleteOperationResult = operationMutex.exclusively:
       val outcome =
@@ -141,13 +159,16 @@ object PlantJournal:
           _         <- rejectLatestRepot(operation)
           deleted   <- deleteFromStore(operation.id)
         yield deleted
-      outcome.merge
+      outcome.merge.tap:
+        case DeleteOperationResult.Deleted => log.info(s"operation deleted id=${id.value}")
+        case _                             => ()
 
     private def readOperation(id: OperationId): Either[DeleteOperationResult, Operation] =
       store.getOperation(id) match
         case GetOperationResult.Read(operation)    => operation.asRight
         case GetOperationResult.RecordMissing      => DeleteOperationResult.OperationMissing.asLeft
-        case GetOperationResult.ReadFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+        case GetOperationResult.ReadFailed(reason) =>
+          DeleteOperationResult.DeleteFailed(reason).asLeft.tap(_ => log.error("delete operation", reason))
 
     private def rejectLatestRepot(operation: Operation): Either[DeleteOperationResult, Unit] =
       operation.details match
@@ -156,12 +177,13 @@ object PlantJournal:
           isLatestRepot(operation) match
             case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot.asLeft
             case Right(false) => ().asRight
-            case Left(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+            case Left(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft.tap(_ => log.error("delete operation", reason))
 
     private def deleteFromStore(id: OperationId): Either[DeleteOperationResult, DeleteOperationResult] =
       store.removeOperation(id) match
         case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted.asRight
-        case OperationCompensationResult.CompensationFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+        case OperationCompensationResult.CompensationFailed(reason) =>
+          DeleteOperationResult.DeleteFailed(reason).asLeft.tap(_ => log.error("delete operation", reason))
 
     private enum PlantUpdateInterruption:
       case NotLatestRepot

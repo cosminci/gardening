@@ -8,7 +8,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.util.chaining.scalaUtilChainingOps
 
-class PesticideCatalogComponentTest extends munit.FunSuite:
+class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private val pesticideId   = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
   private val pesticideData = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, NomenclatureInfo("2g/L").some)
@@ -27,6 +27,11 @@ class PesticideCatalogComponentTest extends munit.FunSuite:
     assertEquals(editResult, CatalogEditResult.RecordMissing)
     assertEquals(refs.added.get(), Vector(pesticide))
     assertEquals(refs.edited.get(), Vector(pesticideId -> pesticideData))
+
+  test("should return the edited pesticide"):
+    val editResult = buildCatalog(editResult = CatalogEditResult.Edited(pesticide)).editPesticide(pesticideId, pesticideData)
+
+    assertEquals(editResult, CatalogEditResult.Edited(pesticide))
 
   test("should preserve pesticide catalog failures"):
     val failure = RuntimeException("storage unavailable")

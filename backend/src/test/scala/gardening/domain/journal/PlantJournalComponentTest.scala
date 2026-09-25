@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.CountDownLatch
 import scala.util.chaining.scalaUtilChainingOps
 
-class PlantJournalComponentTest extends munit.FunSuite:
+class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
 
   private val date       = Instant.parse("2026-01-01T00:00:00Z")
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
@@ -294,6 +294,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(repotResult, LogOperationResult.PlantArchived)
     assertEquals(refs.recordedOperations.get(), Vector.empty)
     assertEquals(refs.updatedPlants.get(), Vector.empty)
+
+  test("should preserve an unexpected addOperation outcome when logging"):
+    assertEquals(
+      buildJournal(addOperationResult = LogOperationResult.PlantMissing).logOperation(plant.id, date, care),
+      LogOperationResult.PlantMissing
+    )
 
   test("should preserve missing and unreadable plant failures when logging"):
     val readFailure = RuntimeException("plant unavailable")
@@ -626,6 +632,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
     )
     List(typeMismatch, missing, unreadable).foreach: refs =>
       assertEquals(refs.updatedOperations.get(), Vector.empty)
+
+  test("should preserve an unexpected updateOperation outcome when editing"):
+    assertEquals(
+      buildJournal(updateOperationResult = EditOperationResult.OperationMissing).editOperation(operation.id, care),
+      EditOperationResult.OperationMissing
+    )
 
   test("should surface an edit failure from the store"):
     val cause = RuntimeException("store down")

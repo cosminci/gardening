@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.*
 import scala.jdk.DurationConverters.*
 
-class PlantAttentionMonitorComponentTest extends munit.FunSuite:
+class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplicits:
 
   private val referenceTime = Instant.parse("2026-01-01T00:00:00Z")
   private val componentId   = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
