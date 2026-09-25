@@ -15,6 +15,8 @@ flowchart LR
   Plant -->|current mix| Substrate
   Repot -->|replaces mix| Substrate
   Substrate -->|references| Component["Substrate component"]
+  Substrate -->|saved as| Mix["Substrate mix"]
+  Mix -->|loaded into| Substrate
   Care -->|may reference| Pesticide
   Waterings["Watering history"] --> Attention["Watering attention"]
   Care --> Waterings
@@ -22,6 +24,7 @@ flowchart LR
 ```
 
 - Creation establishes the plant's initial mix independently of operation history; the latest repot by recorded date and identifier replaces it as the current mix, not the order of entry. Catalog identities remain stable across edits so historical references keep their meaning.
+- A substrate mix is a named, independently-saved copy of a substrate, saved from or loaded into a plant's or repot operation's substrate; later edits or deletion of the mix never affect a substrate previously loaded from it, and it may be permanently deleted without a reference check.
 - Archiving keeps plant history and its care-date range but prevents new operations; existing operation details may still be corrected without changing their date or kind.
 - A logged operation may be permanently deleted from a plant's history, except a plant's current latest repot, which must remain so the plant's current substrate stays meaningful.
 
