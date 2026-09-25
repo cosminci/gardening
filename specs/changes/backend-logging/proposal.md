@@ -10,9 +10,22 @@ Add leveled, single-line logging to the backend. There is none today.
 ## What & Why
 
 - Today: no log output. A persistence failure is a typed result (e.g. `AddFailed(cause)`); every adapter that maps it to an HTTP response discards `cause`. A fatal startup error is an uncaught exception with a multi-line stack trace. A failed background recomputation is silently dropped. Nothing distinguishes "working fine" from "just swallowed an error."
-- New: whichever component performs a side effect logs its own outcome exactly once — error for an unexpected failure (operation + cause), info for a successful mutation (action + id). One failure produces exactly one log line, regardless of how many layers pass it upward.
+- New: the domain service each action goes through logs its own outcome exactly once — error for an unexpected failure (operation + cause), info for a successful mutation (action + id). One failure produces exactly one log line, regardless of how many layers pass it upward.
 
 ## Domain / Design Notes
+
+**Layer: the domain services log, nothing else does.** `PlantJournal`, `PlantAttentionMonitor`, `SubstrateComponentCatalog`, and `PesticideCatalog` are the target — they're the stable contract every caller goes through today (HTTP) and tomorrow (anything else), so a log line stays correct no matter what storage adapter sits underneath it. Persistence adapters (SQL) and HTTP adapters do not log; HTTP already discards the cause when it maps a failure to a status code, and persistence is swappable machinery below the contract, not where the meaning of an action lives.
+
+Hotspots — every public method on those four services, one info line per successful mutation, one error line per unexpected failure, nothing on a successful read:
+
+| Service | Mutations (info + error) | Reads (error-only) |
+| --- | --- | --- |
+| `PlantJournal` | createPlant, editPlant (including archiving), logOperation, editOperation, deleteOperation | getPlants, getArchivedCount, getOperations, getOperationDateRange |
+| `PlantAttentionMonitor` | — | refreshAll (recomputation isn't a business mutation, so no info line even on success) |
+| `SubstrateComponentCatalog` | addSubstrateComponent, editSubstrateComponent | getSubstrateComponents |
+| `PesticideCatalog` | addPesticide, editPesticide | getPesticides |
+
+The composition root is a second, separate hotspot outside the domain layer: it logs its own startup readiness/failure once. It does not need to log the background recomputation loop itself — `refreshAll` already logs its own failure, on the timer tick and on the same call triggered synchronously after an edit.
 
 Logging is a capability, threaded the same way `Clock` and `IdGenerator` already are — built once in the composition root, passed via `using`, substitutable in tests. Not a global/static logger.
 
@@ -24,16 +37,25 @@ def make(using store: PlantJournalStore^, idGen: IdGenerator^): PlantJournal^{st
 def make(using store: PlantJournalStore^, idGen: IdGenerator^, log: Logger^): PlantJournal^{store, idGen, log}
 ```
 
-Only the component that performs the effect logs it:
+Inside `PlantJournal.createPlant` — the mutation case:
 
 ```scala
 store.addPlant(plant) match
-  case AddPlantResult.Added             => log.info(s"plant created id=${plant.id.value}"); CreatePlantResult.Created(plant)
-  case AddPlantResult.AddFailed(cause)  => log.error(s"add plant failed: ${cause.getClass.getSimpleName}: ${cause.getMessage}")
-                                            CreatePlantResult.CreateFailed(cause)
+  case AddPlantResult.Added            => log.info(s"plant created id=${plant.id.value}"); CreatePlantResult.Created(plant)
+  case AddPlantResult.AddFailed(cause) => log.error(s"add plant failed: ${cause.getClass.getSimpleName}: ${cause.getMessage}")
+                                          CreatePlantResult.CreateFailed(cause)
 ```
 
-The HTTP adapter that turns `CreateFailed` into a 500 does **not** log it again — the cause was already logged where it happened.
+Inside `PlantJournal.getPlants` — the read case (today a one-line delegation to the store; it stays a delegation, just no longer a silent one):
+
+```scala
+store.getPlants(status) match
+  case failure: GetPlantsResult.ReadFailed => log.error(s"get plants failed: ...")
+                                               failure
+  case success                             => success
+```
+
+The HTTP adapter that turns `CreateFailed`/`ReadFailed` into a 500 does **not** log it again — the cause was already logged where it happened.
 
 ## Invariants
 
@@ -55,6 +77,8 @@ The HTTP adapter that turns `CreateFailed` into a 500 does **not** log it again 
 
 ## Doc Sync
 
-- `CONTRIBUTING.md` — new "Logging" section: effect-owner-only logging, info/error meanings, single-line/no-stack-trace rule.
+These rules bind this change's own implementation via the Acceptance Criteria above; the entries below only make them durable for changes after this one.
+
+- `CONTRIBUTING.md` — new "Logging" section: domain services are the only logging point, info/error meanings, single-line/no-stack-trace rule.
 - `specs/operational.md` — Alerts: single-line log output is the operational signal now (state what is/isn't logged); still no aggregation or alerting.
-- `.agents/skills/sdd/SKILL.md` — implementation checklist gains a permanent item: log once, at the effect owner; capability, not a global logger; single line; never inside a pure function.
+- `.agents/skills/sdd/SKILL.md` — implementation checklist gains a permanent item: log once, at the domain service; capability, not a global logger; single line; never inside a pure function.
