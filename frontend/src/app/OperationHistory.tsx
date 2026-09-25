@@ -5,7 +5,9 @@ import * as Labels from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
 
 export type OperationHistoryChange =
-  { readonly kind: "logged" } | { readonly kind: "edited"; readonly operation: Journal.Operation };
+  | { readonly kind: "logged" }
+  | { readonly kind: "deleted" }
+  | { readonly kind: "edited"; readonly operation: Journal.Operation };
 
 interface OperationHistoryProps {
   readonly plantId: Journal.PlantId;
@@ -87,7 +89,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
       () => props.operationChange,
       (change) => {
         if (!expanded() || change === undefined) return;
-        if (change.kind === "logged") void loadPage(pageNumber());
+        if (change.kind === "logged" || change.kind === "deleted") void loadPage(pageNumber());
         else
           setState((current) =>
             current.kind === "loaded"

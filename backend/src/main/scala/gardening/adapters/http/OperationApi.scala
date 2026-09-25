@@ -25,12 +25,14 @@ final private case class LoggedOperation(id: String) derives Codec.AsObject
 
 object OperationApi:
 
-  private val plantMissing          = ApiError("plant not found")
-  private val plantArchived         = ApiError("plant already archived")
-  private val operationMissing      = ApiError("operation not found")
-  private val operationTypeMismatch = ApiError("operation type cannot be changed")
-  private val editFailed            = ApiError("operation could not be edited")
-  private val plantReadErrors       = oneOf[ApiError](
+  private val plantMissing            = ApiError("plant not found")
+  private val plantArchived           = ApiError("plant already archived")
+  private val operationMissing        = ApiError("operation not found")
+  private val operationTypeMismatch   = ApiError("operation type cannot be changed")
+  private val editFailed              = ApiError("operation could not be edited")
+  private val cannotDeleteLatestRepot = ApiError("cannot delete the plant's current latest repot")
+  private val deleteFailed            = ApiError("operation could not be deleted")
+  private val plantReadErrors         = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
     oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
   )
@@ -42,6 +44,11 @@ object OperationApi:
   private val editOperationErrors = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(operationMissing),
     oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(operationTypeMismatch),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
+  private val deleteOperationErrors = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(operationMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(cannotDeleteLatestRepot),
     oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
   )
 
@@ -62,9 +69,12 @@ object OperationApi:
   private val editOperationEndpoint =
     endpoint.put.in("operations" / path[String]("operationId")).in(jsonBody[OperationDetails]).errorOut(editOperationErrors)
       .out(jsonBody[Operation]).summary("Edit a plant operation")
+  private val deleteOperationEndpoint =
+    endpoint.delete.in("operations" / path[String]("operationId")).errorOut(deleteOperationErrors)
+      .out(statusCode(StatusCode.NoContent)).summary("Delete a plant operation")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
-    List(getOperationsEndpoint, getOperationDateRangeEndpoint, logOperationEndpoint, editOperationEndpoint)
+    List(getOperationsEndpoint, getOperationDateRangeEndpoint, logOperationEndpoint, editOperationEndpoint, deleteOperationEndpoint)
 
   def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
     List(
@@ -88,7 +98,13 @@ object OperationApi:
           case EditOperationResult.Edited(operation)     => operation.asRight
           case EditOperationResult.OperationMissing      => operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch => operationTypeMismatch.asLeft
-          case EditOperationResult.EditFailed(_)         => editFailed.asLeft
+          case EditOperationResult.EditFailed(_)         => editFailed.asLeft,
+      deleteOperationEndpoint.handle: operationId =>
+        journal.deleteOperation(OperationId(operationId)) match
+          case DeleteOperationResult.Deleted                 => ().asRight
+          case DeleteOperationResult.OperationMissing        => operationMissing.asLeft
+          case DeleteOperationResult.CannotDeleteLatestRepot => cannotDeleteLatestRepot.asLeft
+          case DeleteOperationResult.DeleteFailed(_)         => deleteFailed.asLeft
     )
 
   // Tapir validates query offsets with the plain codec, not this schema's inverse mapping.

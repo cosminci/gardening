@@ -136,7 +136,8 @@ export interface paths {
         /** Edit a plant operation */
         put: operations["putOperationsOperationid"];
         post?: never;
-        delete?: never;
+        /** Delete a plant operation */
+        delete: operations["deleteOperationsOperationid"];
         options?: never;
         head?: never;
         patch?: never;
@@ -856,6 +857,49 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteOperationsOperationid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: {
                 headers: {

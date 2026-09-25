@@ -186,11 +186,39 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
+  test("should delete an operation"):
+    val refs   = Refs()
+    val server = buildOperationApi(refs, deleteOperationResult = DeleteOperationResult.Deleted)
+
+    val response = delete(s"/operations/${careOperation.id.value}", server)
+
+    assertEquals(response.code, StatusCode.NoContent)
+    assertEquals(refs.deletedOperations.get(), Vector(careOperation.id))
+
+  test("should report when the operation to delete does not exist"):
+    val response = delete(s"/operations/${repotOperation.id.value}", buildOperationApi())
+    assertEquals(response.code -> jsonBody(response), StatusCode.NotFound -> json("""{"message":"operation not found"}"""))
+
+  test("should reject deleting a plant's current latest repot with a conflict"):
+    val response =
+      delete(s"/operations/${repotOperation.id.value}", buildOperationApi(deleteOperationResult = DeleteOperationResult.CannotDeleteLatestRepot))
+    val expected = StatusCode.Conflict -> json("""{"message":"cannot delete the plant's current latest repot"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+
+  test("should hide storage failures returned when deleting"):
+    val response = delete(
+      s"/operations/${repotOperation.id.value}",
+      buildOperationApi(deleteOperationResult = DeleteOperationResult.DeleteFailed(RuntimeException("offline")))
+    )
+    val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be deleted"}""")
+    assertEquals(response.code -> jsonBody(response), expected)
+
   private case class Refs(
       requestedWindows: AtomicReference[Vector[OperationWindow]] = AtomicReference(Vector.empty),
       requestedDateRanges: AtomicReference[Vector[PlantId]] = AtomicReference(Vector.empty),
       loggedOperations: AtomicReference[Vector[(PlantId, Instant, OperationDetails)]] = AtomicReference(Vector.empty),
-      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty)
+      editedOperations: AtomicReference[Vector[(OperationId, OperationDetails)]] = AtomicReference(Vector.empty),
+      deletedOperations: AtomicReference[Vector[OperationId]] = AtomicReference(Vector.empty)
   )
 
   private def buildOperationApi(
@@ -198,7 +226,8 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       operationDateRangeResult: GetOperationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty),
       logOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("logged")),
-      editOperationResult: EditOperationResult = EditOperationResult.OperationMissing
+      editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
+      deleteOperationResult: DeleteOperationResult = DeleteOperationResult.OperationMissing
   ) =
     val journal = new PlantJournal:
       override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
@@ -215,6 +244,8 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
         refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => logOperationResult)
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
         refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
+      override def deleteOperation(id: OperationId): DeleteOperationResult =
+        refs.deletedOperations.updateAndGet(_ :+ id).pipe(_ => deleteOperationResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(OperationApi.serverEndpoints(using journal))
       .backend()
@@ -234,6 +265,9 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
 
   private def put(path: String, body: String, server: TestServer) =
     basicRequest.put(Uri.unsafeParse(s"http://test$path")).body(body).contentType("application/json").send(server)
+
+  private def delete(path: String, server: TestServer) =
+    basicRequest.delete(Uri.unsafeParse(s"http://test$path")).send(server)
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)

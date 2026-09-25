@@ -243,6 +243,29 @@ Vitest.describe("operation history", () => {
     Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
   });
 
+  Vitest.it("should reload the current page after a deletion", async () => {
+    const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
+    const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
+    Testing.render(() => (
+      <OperationHistory
+        plantId={recent.plantId}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={operationChange()}
+        onEdit={() => undefined}
+      />
+    ));
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByRole("table");
+
+    setOperationChange({ kind: "deleted" });
+    await Testing.waitFor(() => {
+      Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
+    });
+  });
+
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {
     const secondPage = care({
       id: "o1",

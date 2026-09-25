@@ -90,6 +90,7 @@ export const buildJournal = ({
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  deleteOperationResult = { kind: "deleteFailed", reason: new Error("unexpected write") },
   getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
   componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
@@ -98,6 +99,7 @@ export const buildJournal = ({
   pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
   logged = [],
   edited = [],
+  deleted = [],
   addedComponents = [],
   editedComponents = [],
   addedPesticides = [],
@@ -111,6 +113,7 @@ export const buildJournal = ({
   >;
   logOperationResult?: Journal.LogOperationResult;
   editOperationResult?: Journal.EditOperationResult;
+  deleteOperationResult?: Journal.DeleteOperationResult;
   getSubstrateComponentsResult?: Journal.CatalogReadResult<Journal.SubstrateComponent>;
   componentAddResult?: Journal.CatalogAddResult<Journal.SubstrateComponent>;
   componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
@@ -119,6 +122,7 @@ export const buildJournal = ({
   pesticideEditResult?: Journal.CatalogEditResult<Journal.Pesticide>;
   logged?: { plantId: string; date: Journal.Instant; details: Journal.OperationDetails }[];
   edited?: { operationId: string; details: Journal.OperationDetails }[];
+  deleted?: Journal.OperationId[];
   addedComponents?: Journal.SubstrateComponentData[];
   editedComponents?: {
     id: Journal.SubstrateComponentId;
@@ -173,6 +177,10 @@ export const buildJournal = ({
     editOperation: (id, details) => {
       edited.push({ operationId: id, details });
       return Promise.resolve(editOperationResult);
+    },
+    deleteOperation: (id) => {
+      deleted.push(id);
+      return Promise.resolve(deleteOperationResult);
     },
     getSubstrateComponents: () => Promise.resolve(getSubstrateComponentsResult),
     addSubstrateComponent: (data) => {

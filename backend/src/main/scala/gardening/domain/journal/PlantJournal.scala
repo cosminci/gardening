@@ -28,6 +28,7 @@ trait PlantJournal:
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
+  def deleteOperation(id: OperationId): DeleteOperationResult
 
 object PlantJournal:
 
@@ -133,6 +134,26 @@ object PlantJournal:
                     .fold(identity, _ => res)
                 case failure => failure
 
+    override def deleteOperation(id: OperationId): DeleteOperationResult = operationMutex.exclusively:
+      store.getOperation(id) match
+        case GetOperationResult.ReadFailed(reason) => DeleteOperationResult.DeleteFailed(reason)
+        case GetOperationResult.RecordMissing      => DeleteOperationResult.OperationMissing
+        case GetOperationResult.Read(operation)    => deleteIfPermitted(operation)
+
+    private def deleteIfPermitted(operation: Operation) =
+      operation.details match
+        case _: OperationDetails.Care  => removeOperation(operation.id)
+        case _: OperationDetails.Repot =>
+          isCurrentLatestRepot(operation) match
+            case Left(reason) => DeleteOperationResult.DeleteFailed(reason)
+            case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot
+            case Right(false) => removeOperation(operation.id)
+
+    private def removeOperation(id: OperationId) =
+      store.removeOperation(id) match
+        case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted
+        case OperationCompensationResult.CompensationFailed(reason) => DeleteOperationResult.DeleteFailed(reason)
+
     private enum PlantUpdateInterruption:
       case NotLatestRepot
       case Failed(reason: Throwable)
@@ -171,15 +192,21 @@ object PlantJournal:
         case _: OperationDetails.Care      => ().asRight
         case repot: OperationDetails.Repot =>
           for
-            maybeLatestRepot <- readLatestOtherRepot(operation)
-            _                <- maybeLatestRepot.forall(other => isNewer(operation, other)).orSkip
+            maybeLatestRepot <- readLatestOtherRepot(operation).leftMap(PlantUpdateInterruption.Failed.apply)
+            _                <- isLatestRepot(operation, maybeLatestRepot).orSkip
             plant            <- readPlant(operation.plantId)
             updated          <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def readLatestOtherRepot(operation: Operation) =
+    private def isCurrentLatestRepot(operation: Operation): Either[Throwable, Boolean] =
+      readLatestOtherRepot(operation).map(isLatestRepot(operation, _))
+
+    private def isLatestRepot(operation: Operation, maybeOther: Option[Operation]) =
+      maybeOther.forall(other => isNewer(operation, other))
+
+    private def readLatestOtherRepot(operation: Operation): Either[Throwable, Option[Operation]] =
       @tailrec
-      def read(window: OperationWindow): Either[PlantUpdateInterruption, Option[Operation]] =
+      def read(window: OperationWindow): Either[Throwable, Option[Operation]] =
         store.getOperations(operation.plantId, window) match
           case GetOperationsResult.Read(page) =>
             page.operations
@@ -190,7 +217,7 @@ object PlantJournal:
                 read(OperationWindow(nextOffset, window.size))
               case None => none[Operation].asRight
           case GetOperationsResult.ReadFailed(reason) =>
-            PlantUpdateInterruption.Failed(reason).asLeft
+            reason.asLeft
 
       read(OperationWindow(offset = 0, size = 10))
 
