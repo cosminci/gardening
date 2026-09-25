@@ -29,9 +29,9 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
   private val mixId       = UUID.fromString("20000000-0000-4000-8000-000000000001")
   private val substrate   = Substrate.of(List(SubstratePart(componentId, share = 100))).getOrElse(fail("invalid test substrate"))
   private val mix         = SubstrateMix(mixId, SubstrateMixName("Cactus mix"), SubstrateMixNotes("Free-draining").some, substrate)
-  private val mixDataJson = s"""{"name":"Cactus mix","notes":"Free-draining","substrate":[{"component":"${componentId.value}","share":100}]}"""
+  private val mixDataJson = s"""{"name":"Cactus mix","notes":"Free-draining","substrate":[{"componentId":"${componentId.value}","share":100}]}"""
   private val mixJson     =
-    s"""{"id":"$mixId","name":"Cactus mix","notes":"Free-draining","substrate":[{"component":"${componentId.value}","share":100}]}"""
+    s"""{"id":"$mixId","name":"Cactus mix","notes":"Free-draining","substrate":[{"componentId":"${componentId.value}","share":100}]}"""
   private val mixReadError   = """{"message":"substrate mixes could not be read"}"""
   private val mixWriteError  = """{"message":"substrate mix could not be saved"}"""
   private val mixDeleteError = """{"message":"substrate mix could not be deleted"}"""

@@ -130,10 +130,10 @@ object SubstrateApi:
     Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value")),
     Encoder.encodeInt.contramap(value => value: Int)
   )
-  private given Codec[SubstrateMixName]  = Codec.from(Decoder.decodeString.map(SubstrateMixName.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[SubstrateMixNotes] = Codec.from(Decoder.decodeString.map(SubstrateMixNotes.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[SubstratePart]     = Codec.forProduct2("component", "share")(SubstratePart.apply)(part => (part.componentId, part.share))
-  private given Codec[Substrate]         = Codec.from(
+  private given Codec[SubstrateMixName]       = Codec.from(Decoder.decodeString.map(SubstrateMixName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[SubstrateMixNotes]      = Codec.from(Decoder.decodeString.map(SubstrateMixNotes.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec.AsObject[SubstratePart] = ConfiguredCodec.derived
+  private given Codec[Substrate]              = Codec.from(
     Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).left.map(_.toString)),
     Encoder.encodeList[SubstratePart].contramap(_.parts)
   )
