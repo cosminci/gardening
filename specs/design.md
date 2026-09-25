@@ -23,6 +23,7 @@ flowchart LR
 
 - Creation establishes the plant's initial mix independently of operation history; the latest repot by recorded date and identifier replaces it as the current mix, not the order of entry. Catalog identities remain stable across edits so historical references keep their meaning.
 - Archiving keeps plant history and its care-date range but prevents new operations; existing operation details may still be corrected without changing their date or kind.
+- A logged operation may be permanently deleted from a plant's history, except a plant's current latest repot, which must remain so the plant's current substrate stays meaningful.
 
 ## Use cases and workflows
 
