@@ -153,7 +153,7 @@ object PlantJournal:
       operation.details match
         case _: OperationDetails.Care  => ().asRight
         case _: OperationDetails.Repot =>
-          isCurrentLatestRepot(operation) match
+          isLatestRepot(operation) match
             case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot.asLeft
             case Right(false) => ().asRight
             case Left(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
@@ -201,13 +201,13 @@ object PlantJournal:
         case _: OperationDetails.Care      => ().asRight
         case repot: OperationDetails.Repot =>
           for
-            isLatest <- isCurrentLatestRepot(operation).leftMap(PlantUpdateInterruption.Failed.apply)
+            isLatest <- isLatestRepot(operation).leftMap(PlantUpdateInterruption.Failed.apply)
             _        <- isLatest.orSkip
             plant    <- readPlant(operation.plantId)
             updated  <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def isCurrentLatestRepot(operation: Operation): Either[Throwable, Boolean] =
+    private def isLatestRepot(operation: Operation): Either[Throwable, Boolean] =
       readLatestRepot(operation.plantId).map(_.exists(_.id.value.equals(operation.id.value)))
 
     private def readLatestRepot(plantId: PlantId): Either[Throwable, Option[Operation]] =
