@@ -27,6 +27,8 @@ interface SubstrateFieldsProps {
   readonly onChange: (parts: SubstratePartInput[]) => void;
   readonly onAddComponent: () => void;
   readonly onEditComponent: (component: SubstrateComponent, returnFocusId: string) => void;
+  readonly onSaveMix: () => void;
+  readonly onLoadMix: () => void;
 }
 
 export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
@@ -140,6 +142,25 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
         >
           Extend mix
         </button>
+        <button
+          id={Controls.saveSubstrateMixControlId}
+          class="inline-icon-action inline-icon-action--save-mix"
+          type="button"
+          aria-label="Save mix"
+          disabled={validateSubstrate(props.parts) !== undefined}
+          onClick={() => {
+            props.onSaveMix();
+          }}
+        />
+        <button
+          id={Controls.loadSubstrateMixControlId}
+          class="inline-icon-action inline-icon-action--load-mix"
+          type="button"
+          aria-label="Load saved mix"
+          onClick={() => {
+            props.onLoadMix();
+          }}
+        />
         <button
           id={Controls.addSubstrateComponentControlId}
           class="compact-action catalog-action--define"

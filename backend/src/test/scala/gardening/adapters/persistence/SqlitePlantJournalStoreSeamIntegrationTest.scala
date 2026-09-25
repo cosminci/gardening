@@ -366,7 +366,7 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
       val store   = SqlitePlantJournalStore.make(connection.transactor)
       assertEquals(
         migration.info().applied().toVector.map(_.getVersion),
-        Vector(MigrationVersion.fromVersion("1"), MigrationVersion.fromVersion("2"))
+        Vector(MigrationVersion.fromVersion("1"), MigrationVersion.fromVersion("2"), MigrationVersion.fromVersion("3"))
       )
       assertEquals(store.addOperation(older), LogOperationResult.Logged(older.id))
       assertEquals(store.addOperation(newer), LogOperationResult.Logged(newer.id))

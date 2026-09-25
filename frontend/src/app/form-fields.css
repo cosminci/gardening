@@ -126,6 +126,24 @@ select:disabled {
   line-height: 1;
 }
 
+.inline-icon-action--save-mix::before {
+  content: "\1f4be";
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.inline-icon-action--load-mix::before {
+  content: "\1f4c2";
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.inline-icon-action--save-mix:disabled,
+.inline-icon-action--load-mix:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .choice input {
   position: absolute;
   opacity: 0;

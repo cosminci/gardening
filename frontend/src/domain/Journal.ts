@@ -11,10 +11,13 @@ export type Milliseconds = Brand<bigint, "Milliseconds">;
 export type Percentage = Brand<number, "Percentage">;
 export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
-export type NomenclatureName = Brand<string, "NomenclatureName">;
-export type NomenclatureInfo = Brand<string, "NomenclatureInfo">;
+export type SubstrateMixId = Brand<string, "SubstrateMixId">;
+export type SubstrateComponentName = Brand<string, "SubstrateComponentName">;
+export type SubstrateComponentInfo = Brand<string, "SubstrateComponentInfo">;
 export type PesticideName = Brand<string, "PesticideName">;
 export type PesticideInfo = Brand<string, "PesticideInfo">;
+export type SubstrateMixName = Brand<string, "SubstrateMixName">;
+export type SubstrateMixNotes = Brand<string, "SubstrateMixNotes">;
 
 export const plantId = (value: string): PlantId => value as PlantId;
 export const operationId = (value: string): OperationId => value as OperationId;
@@ -31,10 +34,15 @@ export const percentage = (value: number): Percentage => value as Percentage;
 export const substrateComponentId = (value: string): SubstrateComponentId =>
   value as SubstrateComponentId;
 export const pesticideId = (value: string): PesticideId => value as PesticideId;
-export const nomenclatureName = (value: string): NomenclatureName => value as NomenclatureName;
-export const nomenclatureInfo = (value: string): NomenclatureInfo => value as NomenclatureInfo;
+export const substrateMixId = (value: string): SubstrateMixId => value as SubstrateMixId;
+export const substrateComponentName = (value: string): SubstrateComponentName =>
+  value as SubstrateComponentName;
+export const substrateComponentInfo = (value: string): SubstrateComponentInfo =>
+  value as SubstrateComponentInfo;
 export const pesticideName = (value: string): PesticideName => value as PesticideName;
 export const pesticideInfo = (value: string): PesticideInfo => value as PesticideInfo;
+export const substrateMixName = (value: string): SubstrateMixName => value as SubstrateMixName;
+export const substrateMixNotes = (value: string): SubstrateMixNotes => value as SubstrateMixNotes;
 
 export const pesticideTypes = ["fungicide", "insecticide", "treatment"] as const;
 export type PesticideType = (typeof pesticideTypes)[number];
@@ -60,8 +68,8 @@ export type Substrate = Brand<readonly SubstratePart[], "Substrate">;
 export const substrate = (parts: readonly SubstratePart[]): Substrate => parts as Substrate;
 
 export interface SubstrateComponentData {
-  readonly name: NomenclatureName;
-  readonly maybeInfo: NomenclatureInfo | null;
+  readonly name: SubstrateComponentName;
+  readonly maybeInfo: SubstrateComponentInfo | null;
 }
 
 export interface SubstrateComponent {
@@ -79,6 +87,13 @@ export interface Pesticide {
   readonly id: PesticideId;
   readonly data: PesticideData;
   readonly status: PesticideStatus;
+}
+
+export interface SubstrateMix {
+  readonly id: SubstrateMixId;
+  readonly name: SubstrateMixName;
+  readonly maybeNotes: SubstrateMixNotes | null;
+  readonly substrate: Substrate;
 }
 
 export interface PlantDetails {
@@ -257,3 +272,11 @@ export type PesticideArchiveResult =
   | { readonly kind: "pesticideMissing" }
   | { readonly kind: "alreadyArchived" }
   | { readonly kind: "archiveFailed"; readonly reason: Error };
+
+export type CatalogDeleteResult =
+  { readonly kind: "deleted" } | { readonly kind: "deleteFailed"; readonly reason: Error };
+
+export type AddSubstrateMixResult =
+  | { readonly kind: "added"; readonly entry: SubstrateMix }
+  | { readonly kind: "duplicateSubstrate" }
+  | { readonly kind: "addFailed"; readonly reason: Error };

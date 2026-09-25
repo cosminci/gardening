@@ -1,7 +1,7 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PlantApi, StaticSite, SubstrateComponentApi}
+import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PlantApi, StaticSite, SubstrateApi}
 import gardening.adapters.persistence.SqliteLocation
 import gardening.domain.Logger
 import org.flywaydb.core.Flyway
@@ -40,6 +40,6 @@ object Main:
       PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
       AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
       OperationApi.serverEndpoints(using programs.plantJournal) ++
-      SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
+      SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
       PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
       StaticSite.endpoint(staticDir)

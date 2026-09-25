@@ -16,10 +16,10 @@ import sttp.tapir.server.ServerEndpoint
 
 object PesticideApi:
 
-  private val recordMissing     = ApiError("nomenclature not found")
-  private val invalidId         = ApiError("invalid nomenclature id")
-  private val readFailed        = ApiError("nomenclatures could not be read")
-  private val writeFailed       = ApiError("nomenclature could not be saved")
+  private val recordMissing     = ApiError("pesticide not found")
+  private val invalidId         = ApiError("invalid pesticide id")
+  private val readFailed        = ApiError("pesticides could not be read")
+  private val writeFailed       = ApiError("pesticide could not be saved")
   private val pesticideArchived = ApiError("pesticide is archived")
   private val alreadyArchived   = ApiError("pesticide is already archived")
   private val archiveFailed     = ApiError("pesticide could not be archived")

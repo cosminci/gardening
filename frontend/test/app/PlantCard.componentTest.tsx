@@ -4,7 +4,7 @@ import { PlantCard } from "../../src/app/PlantCard";
 import {
   instant,
   milliseconds,
-  nomenclatureName,
+  substrateComponentName,
   pesticideId,
   substrateComponentId,
 } from "../../src/domain/Journal";
@@ -98,7 +98,7 @@ describe("plant cards", () => {
         substrateComponents={[
           {
             id: componentId,
-            data: { name: nomenclatureName("Perlite"), maybeInfo: null },
+            data: { name: substrateComponentName("Perlite"), maybeInfo: null },
           },
         ]}
         pesticides={[]}

@@ -51,15 +51,15 @@ object PesticideId:
   def parse(value: String): Option[PesticideId] = Try(UUID.fromString(value)).toOption
   extension (id: PesticideId) def value: UUID   = id
 
-opaque type NomenclatureName = String
-object NomenclatureName:
-  def apply(value: String): NomenclatureName           = value
-  extension (name: NomenclatureName) def value: String = name
+opaque type SubstrateComponentName = String
+object SubstrateComponentName:
+  def apply(value: String): SubstrateComponentName           = value
+  extension (name: SubstrateComponentName) def value: String = name
 
-opaque type NomenclatureInfo = String
-object NomenclatureInfo:
-  def apply(value: String): NomenclatureInfo           = value
-  extension (info: NomenclatureInfo) def value: String = info
+opaque type SubstrateComponentInfo = String
+object SubstrateComponentInfo:
+  def apply(value: String): SubstrateComponentInfo           = value
+  extension (info: SubstrateComponentInfo) def value: String = info
 
 opaque type PesticideName = String
 object PesticideName:
@@ -71,10 +71,20 @@ object PesticideInfo:
   def apply(value: String): PesticideInfo           = value
   extension (info: PesticideInfo) def value: String = info
 
+opaque type SubstrateMixName = String
+object SubstrateMixName:
+  def apply(value: String): SubstrateMixName           = value
+  extension (name: SubstrateMixName) def value: String = name
+
+opaque type SubstrateMixNotes = String
+object SubstrateMixNotes:
+  def apply(value: String): SubstrateMixNotes            = value
+  extension (notes: SubstrateMixNotes) def value: String = notes
+
 enum PesticideType:
   case Fungicide, Insecticide, Treatment
 
-final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Option[NomenclatureInfo])
+final case class SubstrateComponentData(name: SubstrateComponentName, maybeInfo: Option[SubstrateComponentInfo])
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
 final case class PesticideData(name: PesticideName, pesticideType: PesticideType, maybeInfo: Option[PesticideInfo])
 
@@ -124,6 +134,8 @@ object Substrate:
     else parts.asRight
 
   extension (substrate: Substrate) def parts: List[SubstratePart] = substrate
+
+final case class SubstrateMix(id: UUID, name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate)
 
 final case class Plant(id: PlantId, details: PlantDetails)
 

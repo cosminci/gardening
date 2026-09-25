@@ -1,7 +1,9 @@
 import { Show, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
-import { addSubstrateComponentControlId } from "./OperationControlIds";
+import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
+import * as Controls from "./OperationControlIds";
+import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
@@ -17,6 +19,7 @@ export const editPlantControlId = (plantId: Journal.PlantId) => `edit-plant-${pl
 interface PlantSheetProps {
   readonly target: PlantTarget;
   readonly components: readonly Journal.SubstrateComponent[];
+  readonly substrateMixes: readonly Journal.SubstrateMix[];
   readonly saveError: string | undefined;
   readonly completed: boolean;
   readonly onSubmit: (details: Journal.NewPlantDetails) => Promise<void>;
@@ -27,8 +30,30 @@ interface PlantSheetProps {
     id: Journal.SubstrateComponentId,
     data: Journal.SubstrateComponentData,
   ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  readonly onAddSubstrateMix: (
+    name: Journal.SubstrateMixName,
+    maybeNotes: Journal.SubstrateMixNotes | null,
+    substrate: Journal.Substrate,
+  ) => Promise<Journal.AddSubstrateMixResult>;
+  readonly onRequestDeleteSubstrateMix: (mix: Journal.SubstrateMix) => void;
   readonly onCancel: () => void;
+  readonly deleteMixConfirming?: boolean | undefined;
 }
+
+type SecondarySheet =
+  | {
+      readonly kind: "component";
+      readonly component: Journal.SubstrateComponent | undefined;
+      readonly returnFocusId: string;
+    }
+  | { readonly kind: "saveMix"; readonly returnFocusId: string }
+  | { readonly kind: "loadMix"; readonly returnFocusId: string };
+
+const secondarySheetLabels: Record<SecondarySheet["kind"], string> = {
+  component: "Substrate component editor",
+  saveMix: "Save substrate mix",
+  loadMix: "Load substrate mix",
+};
 
 export const PlantSheet: Component<PlantSheetProps> = (props) => {
   let dialog!: HTMLElement;
@@ -51,10 +76,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   );
   const [validationError, setValidationError] = createSignal<string>();
   const [submitting, setSubmitting] = createSignal(false);
-  const [editor, setEditor] = createSignal<{
-    component: Journal.SubstrateComponent | undefined;
-    returnFocusId: string;
-  }>();
+  const [editor, setEditor] = createSignal<SecondarySheet>();
   const [closingSheet, setClosingSheet] = createSignal<"editor" | "plant">();
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
 
@@ -82,7 +104,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !submitting()) {
+    if (event.key === "Escape" && !submitting() && props.deleteMixConfirming !== true) {
       event.preventDefault();
       void closeSheets(editor() === undefined ? "plant" : "editor");
     }
@@ -146,6 +168,11 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const editComponent = (id: Journal.SubstrateComponentId, data: Journal.SubstrateComponentData) =>
     props.onEditComponent(id, data);
 
+  const currentSubstrate = () =>
+    Journal.substrate(
+      parts().map((part) => ({ component: part.component, share: Journal.percentage(part.share) })),
+    );
+
   onMount(() => {
     background.forEach((element) => {
       element.inert = true;
@@ -167,6 +194,44 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
           : "add-plant";
     document.getElementById(returnFocusId)?.focus();
   });
+
+  const editorContent = (current: SecondarySheet) => {
+    switch (current.kind) {
+      case "component":
+        return (
+          <SubstrateComponentEditor
+            component={current.component}
+            onAdd={addComponent}
+            onEdit={editComponent}
+            onClose={() => void closeSheets("editor")}
+          />
+        );
+      case "saveMix":
+        return (
+          <SaveSubstrateMixSheet
+            onSave={(name, maybeNotes) =>
+              props.onAddSubstrateMix(name, maybeNotes, currentSubstrate())
+            }
+            onClose={() => void closeSheets("editor")}
+          />
+        );
+      case "loadMix":
+        return (
+          <LoadSubstrateMixSheet
+            mixes={props.substrateMixes}
+            components={props.components}
+            onLoad={(mix) => {
+              setParts(
+                mix.substrate.map((part) => ({ component: part.component, share: part.share })),
+              );
+              void closeSheets("editor");
+            }}
+            onRequestDelete={props.onRequestDeleteSubstrateMix}
+            onClose={() => void closeSheets("editor")}
+          />
+        );
+    }
+  };
 
   return (
     <div
@@ -241,11 +306,21 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
               components={props.components}
               onChange={setParts}
               onAddComponent={() =>
-                setEditor({ component: undefined, returnFocusId: addSubstrateComponentControlId })
+                setEditor({
+                  kind: "component",
+                  component: undefined,
+                  returnFocusId: Controls.addSubstrateComponentControlId,
+                })
               }
               onEditComponent={(component, returnFocusId) =>
-                setEditor({ component, returnFocusId })
+                setEditor({ kind: "component", component, returnFocusId })
               }
+              onSaveMix={() => {
+                setEditor({ kind: "saveMix", returnFocusId: Controls.saveSubstrateMixControlId });
+              }}
+              onLoadMix={() => {
+                setEditor({ kind: "loadMix", returnFocusId: Controls.loadSubstrateMixControlId });
+              }}
             />
             <Show when={validationError()}>{(message) => <p role="alert">{message()}</p>}</Show>
             <Show when={props.saveError}>
@@ -273,19 +348,14 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
       <Show keyed when={editor()}>
         {(current) => (
           <aside
-            class="sheet sheet--nomenclature-editor sheet--entering"
+            class="sheet sheet--catalog-editor sheet--entering"
             classList={{ "sheet--closing": closingSheet() === "editor" }}
             inert={closingSheet() === "editor"}
             role="dialog"
             aria-modal="true"
-            aria-label="Substrate component editor"
+            aria-label={secondarySheetLabels[current.kind]}
           >
-            <SubstrateComponentEditor
-              component={current.component}
-              onAdd={addComponent}
-              onEdit={editComponent}
-              onClose={() => void closeSheets("editor")}
-            />
+            {editorContent(current)}
           </aside>
         )}
       </Show>

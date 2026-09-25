@@ -1,0 +1,76 @@
+@import "./form-fields.css";
+
+.substrate-mix-sheet {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  min-height: 100%;
+  padding: 2rem;
+}
+
+.substrate-mix-sheet__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.substrate-mix-sheet__header h2 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.025em;
+}
+
+.substrate-mix-sheet__empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.substrate-mix-sheet__list {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.substrate-mix-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.substrate-mix-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.substrate-mix-card__header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.substrate-mix-card__notes {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.inline-icon-action--delete::before {
+  content: "\1f5d1";
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+@media (max-width: 28rem) {
+  .substrate-mix-sheet {
+    padding: 1.25rem;
+  }
+}

@@ -1,7 +1,7 @@
 import { Show, createSignal, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
-import "./nomenclature-editor.css";
+import "./catalog-editor.css";
 
 interface SubstrateComponentEditorProps {
   readonly component: Journal.SubstrateComponent | undefined;
@@ -30,8 +30,8 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
     }
     const trimmedInfo = info().trim();
     const data = {
-      name: Journal.nomenclatureName(trimmedName),
-      maybeInfo: trimmedInfo === "" ? null : Journal.nomenclatureInfo(trimmedInfo),
+      name: Journal.substrateComponentName(trimmedName),
+      maybeInfo: trimmedInfo === "" ? null : Journal.substrateComponentInfo(trimmedInfo),
     };
     const result =
       props.component === undefined
@@ -62,7 +62,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
       ref={(element) => {
         panel = element;
       }}
-      class="nomenclature-editor"
+      class="catalog-editor"
       aria-label={
         props.component === undefined
           ? "Add substrate component"
@@ -70,7 +70,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
       }
       tabIndex="-1"
     >
-      <header class="nomenclature-editor__header">
+      <header class="catalog-editor__header">
         <h2>
           {props.component === undefined ? "Add substrate component" : "Edit substrate component"}
         </h2>
@@ -86,7 +86,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
         </button>
       </header>
       <form
-        class="nomenclature-editor__form"
+        class="catalog-editor__form"
         aria-label={
           props.component === undefined
             ? "Add substrate component"
@@ -120,7 +120,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
           />
         </label>
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
-        <footer class="nomenclature-editor__actions">
+        <footer class="catalog-editor__actions">
           <button class="primary-action" type="submit">
             Save
           </button>

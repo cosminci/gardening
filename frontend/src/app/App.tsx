@@ -15,9 +15,10 @@ import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
 import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
-import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
+import type { SubstrateClient } from "../domain/SubstrateCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
+import { DeleteSubstrateMixConfirmation } from "./DeleteSubstrateMixConfirmation";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
 import * as Controls from "./OperationControlIds";
@@ -32,7 +33,7 @@ interface AppProps {
   readonly plants: PlantClient;
   readonly operations: OperationClient;
   readonly attention: PlantAttentionFeed;
-  readonly substrates: SubstrateComponentClient;
+  readonly substrates: SubstrateClient;
   readonly pesticideCatalog: PesticideClient;
 }
 
@@ -67,6 +68,9 @@ export const App: Component<AppProps> = (props) => {
   const [substrateComponents, setSubstrateComponents] = createSignal<
     readonly Journal.SubstrateComponent[]
   >([]);
+  const [substrateMixes, setSubstrateMixes] = createSignal<readonly Journal.SubstrateMix[]>([]);
+  const [deleteMixTarget, setDeleteMixTarget] = createSignal<Journal.SubstrateMix>();
+  const [deleteMixCompleted, setDeleteMixCompleted] = createSignal(false);
   const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
@@ -131,23 +135,27 @@ export const App: Component<AppProps> = (props) => {
     const version = ++loadVersion;
     const plants = props.plants;
     const operations = props.operations;
-    const [plantsResult, countResult, componentsResult, pesticidesResult] = await Promise.all([
-      plants.getPlants(),
-      plants.getArchivedCount(),
-      props.substrates.getSubstrateComponents(),
-      props.pesticideCatalog.getPesticides(),
-    ]);
+    const [plantsResult, countResult, componentsResult, mixesResult, pesticidesResult] =
+      await Promise.all([
+        plants.getPlants(),
+        plants.getArchivedCount(),
+        props.substrates.getSubstrateComponents(),
+        props.substrates.getSubstrateMixes(),
+        props.pesticideCatalog.getPesticides(),
+      ]);
     if (version !== loadVersion) return;
     if (
       plantsResult.kind !== "read" ||
       countResult.kind !== "read" ||
       componentsResult.kind !== "read" ||
+      mixesResult.kind !== "read" ||
       pesticidesResult.kind !== "read"
     ) {
       setView("failed");
       return;
     }
     setSubstrateComponents(componentsResult.entries);
+    setSubstrateMixes(mixesResult.entries);
     setPesticides(pesticidesResult.entries);
 
     const newActiveIds = new Set(plantsResult.plants.map((plant) => plant.id));
@@ -404,16 +412,42 @@ export const App: Component<AppProps> = (props) => {
     return result;
   };
 
-  const editSubstrateComponent: SubstrateComponentClient["editSubstrateComponent"] = async (
-    id,
-    data,
-  ) => {
+  const editSubstrateComponent: SubstrateClient["editSubstrateComponent"] = async (id, data) => {
     const result = await props.substrates.editSubstrateComponent(id, data);
     if (result.kind === "edited")
       setSubstrateComponents((current) =>
         current.map((component) => (component.id === id ? result.entry : component)),
       );
     return result;
+  };
+
+  const addSubstrateMix = async (
+    name: Journal.SubstrateMixName,
+    maybeNotes: Journal.SubstrateMixNotes | null,
+    substrate: Journal.Substrate,
+  ) => {
+    const result = await props.substrates.addSubstrateMix(name, maybeNotes, substrate);
+    if (result.kind === "added") setSubstrateMixes((current) => [...current, result.entry]);
+    return result;
+  };
+
+  const requestDeleteSubstrateMix = (mix: Journal.SubstrateMix) => {
+    setDeleteMixCompleted(false);
+    setDeleteMixTarget(mix);
+  };
+
+  const confirmDeleteSubstrateMix = async (mix: Journal.SubstrateMix) => {
+    let result: Journal.CatalogDeleteResult;
+    try {
+      result = await props.substrates.deleteSubstrateMix(mix.id);
+    } catch {
+      return "The mix could not be deleted.";
+    }
+    if (result.kind === "deleteFailed") return "The mix could not be deleted.";
+    setSubstrateMixes((current) => current.filter((entry) => entry.id !== mix.id));
+    setDeleteMixCompleted(true);
+    setDeleteMixTarget(undefined);
+    return undefined;
   };
 
   const addPesticide = async (data: Journal.PesticideData) => {
@@ -595,6 +629,7 @@ export const App: Component<AppProps> = (props) => {
           <PlantSheet
             target={target}
             components={substrateComponents()}
+            substrateMixes={substrateMixes()}
             saveError={plantSaveError()}
             completed={plantSheetCompleted()}
             onSubmit={(details) =>
@@ -604,9 +639,12 @@ export const App: Component<AppProps> = (props) => {
             }
             onAddComponent={addSubstrateComponent}
             onEditComponent={editSubstrateComponent}
+            onAddSubstrateMix={addSubstrateMix}
+            onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
             onCancel={() => {
               setPlantTarget(undefined);
             }}
+            deleteMixConfirming={deleteMixTarget() !== undefined}
           />
         )}
       </Show>
@@ -615,11 +653,14 @@ export const App: Component<AppProps> = (props) => {
           <OperationSheet
             target={target}
             substrateComponents={substrateComponents()}
+            substrateMixes={substrateMixes()}
             pesticides={pesticides()}
             saveError={saveError()}
             onSubmit={(details, date) => saveOperation(target, details, date)}
             onAddSubstrateComponent={addSubstrateComponent}
             onEditSubstrateComponent={editSubstrateComponent}
+            onAddSubstrateMix={addSubstrateMix}
+            onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
             onAddPesticide={addPesticide}
             onEditPesticide={editPesticide}
             onArchivePesticide={archivePesticide}
@@ -637,7 +678,7 @@ export const App: Component<AppProps> = (props) => {
                   }
                 : undefined
             }
-            deleteConfirming={deleteTarget() !== undefined}
+            deleteConfirming={deleteTarget() !== undefined || deleteMixTarget() !== undefined}
           />
         )}
       </Show>
@@ -661,6 +702,18 @@ export const App: Component<AppProps> = (props) => {
             onConfirm={() => confirmDelete(operation)}
             onCancel={() => {
               setDeleteTarget(undefined);
+            }}
+          />
+        )}
+      </Show>
+      <Show when={deleteMixTarget()} keyed>
+        {(mix) => (
+          <DeleteSubstrateMixConfirmation
+            mix={mix}
+            completed={deleteMixCompleted()}
+            onConfirm={() => confirmDeleteSubstrateMix(mix)}
+            onCancel={() => {
+              setDeleteMixTarget(undefined);
             }}
           />
         )}

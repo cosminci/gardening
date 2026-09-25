@@ -7,13 +7,13 @@ import type {
   FeedEvent,
   PlantAttentionFeed,
 } from "../../src/domain/PlantAttention";
-import type { SubstrateComponentClient } from "../../src/domain/SubstrateComponentCatalog";
+import type { SubstrateClient } from "../../src/domain/SubstrateCatalog";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
 const substrateComponents: readonly Journal.SubstrateComponent[] = [
-  { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
-  { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
+  { id: perliteId, data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null } },
+  { id: pineBarkId, data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null } },
 ];
 
 export const ficus = (): Journal.Plant => ({
@@ -94,6 +94,9 @@ export const buildJournal = ({
   getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
   componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  getSubstrateMixesResult = { kind: "read", entries: [] },
+  mixAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  mixDeleteResult = { kind: "deleteFailed", reason: new Error("unexpected write") },
   getPesticidesResult = { kind: "read", entries: [] },
   pesticideAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
@@ -103,6 +106,8 @@ export const buildJournal = ({
   deleted = [],
   addedComponents = [],
   editedComponents = [],
+  addedMixes = [],
+  deletedMixes = [],
   addedPesticides = [],
   editedPesticides = [],
   archivedPesticides = [],
@@ -119,6 +124,9 @@ export const buildJournal = ({
   getSubstrateComponentsResult?: Journal.CatalogReadResult<Journal.SubstrateComponent>;
   componentAddResult?: Journal.CatalogAddResult<Journal.SubstrateComponent>;
   componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
+  getSubstrateMixesResult?: Journal.CatalogReadResult<Journal.SubstrateMix>;
+  mixAddResult?: Journal.AddSubstrateMixResult;
+  mixDeleteResult?: Journal.CatalogDeleteResult;
   getPesticidesResult?: Journal.CatalogReadResult<Journal.Pesticide>;
   pesticideAddResult?: Journal.CatalogAddResult<Journal.Pesticide>;
   pesticideEditResult?: Journal.PesticideEditResult;
@@ -131,6 +139,12 @@ export const buildJournal = ({
     id: Journal.SubstrateComponentId;
     data: Journal.SubstrateComponentData;
   }[];
+  addedMixes?: {
+    name: Journal.SubstrateMixName;
+    maybeNotes: Journal.SubstrateMixNotes | null;
+    substrate: Journal.Substrate;
+  }[];
+  deletedMixes?: Journal.SubstrateMixId[];
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
   archivedPesticides?: Journal.PesticideId[];
@@ -138,7 +152,7 @@ export const buildJournal = ({
 } = {}): PlantClient &
   OperationClient &
   PlantAttentionFeed &
-  SubstrateComponentClient &
+  SubstrateClient &
   PesticideClient & {
     pushAttention(projection: Journal.AttentionProjection): void;
     setAttentionConnection(state: FeedConnectionState): void;
@@ -219,6 +233,15 @@ export const buildJournal = ({
     editSubstrateComponent: (id, data) => {
       editedComponents.push({ id, data });
       return Promise.resolve(componentEditResult);
+    },
+    getSubstrateMixes: () => Promise.resolve(getSubstrateMixesResult),
+    addSubstrateMix: (name, maybeNotes, substrate) => {
+      addedMixes.push({ name, maybeNotes, substrate });
+      return Promise.resolve(mixAddResult);
+    },
+    deleteSubstrateMix: (id) => {
+      deletedMixes.push(id);
+      return Promise.resolve(mixDeleteResult);
     },
     getPesticides: () => Promise.resolve(getPesticidesResult),
     addPesticide: (data) => {

@@ -936,8 +936,11 @@ Vitest.describe("changing the journal", () => {
       id: ReturnType<typeof Journal.substrateComponentId>;
       data: Journal.SubstrateComponentData;
     }[] = [];
-    const addedComponent = { name: Journal.nomenclatureName("Pumice"), maybeInfo: null };
-    const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
+    const addedComponent = { name: Journal.substrateComponentName("Pumice"), maybeInfo: null };
+    const editedComponent = {
+      name: Journal.substrateComponentName("Fine perlite"),
+      maybeInfo: null,
+    };
     const journal = JournalFixtures.buildJournal({
       attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
@@ -991,6 +994,195 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(addedComponents).toEqual([addedComponent]);
     Vitest.expect(editedComponents).toEqual([{ id: perliteId, data: editedComponent }]);
   });
+
+  Vitest.it("should save, load, and delete a substrate mix from the repot form", async () => {
+    const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
+    const existingMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000011");
+    const existingMix: Journal.SubstrateMix = {
+      id: existingMixId,
+      name: Journal.substrateMixName("Bark mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(100) }]),
+    };
+    const savedMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000012");
+    const savedMix: Journal.SubstrateMix = {
+      id: savedMixId,
+      name: Journal.substrateMixName("Perlite mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    };
+    const addedMixes: {
+      name: Journal.SubstrateMixName;
+      maybeNotes: Journal.SubstrateMixNotes | null;
+      substrate: Journal.Substrate;
+    }[] = [];
+    const deletedMixes: Journal.SubstrateMixId[] = [];
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      getSubstrateMixesResult: { kind: "read", entries: [existingMix] },
+      mixAddResult: { kind: "added", entry: savedMix },
+      mixDeleteResult: { kind: "deleted" },
+      addedMixes,
+      deletedMixes,
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+      target: { value: "repot" },
+    });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save mix" }));
+    const saveSheet = Testing.screen.getByRole("dialog", { name: "Save substrate mix" });
+    Testing.fireEvent.input(Testing.within(saveSheet).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Perlite mix" },
+    });
+    Testing.fireEvent.click(Testing.within(saveSheet).getByRole("button", { name: "Save" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Save substrate mix" }),
+      ).toBeNull();
+    });
+    Vitest.expect(addedMixes).toEqual([
+      {
+        name: Journal.substrateMixName("Perlite mix"),
+        maybeNotes: null,
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+      },
+    ]);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+    const loadSheet = Testing.screen.getByRole("dialog", { name: "Load substrate mix" });
+    Vitest.expect(Testing.within(loadSheet).getByText("Bark mix")).toBeInTheDocument();
+    Vitest.expect(Testing.within(loadSheet).getByText("Perlite mix")).toBeInTheDocument();
+    const [barkMixLoad] = Testing.within(loadSheet).getAllByRole("button", { name: "Load" });
+    if (barkMixLoad === undefined) throw new Error("expected a Load button for Bark mix");
+    Testing.fireEvent.click(barkMixLoad);
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Load substrate mix" }),
+      ).toBeNull();
+    });
+    Vitest.expect(Testing.screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(
+      pineBarkId,
+    );
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Perlite mix" }));
+    const cancelWarning = Testing.screen.getByRole("alertdialog", { name: "Delete Perlite mix" });
+    Testing.fireEvent.click(Testing.within(cancelWarning).getByRole("button", { name: "Cancel" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    });
+    Vitest.expect(deletedMixes).toEqual([]);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Perlite mix" }));
+    const confirmWarning = Testing.screen.getByRole("alertdialog", { name: "Delete Perlite mix" });
+    Testing.fireEvent.click(
+      Testing.within(confirmWarning).getByRole("button", { name: "Delete permanently" }),
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    });
+    Vitest.expect(deletedMixes).toEqual([savedMixId]);
+    Vitest.expect(Testing.screen.queryByText("Perlite mix")).not.toBeInTheDocument();
+    Vitest.expect(Testing.screen.getByText("Bark mix")).toBeInTheDocument();
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", { name: "Collapse load mix editor" }),
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Load substrate mix" }),
+      ).toBeNull();
+    });
+  });
+
+  Vitest.it(
+    "should keep a duplicate substrate mix out of the catalog and surface delete failures",
+    async () => {
+      const existingMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000013");
+      const existingMix: Journal.SubstrateMix = {
+        id: existingMixId,
+        name: Journal.substrateMixName("Existing mix"),
+        maybeNotes: null,
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+      };
+      const journal = {
+        ...JournalFixtures.buildJournal({
+          attentionProjection: unavailableFicusAttention,
+          getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+          getSubstrateMixesResult: { kind: "read", entries: [existingMix] },
+          mixAddResult: { kind: "duplicateSubstrate" },
+        }),
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save mix" }));
+      const saveSheet = Testing.screen.getByRole("dialog", { name: "Save substrate mix" });
+      Testing.fireEvent.input(Testing.within(saveSheet).getByRole("textbox", { name: "Name" }), {
+        target: { value: "Existing mix" },
+      });
+      Testing.fireEvent.click(Testing.within(saveSheet).getByRole("button", { name: "Save" }));
+      Vitest.expect(await Testing.within(saveSheet).findByRole("alert")).toHaveTextContent(
+        "A mix with these exact components and shares is already saved.",
+      );
+
+      Testing.fireEvent.click(
+        Testing.within(saveSheet).getByRole("button", { name: "Collapse save mix editor" }),
+      );
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.queryByRole("dialog", { name: "Save substrate mix" }),
+        ).toBeNull();
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Existing mix" }));
+      const failedWarning = Testing.screen.getByRole("alertdialog", {
+        name: "Delete Existing mix",
+      });
+      Testing.fireEvent.click(
+        Testing.within(failedWarning).getByRole("button", { name: "Delete permanently" }),
+      );
+      Vitest.expect(await Testing.within(failedWarning).findByRole("alert")).toHaveTextContent(
+        "The mix could not be deleted.",
+      );
+
+      journal.deleteSubstrateMix = () => Promise.reject(new Error("offline"));
+      Testing.fireEvent.click(
+        Testing.within(failedWarning).getByRole("button", { name: "Delete permanently" }),
+      );
+      Vitest.expect(await Testing.within(failedWarning).findByRole("alert")).toHaveTextContent(
+        "The mix could not be deleted.",
+      );
+    },
+  );
 
   Vitest.it("should add and edit pesticides from the care form", async () => {
     const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");

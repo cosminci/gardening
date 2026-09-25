@@ -24,8 +24,8 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
   private val pesticideDataJson     = """{"name":"Sulfur","type":"fungicide","info":"2g/L"}"""
   private val pesticideJson         = s"""{"id":"${pesticideId.value}","data":$pesticideDataJson,"status":"active"}"""
   private val archivedPesticideJson = s"""{"id":"${pesticideId.value}","data":$pesticideDataJson,"status":"archived"}"""
-  private val catalogReadError      = """{"message":"nomenclatures could not be read"}"""
-  private val catalogWriteError     = """{"message":"nomenclature could not be saved"}"""
+  private val catalogReadError      = """{"message":"pesticides could not be read"}"""
+  private val catalogWriteError     = """{"message":"pesticide could not be saved"}"""
   private val archiveFailedError    = """{"message":"pesticide could not be archived"}"""
 
   test("should list and add pesticides with their existing wire shape"):
@@ -49,8 +49,8 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
     val archived = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(editResult = PesticideEditResult.PesticideArchived))
 
     assertResponse(edited, StatusCode.Ok, pesticideJson)
-    assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid nomenclature id"}""")
-    assertResponse(missing, StatusCode.NotFound, """{"message":"nomenclature not found"}""")
+    assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid pesticide id"}""")
+    assertResponse(missing, StatusCode.NotFound, """{"message":"pesticide not found"}""")
     assertResponse(archived, StatusCode.Conflict, """{"message":"pesticide is archived"}""")
     assertEquals(refs.edited.get(), Vector(pesticideId -> pesticideData))
 
@@ -76,8 +76,8 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
       post(s"/pesticides/${pesticideId.value}/archive", "", buildServer(archiveResult = PesticideArchiveResult.AlreadyArchived))
 
     assertResponse(archived, StatusCode.Ok, archivedPesticideJson)
-    assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid nomenclature id"}""")
-    assertResponse(missing, StatusCode.NotFound, """{"message":"nomenclature not found"}""")
+    assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid pesticide id"}""")
+    assertResponse(missing, StatusCode.NotFound, """{"message":"pesticide not found"}""")
     assertResponse(alreadyArchived, StatusCode.Conflict, """{"message":"pesticide is already archived"}""")
     assertEquals(refs.archived.get(), Vector(pesticideId))
 
