@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 > Standard: Agentic Engineering Standards v1.2.0
 
@@ -11,7 +11,7 @@ All product changes go through the SDD skill (classify → spec → tests → im
 ## Gates — each is a stop condition; do not proceed until it holds
 
 - Before calling a component done, its gate exits zero:
-  - Backend: `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport`
+  - Backend: `cd backend && sbt scalafmtCheckAll coverage test coverageReport "scalafixAll --check"` (single instrumented compile; `coverage` before any compile so sources compile once)
   - Frontend: `cd frontend && npm run verify`
   - Pipeline: `cd .dagger && npm run verify`
 - Before calling a change done, `dagger call verify` (affected) exits zero. If you touched the tapir endpoints or `contract/`, `dagger call contract-drift` also exits zero.

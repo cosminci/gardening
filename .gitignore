@@ -25,5 +25,6 @@ __pycache__/
 .DS_Store
 
 # Local, un-tracked overrides
+AGENTS.local.md
 CLAUDE.local.md
 .scout/

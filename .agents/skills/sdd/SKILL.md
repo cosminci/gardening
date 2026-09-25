@@ -158,7 +158,7 @@ Make the tests pass. Zero warnings, 100% coverage, and green gates are not negot
 - Whole change: `dagger call verify` (affected). If you touched the tapir endpoints or `contract/`, regenerate the contract and confirm `dagger call contract-drift`.
 
 Gate: all of the above exit zero for the complete implementation. Do not weaken a gate to pass
-(see CLAUDE.md → What agents must not do).
+(see AGENTS.md → What agents must not do).
 
 ### Implementation authoring checklist
 

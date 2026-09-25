@@ -27,19 +27,26 @@ export function backendWork(source: Dagger.Directory): Dagger.Container {
   return backendSources(sbtBase(), source);
 }
 
-/** Full backend gate: scalafmt check, scalafix check, warnings-as-errors compile, 100% coverage. */
+/** Full backend gate: scalafmt check, scalafix check, warnings-as-errors compile, 100% coverage.
+ *
+ * `coverage` runs before any compile so the sources are compiled exactly once, with scoverage
+ * instrumentation — that single instrumented compile already satisfies the warnings-as-errors and
+ * wartremover checks, so no separate plain compile is needed. `scalafmtCheckAll` (no compile) runs
+ * first to fail fast on formatting; `scalafixAll --check` runs last, reusing the instrumented
+ * compile's semanticdb (emitted at typer, unaffected by instrumentation). The uninstrumented
+ * assembly compile only happens on publish, in `backendStage`.
+ */
 export function backendCheck(source: Dagger.Directory): Dagger.Container {
   return backendWork(source).withExec([
     "sbt",
     "-batch",
     "-Dsbt.color=false",
     "-Dsbt.supershell=false",
-    "compile",
-    "scalafixAll --check",
     "scalafmtCheckAll",
     "coverage",
     "test",
     "coverageReport",
+    "scalafixAll --check",
   ]);
 }
 
