@@ -944,8 +944,14 @@ Vitest.describe("changing the journal", () => {
     const journal = JournalFixtures.buildJournal({
       attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
-      componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
+      componentAddResult: {
+        kind: "added",
+        entry: { id: pumiceId, data: addedComponent, status: "active" },
+      },
+      componentEditResult: {
+        kind: "edited",
+        entry: { id: perliteId, data: editedComponent, status: "active" },
+      },
       addedComponents,
       editedComponents,
     });

@@ -13,7 +13,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private val componentId   = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
   private val componentData = SubstrateComponentData(SubstrateComponentName("Pumice"), SubstrateComponentInfo("porous").some)
-  private val component     = SubstrateComponent(componentId, componentData)
+  private val component     = SubstrateComponent(componentId, componentData, SubstrateComponentStatus.Active)
+  private val archived      = component.copy(status = SubstrateComponentStatus.Archived)
 
   private val mixId     = UUID.fromString("20000000-0000-4000-8000-000000000001")
   private val substrate = Substrate.of(List(SubstratePart(componentId, share = 100))).getOrElse(fail("invalid test substrate"))
@@ -21,40 +22,70 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
   private val mixNotes  = SubstrateMixNotes("Free-draining").some
   private val mix       = SubstrateMix(mixId, mixName, mixNotes, substrate)
 
-  test("should assign identifiers and delegate catalog reads and edits"):
+  test("should assign identifiers, list components, and reject an edit or archive of a missing one"):
     val refs    = Refs()
     val catalog = buildCatalog(refs)
 
-    val readResult = catalog.getSubstrateComponents
-    val addResult  = catalog.addSubstrateComponent(componentData)
-    val editResult = catalog.editSubstrateComponent(componentId, componentData)
+    val readResult    = catalog.getSubstrateComponents
+    val addResult     = catalog.addSubstrateComponent(componentData)
+    val editResult    = catalog.editSubstrateComponent(componentId, componentData)
+    val archiveResult = catalog.archiveSubstrateComponent(componentId)
 
     assertEquals(readResult, CatalogReadResult.Read(Vector(component)))
     assertEquals(addResult, CatalogAddResult.Added(component))
-    assertEquals(editResult, CatalogEditResult.RecordMissing)
+    assertEquals(editResult, SubstrateComponentEditResult.ComponentMissing)
+    assertEquals(archiveResult, SubstrateComponentArchiveResult.ComponentMissing)
     assertEquals(refs.addedComponents.get(), Vector(component))
-    assertEquals(refs.editedComponents.get(), Vector(componentId -> componentData))
+    assertEquals(refs.updatedComponents.get(), Vector.empty)
 
-  test("should return the edited substrate component"):
-    val editResult = buildCatalog(editResult = CatalogEditResult.Edited(component)).editSubstrateComponent(componentId, componentData)
+  test("should edit an active substrate component's data and persist it unchanged from status"):
+    val refs       = Refs()
+    val editResult = buildCatalog(refs, getResult = GetSubstrateComponentResult.Read(component)).editSubstrateComponent(componentId, componentData)
 
-    assertEquals(editResult, CatalogEditResult.Edited(component))
+    assertEquals(editResult, SubstrateComponentEditResult.Edited(component))
+    assertEquals(refs.updatedComponents.get(), Vector(component))
+
+  test("should archive an active substrate component"):
+    val refs          = Refs()
+    val archiveResult = buildCatalog(refs, getResult = GetSubstrateComponentResult.Read(component)).archiveSubstrateComponent(componentId)
+
+    assertEquals(archiveResult, SubstrateComponentArchiveResult.Archived(archived))
+    assertEquals(refs.updatedComponents.get(), Vector(archived))
+
+  test("should reject editing or re-archiving an already-archived substrate component without writing"):
+    val refs          = Refs()
+    val catalog       = buildCatalog(refs, getResult = GetSubstrateComponentResult.Read(archived))
+    val editResult    = catalog.editSubstrateComponent(componentId, componentData)
+    val archiveResult = catalog.archiveSubstrateComponent(componentId)
+
+    assertEquals(editResult, SubstrateComponentEditResult.ComponentArchived)
+    assertEquals(archiveResult, SubstrateComponentArchiveResult.AlreadyArchived)
+    assertEquals(refs.updatedComponents.get(), Vector.empty)
 
   test("should preserve substrate component catalog failures"):
-    val failure = RuntimeException("storage unavailable")
-    val catalog = buildCatalog(
-      readResult = CatalogReadResult.ReadFailed(failure),
-      addResult = CatalogAddResult.AddFailed(failure),
-      editResult = CatalogEditResult.EditFailed(failure)
+    val readFailure  = RuntimeException("storage unavailable")
+    val writeFailure = RuntimeException("write unavailable")
+    val catalog      = buildCatalog(
+      readResult = CatalogReadResult.ReadFailed(readFailure),
+      addResult = CatalogAddResult.AddFailed(readFailure),
+      getResult = GetSubstrateComponentResult.ReadFailed(readFailure)
     )
+    val writeFailingCatalog =
+      buildCatalog(getResult = GetSubstrateComponentResult.Read(component), updateResult = UpdateSubstrateComponentResult.UpdateFailed(writeFailure))
 
-    val readResult = catalog.getSubstrateComponents
-    val addResult  = catalog.addSubstrateComponent(componentData)
-    val editResult = catalog.editSubstrateComponent(componentId, componentData)
+    val readResult          = catalog.getSubstrateComponents
+    val addResult           = catalog.addSubstrateComponent(componentData)
+    val editResult          = catalog.editSubstrateComponent(componentId, componentData)
+    val archiveResult       = catalog.archiveSubstrateComponent(componentId)
+    val writeFailingEdit    = writeFailingCatalog.editSubstrateComponent(componentId, componentData)
+    val writeFailingArchive = writeFailingCatalog.archiveSubstrateComponent(componentId)
 
-    assertEquals(readResult, CatalogReadResult.ReadFailed(failure))
-    assertEquals(addResult, CatalogAddResult.AddFailed(failure))
-    assertEquals(editResult, CatalogEditResult.EditFailed(failure))
+    assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
+    assertEquals(editResult, SubstrateComponentEditResult.EditFailed(readFailure))
+    assertEquals(archiveResult, SubstrateComponentArchiveResult.ArchiveFailed(readFailure))
+    assertEquals(writeFailingEdit, SubstrateComponentEditResult.EditFailed(writeFailure))
+    assertEquals(writeFailingArchive, SubstrateComponentArchiveResult.ArchiveFailed(writeFailure))
 
   test("should delegate substrate mix reads"):
     val readResult = buildCatalog(mixReadResult = CatalogReadResult.Read(Vector(mix))).getSubstrateMixes
@@ -108,7 +139,7 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private case class Refs(
       addedComponents: AtomicReference[Vector[SubstrateComponent]] = AtomicReference(Vector.empty),
-      editedComponents: AtomicReference[Vector[(SubstrateComponentId, SubstrateComponentData)]] = AtomicReference(Vector.empty),
+      updatedComponents: AtomicReference[Vector[SubstrateComponent]] = AtomicReference(Vector.empty),
       addedMixes: AtomicReference[Vector[SubstrateMix]] = AtomicReference(Vector.empty),
       deletedMixes: AtomicReference[Vector[UUID]] = AtomicReference(Vector.empty)
   )
@@ -117,7 +148,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
       refs: Refs = Refs(),
       readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
       addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
-      editResult: CatalogEditResult[SubstrateComponent] = CatalogEditResult.RecordMissing,
+      getResult: GetSubstrateComponentResult = GetSubstrateComponentResult.RecordMissing,
+      updateResult: UpdateSubstrateComponentResult = UpdateSubstrateComponentResult.Updated,
       mixReadResult: CatalogReadResult[SubstrateMix] = CatalogReadResult.Read(Vector.empty),
       mixAddResult: CatalogAddResult[SubstrateMix] = CatalogAddResult.Added(mix),
       mixDeleteResult: CatalogDeleteResult = CatalogDeleteResult.Deleted,
@@ -125,10 +157,11 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
   ) =
     val store = new SubstrateStore:
       override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                          = readResult
+      override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult           = getResult
       override def addSubstrateComponent(value: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
         refs.addedComponents.updateAndGet(_ :+ value).pipe(_ => addResult)
-      override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
-        refs.editedComponents.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
+      override def updateSubstrateComponent(value: SubstrateComponent): UpdateSubstrateComponentResult =
+        refs.updatedComponents.updateAndGet(_ :+ value).pipe(_ => updateResult)
       override def getSubstrateMixes: CatalogReadResult[SubstrateMix]                   = mixReadResult
       override def addSubstrateMix(value: SubstrateMix): CatalogAddResult[SubstrateMix] =
         refs.addedMixes.updateAndGet(_ :+ value).pipe(_ => mixAddResult)

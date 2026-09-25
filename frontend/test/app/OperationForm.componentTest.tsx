@@ -13,8 +13,13 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
       name: Journal.substrateComponentName("Perlite"),
       maybeInfo: Journal.substrateComponentInfo("Improves drainage.\nUse up to 30%."),
     },
+    status: "active",
   },
-  { id: pineBarkId, data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null } },
+  {
+    id: pineBarkId,
+    data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+    status: "active",
+  },
 ];
 const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
 const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");

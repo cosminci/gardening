@@ -99,6 +99,7 @@ describe("plant cards", () => {
           {
             id: componentId,
             data: { name: substrateComponentName("Perlite"), maybeInfo: null },
+            status: "active",
           },
         ]}
         pesticides={[]}

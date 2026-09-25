@@ -3,8 +3,8 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog}
-import io.circe.derivation.{Configuration, ConfiguredCodec}
+import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentArchiveResult, SubstrateComponentEditResult}
+import io.circe.derivation.{Configuration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
@@ -25,10 +25,21 @@ object SubstrateApi:
   private val invalidComponentId   = ApiError("invalid substrate component id")
   private val componentsReadFailed = ApiError("substrate components could not be read")
   private val componentWriteFailed = ApiError("substrate component could not be saved")
+  private val componentArchived    = ApiError("substrate component is archived")
+  private val alreadyArchived      = ApiError("substrate component is already archived")
+  private val archiveFailed        = ApiError("substrate component could not be archived")
   private val componentEditErrors  =
     oneOf[ApiError](
       oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
       oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
+      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(componentArchived),
+      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+    )
+  private val componentArchiveErrors =
+    oneOf[ApiError](
+      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
+      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
+      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(alreadyArchived),
       oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
     )
 
@@ -57,6 +68,8 @@ object SubstrateApi:
   private val editComponentEndpoint =
     endpoint.put.in("substrates" / "components" / path[String]("componentId")).in(jsonBody[SubstrateComponentData])
       .errorOut(componentEditErrors).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
+  private val archiveComponentEndpoint = endpoint.post.in("substrates" / "components" / path[String]("componentId") / "archive")
+    .errorOut(componentArchiveErrors).out(jsonBody[SubstrateComponent]).summary("Archive a substrate component")
 
   private val getMixesEndpoint =
     catalogEndpoint.get.in("substrates" / "mixes").out(jsonBody[Vector[SubstrateMix]]).summary("List substrate mixes")
@@ -68,7 +81,15 @@ object SubstrateApi:
       .errorOut(deleteMixErrors).out(statusCode(StatusCode.NoContent)).summary("Delete a substrate mix")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
-    List(getComponentsEndpoint, addComponentEndpoint, editComponentEndpoint, getMixesEndpoint, addMixEndpoint, deleteMixEndpoint)
+    List(
+      getComponentsEndpoint,
+      addComponentEndpoint,
+      editComponentEndpoint,
+      archiveComponentEndpoint,
+      getMixesEndpoint,
+      addMixEndpoint,
+      deleteMixEndpoint
+    )
 
   def serverEndpoints(using catalog: SubstrateCatalog): List[ServerEndpoint[Any, Identity]] =
     List(
@@ -83,9 +104,17 @@ object SubstrateApi:
       editComponentEndpoint.handle: (encodedId, data) =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
-            case CatalogEditResult.Edited(component) => component.asRight
-            case CatalogEditResult.RecordMissing     => componentMissing.asLeft
-            case CatalogEditResult.EditFailed(_)     => componentWriteFailed.asLeft,
+            case SubstrateComponentEditResult.Edited(component) => component.asRight
+            case SubstrateComponentEditResult.ComponentMissing  => componentMissing.asLeft
+            case SubstrateComponentEditResult.ComponentArchived => componentArchived.asLeft
+            case SubstrateComponentEditResult.EditFailed(_)     => componentWriteFailed.asLeft,
+      archiveComponentEndpoint.handle: encodedId =>
+        SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
+          catalog.archiveSubstrateComponent(id) match
+            case SubstrateComponentArchiveResult.Archived(component) => component.asRight
+            case SubstrateComponentArchiveResult.ComponentMissing    => componentMissing.asLeft
+            case SubstrateComponentArchiveResult.AlreadyArchived     => alreadyArchived.asLeft
+            case SubstrateComponentArchiveResult.ArchiveFailed(_)    => archiveFailed.asLeft,
       getMixesEndpoint.handle: _ =>
         catalog.getSubstrateMixes match
           case CatalogReadResult.Read(mixes)   => mixes.asRight
@@ -104,9 +133,12 @@ object SubstrateApi:
 
   private case class SubstrateMixData(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate)
 
-  private given Configuration = Configuration.default.withTransformMemberNames:
-    case "maybeInfo" => "info"
-    case name        => name
+  private given Configuration = Configuration.default
+    .withTransformMemberNames {
+      case "maybeInfo" => "info"
+      case name        => name
+    }
+    .withTransformConstructorNames(lowerCamel)
   private given TapirConfiguration = TapirConfiguration.default.copy(toEncodedName = {
     case "maybeInfo" => "info"
     case name        => name
@@ -123,6 +155,7 @@ object SubstrateApi:
     // $COVERAGE-ON$
     Encoder.encodeString.contramap(_.value.toString)
   )
+  private given Codec[SubstrateComponentStatus]        = ConfiguredEnumCodec.derived
   private given Codec.AsObject[SubstrateComponentData] = ConfiguredCodec.derived
   private given Codec.AsObject[SubstrateComponent]     = ConfiguredCodec.derived
 
@@ -147,6 +180,11 @@ object SubstrateApi:
   // $COVERAGE-ON$
   private given Schema[SubstrateComponentName] = Schema.string
   private given Schema[SubstrateComponentInfo] = Schema.string
+  // JSON bodies use Circe; Tapir does not invoke these enum schema mappings at runtime.
+  // $COVERAGE-OFF$
+  private given Schema[SubstrateComponentStatus] =
+    Schema.derivedEnumeration[SubstrateComponentStatus].apply(encode = Some(value => lowerCamel(value.productPrefix)))
+  // $COVERAGE-ON$
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
@@ -171,3 +209,6 @@ object SubstrateApi:
   private given Schema[SubstrateMix] = Schema.derived[SubstrateMix]
     .modify(_.notes)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))
+
+  private def lowerCamel(name: String) =
+    name.substring(0, 1).toLowerCase + name.substring(1)

@@ -5,7 +5,7 @@ import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.SubstrateStore
+import gardening.domain.substrate.{GetSubstrateComponentResult, SubstrateStore, UpdateSubstrateComponentResult}
 import io.circe.parser.decode
 import io.circe.syntax.*
 import io.circe.{Decoder, Encoder}
@@ -23,38 +23,55 @@ object SqliteSubstrateStore:
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
       try
-        val query      = sql"select id, name, info from substrate_component order by rowid"
+        val query      = sql"select id, name, info, status from substrate_component order by rowid"
         val components = trust(connect(transactor)(query.query[ComponentRow].run()).traverse(toComponent))
         CatalogReadResult.Read(components)
       catch case error: SqlException => CatalogReadResult.ReadFailed(error)
 
+    override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
+      try
+        connect(transactor)(selectComponent(id.value.toString).query[ComponentRow].run().headOption) match
+          case None      => GetSubstrateComponentResult.RecordMissing
+          case Some(row) => GetSubstrateComponentResult.Read(trust(toComponent(row)))
+      catch case error: SqlException => GetSubstrateComponentResult.ReadFailed(error)
+
     override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
       try
-        val row = ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value))
+        val row =
+          ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value), component.status.toString)
         transact(transactor):
-          sql"insert into substrate_component (id, name, info) values (${row.id}, ${row.name}, ${row.info})".update.run()
+          sql"insert into substrate_component (id, name, info, status) values (${row.id}, ${row.name}, ${row.info}, ${row.status})".update.run()
         CatalogAddResult.Added(component)
       catch case error: SqlException => CatalogAddResult.AddFailed(error)
 
-    override def editSubstrateComponent(
-        id: SubstrateComponentId,
-        data: SubstrateComponentData
-    ): CatalogEditResult[SubstrateComponent] =
+    override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
       try
-        transact(transactor):
-          sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)}
-               where id = ${id.value.toString}""".update.run()
-        match
-          case 1 => CatalogEditResult.Edited(SubstrateComponent(id, data))
-          case _ => CatalogEditResult.RecordMissing
-      catch case error: SqlException => CatalogEditResult.EditFailed(error)
+        transact(transactor)(updateComponentRow(component).update.run()) match
+          case 1 => UpdateSubstrateComponentResult.Updated
+          case _ =>
+            UpdateSubstrateComponentResult.UpdateFailed(RuntimeException(s"substrate component not found while updating: ${component.id.value}"))
+      catch case error: SqlException => UpdateSubstrateComponentResult.UpdateFailed(error)
+
+    private def selectComponent(id: String) =
+      sql"select id, name, info, status from substrate_component where id = $id"
+
+    private def updateComponentRow(component: SubstrateComponent) =
+      val data = component.data
+      sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)},
+           status = ${component.status.toString} where id = ${component.id.value.toString}"""
 
     private def toComponent(row: ComponentRow) =
-      SubstrateComponentId
-        .parse(row.id)
-        .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
-        .map: id =>
-          SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(row.name), row.info.map(SubstrateComponentInfo.apply)))
+      for
+        id <- SubstrateComponentId
+          .parse(row.id)
+          .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
+        status <- Try(SubstrateComponentStatus.valueOf(row.status)).toEither.left.map:
+          error =>
+            // The schema check mirrors SubstrateComponentStatus; extending it requires a migration first.
+            // $COVERAGE-OFF$
+            RuntimeException(s"invalid substrate component status: ${row.status}", error)
+            // $COVERAGE-ON$
+      yield SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(row.name), row.info.map(SubstrateComponentInfo.apply)), status)
 
     override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
       try
@@ -103,5 +120,5 @@ object SqliteSubstrateStore:
     private given Decoder[Substrate] = Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).leftMap(_.toString))
     private given Encoder[Substrate] = Encoder.encodeList[SubstratePart].contramap(_.parts)
 
-  private case class ComponentRow(id: String, name: String, info: Option[String]) derives DbCodec
+  private case class ComponentRow(id: String, name: String, info: Option[String], status: String) derives DbCodec
   private case class MixRow(id: String, name: String, notes: Option[String], substrate: String) derives DbCodec

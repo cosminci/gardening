@@ -14,7 +14,9 @@ const perlite = {
     name: substrateComponentName("Perlite"),
     maybeInfo: substrateComponentInfo("Improves drainage.\nUse up to 30%."),
   },
+  status: "active" as const,
 };
+const archivedPerlite = { ...perlite, status: "archived" as const };
 
 Vitest.describe("SubstrateComponentEditor", () => {
   Vitest.it("should add a component with multiline information", async () => {
@@ -64,7 +66,7 @@ Vitest.describe("SubstrateComponentEditor", () => {
     async () => {
       const onEdit = Vitest.vi
         .fn()
-        .mockResolvedValueOnce({ kind: "recordMissing" })
+        .mockResolvedValueOnce({ kind: "componentMissing" })
         .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
         .mockResolvedValueOnce({ kind: "edited", entry: perlite });
       const onClose = Vitest.vi.fn();
@@ -104,6 +106,72 @@ Vitest.describe("SubstrateComponentEditor", () => {
         name: substrateComponentName("Fine perlite"),
         maybeInfo: substrateComponentInfo("Small grain."),
       });
+    },
+  );
+
+  Vitest.it(
+    "should reject saving an edit rejected because the component became archived",
+    async () => {
+      const onEdit = Vitest.vi.fn().mockResolvedValueOnce({ kind: "componentArchived" });
+      Testing.render(() => (
+        <SubstrateComponentEditor
+          component={perlite}
+          onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
+          onEdit={onEdit}
+          onClose={Vitest.vi.fn()}
+        />
+      ));
+
+      Testing.fireEvent.submit(Testing.screen.getByRole("form", { name: "Edit Perlite" }));
+
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "This substrate component is archived and can no longer be edited.",
+      );
+    },
+  );
+
+  Vitest.it("should offer an archive action beside save for an active existing component", () => {
+    const onArchive = { controlId: "archive-substrate-component-1", onClick: Vitest.vi.fn() };
+    Testing.render(() => (
+      <SubstrateComponentEditor
+        component={perlite}
+        onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
+        onEdit={() => Promise.resolve({ kind: "edited", entry: perlite })}
+        onArchive={onArchive}
+        onClose={Vitest.vi.fn()}
+      />
+    ));
+
+    const archiveButton = Testing.screen.getByRole("button", { name: "Archive" });
+    const saveButton = Testing.screen.getByRole("button", { name: "Save" });
+    Testing.fireEvent.click(archiveButton);
+
+    Vitest.expect(
+      archiveButton.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    Vitest.expect(onArchive.onClick).toHaveBeenCalledOnce();
+  });
+
+  Vitest.it(
+    "should show an archived component's status with no save or archive action and disabled fields",
+    () => {
+      Testing.render(() => (
+        <SubstrateComponentEditor
+          component={archivedPerlite}
+          onAdd={() => Promise.resolve({ kind: "added", entry: perlite })}
+          onEdit={() => Promise.resolve({ kind: "edited", entry: perlite })}
+          onArchive={{ controlId: "archive-substrate-component-1", onClick: Vitest.vi.fn() }}
+          onClose={Vitest.vi.fn()}
+        />
+      ));
+
+      Vitest.expect(Testing.screen.getByText("Archived")).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+      Vitest.expect(Testing.screen.getByRole("textbox", { name: "Info" })).toBeDisabled();
     },
   );
 

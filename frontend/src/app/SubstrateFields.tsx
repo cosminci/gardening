@@ -39,9 +39,9 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
   };
 
   const availableComponent = () =>
-    props.components.find(
-      (component) => !props.parts.some((part) => part.component === component.id),
-    );
+    props.components
+      .filter((component) => component.status === "active")
+      .find((component) => !props.parts.some((part) => part.component === component.id));
   const selectedComponent = (id: SubstrateComponentId) =>
     props.components.find((component) => component.id === id);
 
@@ -61,7 +61,12 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
                   });
                 }}
               >
-                <For each={props.components}>
+                <For
+                  each={props.components.filter(
+                    (component) =>
+                      component.status === "active" || component.id === part().component,
+                  )}
+                >
                   {(component) => (
                     <option value={component.id}>
                       {substrateComponentLabel(component.id, props.components)}

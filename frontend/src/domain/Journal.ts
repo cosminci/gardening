@@ -67,6 +67,9 @@ export interface SubstratePart {
 export type Substrate = Brand<readonly SubstratePart[], "Substrate">;
 export const substrate = (parts: readonly SubstratePart[]): Substrate => parts as Substrate;
 
+export const substrateComponentStatuses = ["active", "archived"] as const;
+export type SubstrateComponentStatus = (typeof substrateComponentStatuses)[number];
+
 export interface SubstrateComponentData {
   readonly name: SubstrateComponentName;
   readonly maybeInfo: SubstrateComponentInfo | null;
@@ -75,6 +78,7 @@ export interface SubstrateComponentData {
 export interface SubstrateComponent {
   readonly id: SubstrateComponentId;
   readonly data: SubstrateComponentData;
+  readonly status: SubstrateComponentStatus;
 }
 
 export interface PesticideData {
@@ -260,6 +264,18 @@ export type CatalogEditResult<A> =
   | { readonly kind: "edited"; readonly entry: A }
   | { readonly kind: "recordMissing" }
   | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type SubstrateComponentEditResult =
+  | { readonly kind: "edited"; readonly entry: SubstrateComponent }
+  | { readonly kind: "componentMissing" }
+  | { readonly kind: "componentArchived" }
+  | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type SubstrateComponentArchiveResult =
+  | { readonly kind: "archived"; readonly entry: SubstrateComponent }
+  | { readonly kind: "componentMissing" }
+  | { readonly kind: "alreadyArchived" }
+  | { readonly kind: "archiveFailed"; readonly reason: Error };
 
 export type PesticideEditResult =
   | { readonly kind: "edited"; readonly entry: Pesticide }

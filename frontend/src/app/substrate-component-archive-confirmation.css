@@ -1,0 +1,63 @@
+.substrate-component-archive-confirmation-layer {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.substrate-component-archive-confirmation-layer__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(18 38 31 / 65%);
+}
+
+.substrate-component-archive-confirmation {
+  position: relative;
+  width: min(30rem, 100%);
+  padding: 2rem;
+  border: 2px solid var(--danger);
+  border-radius: 1rem;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.substrate-component-archive-confirmation__warning {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: var(--danger);
+  color: white;
+  font-size: 2.5rem;
+  font-weight: 800;
+}
+
+.substrate-component-archive-confirmation__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.substrate-component-archive-confirmation__actions button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.substrate-component-archive-confirmation__actions button:disabled {
+  cursor: wait;
+}
+
+.substrate-component-archive-confirmation__actions
+  .substrate-component-archive-confirmation__commit {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: white;
+}

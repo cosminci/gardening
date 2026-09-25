@@ -421,6 +421,15 @@ export const App: Component<AppProps> = (props) => {
     return result;
   };
 
+  const archiveSubstrateComponent: SubstrateClient["archiveSubstrateComponent"] = async (id) => {
+    const result = await props.substrates.archiveSubstrateComponent(id);
+    if (result.kind === "archived")
+      setSubstrateComponents((current) =>
+        current.map((component) => (component.id === id ? result.entry : component)),
+      );
+    return result;
+  };
+
   const addSubstrateMix = async (
     name: Journal.SubstrateMixName,
     maybeNotes: Journal.SubstrateMixNotes | null,
@@ -639,6 +648,7 @@ export const App: Component<AppProps> = (props) => {
             }
             onAddComponent={addSubstrateComponent}
             onEditComponent={editSubstrateComponent}
+            onArchiveComponent={archiveSubstrateComponent}
             onAddSubstrateMix={addSubstrateMix}
             onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
             onCancel={() => {
@@ -659,6 +669,7 @@ export const App: Component<AppProps> = (props) => {
             onSubmit={(details, date) => saveOperation(target, details, date)}
             onAddSubstrateComponent={addSubstrateComponent}
             onEditSubstrateComponent={editSubstrateComponent}
+            onArchiveSubstrateComponent={archiveSubstrateComponent}
             onAddSubstrateMix={addSubstrateMix}
             onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
             onAddPesticide={addPesticide}

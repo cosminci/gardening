@@ -84,8 +84,14 @@ object SubstrateMixNotes:
 enum PesticideType:
   case Fungicide, Insecticide, Treatment
 
+enum SubstrateComponentStatus derives CanEqual:
+  case Active, Archived
+
+object SubstrateComponentStatus:
+  given Eq[SubstrateComponentStatus] = Eq.fromUniversalEquals
+
 final case class SubstrateComponentData(name: SubstrateComponentName, maybeInfo: Option[SubstrateComponentInfo])
-final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
+final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData, status: SubstrateComponentStatus)
 final case class PesticideData(name: PesticideName, pesticideType: PesticideType, maybeInfo: Option[PesticideInfo])
 
 enum PesticideStatus derives CanEqual:

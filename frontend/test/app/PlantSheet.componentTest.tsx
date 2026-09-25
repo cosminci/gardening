@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { PlantSheet } from "../../src/app/PlantSheet";
@@ -7,7 +7,11 @@ import * as Journal from "../../src/domain/Journal";
 const perlite: Journal.SubstrateComponent = {
   id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000003"),
   data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
+  status: "active",
 };
+
+const noOpArchiveComponent = () =>
+  Promise.resolve({ kind: "archiveFailed" as const, reason: new Error("offline") });
 
 describe("PlantSheet", () => {
   it("should validate details and substrate before submitting a new plant", () => {
@@ -25,6 +29,7 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        onArchiveComponent={noOpArchiveComponent}
         substrateMixes={[]}
         onAddSubstrateMix={() =>
           Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -92,6 +97,7 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        onArchiveComponent={noOpArchiveComponent}
         substrateMixes={[]}
         onAddSubstrateMix={() =>
           Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -152,6 +158,7 @@ describe("PlantSheet", () => {
         onSubmit={() => Promise.resolve()}
         onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
         onEditComponent={onEditComponent}
+        onArchiveComponent={noOpArchiveComponent}
         substrateMixes={[]}
         onAddSubstrateMix={() =>
           Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -180,10 +187,146 @@ describe("PlantSheet", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Choose known substrate components.");
   });
 
+  it("should archive a component from within its editor and close the editor", async () => {
+    const onArchiveComponent = vi.fn().mockResolvedValueOnce({
+      kind: "archived" as const,
+      entry: { ...perlite, status: "archived" as const },
+    });
+    render(() => (
+      <PlantSheet
+        target={{ kind: "add" }}
+        components={[perlite]}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onArchiveComponent={onArchiveComponent}
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
+        onCancel={() => undefined}
+      />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    const warning = screen.getByRole("alertdialog");
+    fireEvent.click(within(warning).getByRole("button", { name: "Archive permanently" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onArchiveComponent).toHaveBeenCalledWith(perlite.id);
+  });
+
+  it("should distinguish missing, already-archived, and failed archive outcomes without writing", async () => {
+    const renderWithArchiveResult = (onArchiveComponent: () => Promise<unknown>) => {
+      render(() => (
+        <PlantSheet
+          target={{ kind: "add" }}
+          components={[perlite]}
+          saveError={undefined}
+          completed={false}
+          onSubmit={() => Promise.resolve()}
+          onAddComponent={() =>
+            Promise.resolve({ kind: "addFailed", reason: new Error("offline") })
+          }
+          onEditComponent={() =>
+            Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+          }
+          onArchiveComponent={onArchiveComponent as never}
+          substrateMixes={[]}
+          onAddSubstrateMix={() =>
+            Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+          }
+          onRequestDeleteSubstrateMix={() => undefined}
+          onCancel={() => undefined}
+        />
+      ));
+      fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
+      fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+      const warning = screen.getByRole("alertdialog");
+      fireEvent.click(within(warning).getByRole("button", { name: "Archive permanently" }));
+    };
+
+    renderWithArchiveResult(() => Promise.resolve({ kind: "componentMissing" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This substrate component no longer exists.",
+    );
+    cleanup();
+
+    renderWithArchiveResult(() => Promise.resolve({ kind: "alreadyArchived" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This substrate component was already archived.",
+    );
+    cleanup();
+
+    renderWithArchiveResult(() =>
+      Promise.resolve({ kind: "archiveFailed", reason: new Error("private") }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The substrate component could not be archived.",
+    );
+    expect(screen.queryByText("private")).not.toBeInTheDocument();
+    cleanup();
+
+    renderWithArchiveResult(() => Promise.reject(new Error("private")));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The substrate component could not be archived.",
+    );
+    expect(screen.queryByText("private")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toBeInTheDocument();
+  });
+
+  it("should cancel archiving a component and restore focus without writing", async () => {
+    const onArchiveComponent = vi.fn();
+    render(() => (
+      <PlantSheet
+        target={{ kind: "add" }}
+        components={[perlite]}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onArchiveComponent={onArchiveComponent}
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
+        onCancel={() => undefined}
+      />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Perlite" }));
+    const archiveControl = screen.getByRole("button", { name: "Archive" });
+    archiveControl.focus();
+    fireEvent.click(archiveControl);
+    const warning = screen.getByRole("alertdialog");
+    fireEvent.click(within(warning).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(archiveControl).toHaveFocus();
+    });
+    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onArchiveComponent).not.toHaveBeenCalled();
+  });
+
   it("should keep the existing mix when defining an extra component for a stocked catalog", async () => {
     const pumice: Journal.SubstrateComponent = {
       id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000005"),
       data: { name: Journal.substrateComponentName("Pumice"), maybeInfo: null },
+      status: "active",
     };
     const [components, setComponents] = createSignal<readonly Journal.SubstrateComponent[]>([
       perlite,
@@ -207,6 +350,7 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        onArchiveComponent={noOpArchiveComponent}
         substrateMixes={[]}
         onAddSubstrateMix={() =>
           Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -253,6 +397,7 @@ describe("PlantSheet", () => {
             onEditComponent={() =>
               Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
             }
+            onArchiveComponent={noOpArchiveComponent}
             substrateMixes={[]}
             onAddSubstrateMix={() =>
               Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -322,6 +467,7 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        onArchiveComponent={noOpArchiveComponent}
         substrateMixes={[]}
         onAddSubstrateMix={() =>
           Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -381,6 +527,7 @@ describe("PlantSheet", () => {
             onEditComponent={() =>
               Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
             }
+            onArchiveComponent={noOpArchiveComponent}
             substrateMixes={[]}
             onAddSubstrateMix={() =>
               Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
@@ -405,6 +552,7 @@ describe("PlantSheet", () => {
     const pineBark: Journal.SubstrateComponent = {
       id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000004"),
       data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+      status: "active",
     };
     const savedMix: Journal.SubstrateMix = {
       id: Journal.substrateMixId("00000000-0000-4000-8000-000000000012"),
@@ -432,6 +580,7 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        onArchiveComponent={noOpArchiveComponent}
         onAddSubstrateMix={onAddSubstrateMix}
         onRequestDeleteSubstrateMix={onRequestDeleteSubstrateMix}
         onCancel={() => undefined}

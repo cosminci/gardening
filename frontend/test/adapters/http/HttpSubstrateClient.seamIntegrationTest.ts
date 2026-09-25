@@ -10,6 +10,7 @@ const perlite = {
     name: Journal.substrateComponentName("Perlite"),
     maybeInfo: Journal.substrateComponentInfo("Adds drainage"),
   },
+  status: "active" as const,
 };
 
 const mixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000004");
@@ -26,7 +27,15 @@ describe("HttpSubstrateClient", () => {
     const requests: Request[] = [];
     const client = makeHttpSubstrateClient(
       respondingWith(
-        [jsonResponse([{ id: perliteId, data: { name: "Perlite", info: "Adds drainage" } }])],
+        [
+          jsonResponse([
+            {
+              id: perliteId,
+              data: { name: "Perlite", info: "Adds drainage" },
+              status: "active",
+            },
+          ]),
+        ],
         requests,
       ),
     );
@@ -45,8 +54,15 @@ describe("HttpSubstrateClient", () => {
     const client = makeHttpSubstrateClient(
       respondingWith(
         [
-          jsonResponse({ id: perliteId, data: { name: "Perlite", info: "Adds drainage" } }, 201),
-          jsonResponse({ id: perliteId, data: { name: "Fine perlite", info: null } }),
+          jsonResponse(
+            { id: perliteId, data: { name: "Perlite", info: "Adds drainage" }, status: "active" },
+            201,
+          ),
+          jsonResponse({
+            id: perliteId,
+            data: { name: "Fine perlite", info: null },
+            status: "active",
+          }),
         ],
         requests,
       ),
@@ -61,7 +77,10 @@ describe("HttpSubstrateClient", () => {
     const requestBodies = await Promise.all(requests.map((request) => request.json()));
 
     expect(added).toEqual({ kind: "added", entry: perlite });
-    expect(edited).toEqual({ kind: "edited", entry: { id: perliteId, data: editedData } });
+    expect(edited).toEqual({
+      kind: "edited",
+      entry: { id: perliteId, data: editedData, status: "active" },
+    });
     expect(requestedPaths).toEqual([
       "POST /substrates/components",
       `PUT /substrates/components/${perliteId}`,
@@ -72,38 +91,80 @@ describe("HttpSubstrateClient", () => {
     ]);
   });
 
-  it("should retain missing-record and storage failure outcomes for substrate components", async () => {
+  it("should archive a substrate component and distinguish an unknown or already-archived one", async () => {
+    const requests: Request[] = [];
+    const client = makeHttpSubstrateClient(
+      respondingWith(
+        [
+          jsonResponse({
+            id: perliteId,
+            data: { name: "Perlite", info: "Adds drainage" },
+            status: "archived",
+          }),
+          jsonResponse({ message: "substrate component not found" }, 404),
+          jsonResponse({ message: "substrate component is already archived" }, 409),
+        ],
+        requests,
+      ),
+    );
+
+    const archived = await client.archiveSubstrateComponent(perliteId);
+    const missing = await client.archiveSubstrateComponent(perliteId);
+    const alreadyArchived = await client.archiveSubstrateComponent(perliteId);
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
+    );
+
+    expect(archived).toEqual({ kind: "archived", entry: { ...perlite, status: "archived" } });
+    expect(missing).toEqual({ kind: "componentMissing" });
+    expect(alreadyArchived).toEqual({ kind: "alreadyArchived" });
+    expect(requestedPaths).toEqual([
+      `POST /substrates/components/${perliteId}/archive`,
+      `POST /substrates/components/${perliteId}/archive`,
+      `POST /substrates/components/${perliteId}/archive`,
+    ]);
+  });
+
+  it("should distinguish missing or archived records from catalog failures", async () => {
     const client = makeHttpSubstrateClient(
       respondingWith([
         jsonResponse({ message: "substrate components could not be read" }, 500),
         jsonResponse({ message: "substrate component could not be saved" }, 500),
         jsonResponse({ message: "substrate component not found" }, 404),
+        jsonResponse({ message: "substrate component is archived" }, 409),
         jsonResponse({ message: "substrate component could not be saved" }, 500),
+        jsonResponse({ message: "substrate component could not be archived" }, 500),
       ]),
     );
 
     const read = await client.getSubstrateComponents();
     const added = await client.addSubstrateComponent(perlite.data);
     const missing = await client.editSubstrateComponent(perliteId, perlite.data);
+    const archived = await client.editSubstrateComponent(perliteId, perlite.data);
     const failed = await client.editSubstrateComponent(perliteId, perlite.data);
+    const archiveFailed = await client.archiveSubstrateComponent(perliteId);
 
     expect(read.kind).toBe("readFailed");
     expect(added.kind).toBe("addFailed");
-    expect(missing).toEqual({ kind: "recordMissing" });
+    expect(missing).toEqual({ kind: "componentMissing" });
+    expect(archived).toEqual({ kind: "componentArchived" });
     expect(failed.kind).toBe("editFailed");
+    expect(archiveFailed.kind).toBe("archiveFailed");
   });
 
   it("should surface network failures without reporting a successful catalog edit", async () => {
     const reason = new Error("offline");
-    const client = makeHttpSubstrateClient(respondingWith(new Array<Error>(3).fill(reason)));
+    const client = makeHttpSubstrateClient(respondingWith(new Array<Error>(4).fill(reason)));
 
     const read = await client.getSubstrateComponents();
     const added = await client.addSubstrateComponent(perlite.data);
     const edited = await client.editSubstrateComponent(perliteId, perlite.data);
+    const archived = await client.archiveSubstrateComponent(perliteId);
 
     expect(read).toEqual({ kind: "readFailed", reason });
     expect(added).toEqual({ kind: "addFailed", reason });
     expect(edited).toEqual({ kind: "editFailed", reason });
+    expect(archived).toEqual({ kind: "archiveFailed", reason });
   });
 
   it("should read substrate mixes at their resource path", async () => {
