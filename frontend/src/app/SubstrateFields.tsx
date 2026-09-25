@@ -131,6 +131,9 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           disabled={availableComponent() === undefined}
           onClick={() => {
             const component = availableComponent();
+            // The button is `disabled` when availableComponent() === undefined, so this guard's
+            // false side is unreachable at runtime (domain invariant, not a testable DOM path).
+            /* v8 ignore next */
             if (component !== undefined)
               props.onChange([...props.parts, { component: component.id, share: 1 }]);
           }}

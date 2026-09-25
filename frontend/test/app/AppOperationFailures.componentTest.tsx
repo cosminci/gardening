@@ -276,4 +276,56 @@ Vitest.describe("operation failures", () => {
     Vitest.expect(editor).toBeInTheDocument();
     Vitest.expect(startViewTransition).not.toHaveBeenCalled();
   });
+
+  Vitest.it(
+    "should ignore a stale post-save refresh failure after leaving the garden",
+    async () => {
+      let rejectGarden: (reason: Error) => void = () => undefined;
+      const pendingGarden = new Promise<GetPlantsResult>((_resolve, reject) => {
+        rejectGarden = reject;
+      });
+      const base = buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [operationsPage()] },
+        logOperationResult: { kind: "logged", id: operationId("new") },
+      });
+      let gardenReads = 0;
+      const journal = {
+        ...base,
+        getPlants: (status?: PlantStatus) =>
+          status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [] })
+            : gardenReads++ === 0
+              ? base.getPlants()
+              : pendingGarden,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(gardenReads).toBe(2);
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      await Testing.screen.findByRole("region", { name: "Cemetery" });
+      rejectGarden(new Error("stale refresh"));
+      await pendingGarden.catch(() => undefined);
+      await Promise.resolve();
+
+      Vitest.expect(Testing.screen.getByRole("region", { name: "Cemetery" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
 });

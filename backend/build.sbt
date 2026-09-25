@@ -7,14 +7,14 @@ val apispecV  = "0.11.10"
 val ironV     = "3.3.2"
 val munitV    = "1.3.6"
 val magnumV   = "1.3.1"
-val sqliteV   = "3.49.1.0"
+val sqliteV   = "3.53.4.0"
 val flywayV   = "13.7.0"
 val archUnitV = "1.5.0"
 val catsV     = "2.13.0"
 val circeV    = "0.14.16"
 val monocleV  = "3.3.0"
-val slf4jV    = "2.0.18"
-val oxV       = "1.0.2"
+val slf4jV    = "2.0.19"
+val oxV       = "1.0.7"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
