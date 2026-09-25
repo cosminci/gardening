@@ -1,14 +1,18 @@
 import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { SubstrateComponentEditor } from "../../src/app/SubstrateComponentEditor";
-import { nomenclatureInfo, nomenclatureName, substrateComponentId } from "../../src/domain/Journal";
+import {
+  substrateComponentInfo,
+  substrateComponentName,
+  substrateComponentId,
+} from "../../src/domain/Journal";
 
 const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
 const perlite = {
   id: perliteId,
   data: {
-    name: nomenclatureName("Perlite"),
-    maybeInfo: nomenclatureInfo("Improves drainage.\nUse up to 30%."),
+    name: substrateComponentName("Perlite"),
+    maybeInfo: substrateComponentInfo("Improves drainage.\nUse up to 30%."),
   },
 };
 
@@ -50,8 +54,8 @@ Vitest.describe("SubstrateComponentEditor", () => {
       Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
     Vitest.expect(onAdd).toHaveBeenLastCalledWith({
-      name: nomenclatureName("Pumice"),
-      maybeInfo: nomenclatureInfo("Lightweight.\nRinse first."),
+      name: substrateComponentName("Pumice"),
+      maybeInfo: substrateComponentInfo("Lightweight.\nRinse first."),
     });
   });
 
@@ -97,8 +101,8 @@ Vitest.describe("SubstrateComponentEditor", () => {
         Vitest.expect(onClose).toHaveBeenCalledOnce();
       });
       Vitest.expect(onEdit).toHaveBeenLastCalledWith(perliteId, {
-        name: nomenclatureName("Fine perlite"),
-        maybeInfo: nomenclatureInfo("Small grain."),
+        name: substrateComponentName("Fine perlite"),
+        maybeInfo: substrateComponentInfo("Small grain."),
       });
     },
   );

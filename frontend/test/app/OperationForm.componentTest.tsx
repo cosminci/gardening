@@ -10,11 +10,11 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
   {
     id: perliteId,
     data: {
-      name: Journal.nomenclatureName("Perlite"),
-      maybeInfo: Journal.nomenclatureInfo("Improves drainage.\nUse up to 30%."),
+      name: Journal.substrateComponentName("Perlite"),
+      maybeInfo: Journal.substrateComponentInfo("Improves drainage.\nUse up to 30%."),
     },
   },
-  { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
+  { id: pineBarkId, data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null } },
 ];
 const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
 const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
@@ -55,6 +55,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(_, date) => {
@@ -90,6 +93,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(_, date) => {
@@ -126,6 +132,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -169,6 +178,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(details) => {
@@ -251,6 +263,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -279,6 +294,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => {
           addRequests += 1;
         }}
@@ -387,6 +405,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(details) => {
@@ -414,6 +435,9 @@ describe("OperationForm", () => {
           addRequests += 1;
         }}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -445,6 +469,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => {
@@ -475,6 +502,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -494,6 +524,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}

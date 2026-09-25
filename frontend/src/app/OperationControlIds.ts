@@ -9,3 +9,7 @@ export const archivePesticideControlId = (id: Journal.PesticideId) => `archive-p
 export const addSubstrateComponentControlId = "add-substrate-component";
 export const editSubstrateComponentControlId = (index: number, id: Journal.SubstrateComponentId) =>
   `edit-substrate-component-${String(index)}-${id}`;
+export const saveSubstrateMixControlId = "save-substrate-mix";
+export const loadSubstrateMixControlId = "load-substrate-mix";
+export const deleteSubstrateMixControlId = (id: Journal.SubstrateMixId) =>
+  `delete-substrate-mix-${id}`;

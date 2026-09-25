@@ -1,11 +1,13 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
 import type { DeleteAction } from "./OperationForm";
 import { PesticideArchiveConfirmation } from "./PesticideArchiveConfirmation";
 import { PesticideEditor } from "./PesticideEditor";
+import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
 
@@ -21,6 +23,7 @@ export const operationControlId = (target: OperationTarget) =>
 interface OperationSheetProps {
   readonly target: OperationTarget;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
+  readonly substrateMixes: readonly Journal.SubstrateMix[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly saveError: string | undefined;
   readonly onSubmit: (details: Journal.OperationDetails, date: Journal.Instant) => Promise<void>;
@@ -31,6 +34,12 @@ interface OperationSheetProps {
     id: Journal.SubstrateComponentId,
     data: Journal.SubstrateComponentData,
   ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  readonly onAddSubstrateMix: (
+    name: Journal.SubstrateMixName,
+    maybeNotes: Journal.SubstrateMixNotes | null,
+    substrate: Journal.Substrate,
+  ) => Promise<Journal.AddSubstrateMixResult>;
+  readonly onRequestDeleteSubstrateMix: (mix: Journal.SubstrateMix) => void;
   readonly onAddPesticide: (
     data: Journal.PesticideData,
   ) => Promise<Journal.CatalogAddResult<Journal.Pesticide>>;
@@ -44,7 +53,7 @@ interface OperationSheetProps {
   readonly deleteConfirming?: boolean | undefined;
 }
 
-type NomenclatureEditor =
+type SecondarySheet =
   | {
       readonly kind: "substrate";
       readonly component: Journal.SubstrateComponent | undefined;
@@ -54,15 +63,32 @@ type NomenclatureEditor =
       readonly kind: "pesticide";
       readonly pesticide: Journal.Pesticide | undefined;
       readonly returnFocusId: string;
+    }
+  | {
+      readonly kind: "saveMix";
+      readonly substrate: Journal.Substrate;
+      readonly returnFocusId: string;
+    }
+  | {
+      readonly kind: "loadMix";
+      readonly returnFocusId: string;
     };
 
 type Sheet = "editor" | "operation";
 
 const sheetTransitionMilliseconds = 180;
 
+const secondarySheetLabels: Record<SecondarySheet["kind"], string> = {
+  substrate: "Substrate component editor",
+  pesticide: "Pesticide editor",
+  saveMix: "Save substrate mix",
+  loadMix: "Load substrate mix",
+};
+
 export const OperationSheet: Component<OperationSheetProps> = (props) => {
   let dialog!: HTMLElement;
-  const [editor, setEditor] = createSignal<NomenclatureEditor>();
+  let loadSubstrateIntoForm: ((substrate: Journal.Substrate) => void) | undefined;
+  const [editor, setEditor] = createSignal<SecondarySheet>();
   const [closingSheet, setClosingSheet] = createSignal<Sheet>();
   const [pesticideArchiveTarget, setPesticideArchiveTarget] = createSignal<Journal.Pesticide>();
   const [pesticideArchiveCompleted, setPesticideArchiveCompleted] = createSignal(false);
@@ -100,7 +126,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     props.onCancel();
   };
 
-  const closeEditor = (current: NomenclatureEditor) => {
+  const closeEditor = (current: SecondarySheet) => {
     void closeSheets("editor", current);
   };
 
@@ -142,37 +168,69 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     return undefined;
   };
 
-  const editorContent = (current: NomenclatureEditor) =>
-    current.kind === "substrate" ? (
-      <SubstrateComponentEditor
-        component={current.component}
-        onAdd={props.onAddSubstrateComponent}
-        onEdit={props.onEditSubstrateComponent}
-        onClose={() => {
-          closeEditor(current);
-        }}
-      />
-    ) : (
-      <PesticideEditor
-        pesticide={current.pesticide}
-        onAdd={props.onAddPesticide}
-        onEdit={props.onEditPesticide}
-        onArchive={
-          current.pesticide === undefined
-            ? undefined
-            : {
-                controlId: Controls.archivePesticideControlId(current.pesticide.id),
-                onClick: () => {
-                  setPesticideArchiveCompleted(false);
-                  setPesticideArchiveTarget(current.pesticide);
-                },
-              }
-        }
-        onClose={() => {
-          closeEditor(current);
-        }}
-      />
-    );
+  const editorContent = (current: SecondarySheet) => {
+    switch (current.kind) {
+      case "substrate":
+        return (
+          <SubstrateComponentEditor
+            component={current.component}
+            onAdd={props.onAddSubstrateComponent}
+            onEdit={props.onEditSubstrateComponent}
+            onClose={() => {
+              closeEditor(current);
+            }}
+          />
+        );
+      case "pesticide":
+        return (
+          <PesticideEditor
+            pesticide={current.pesticide}
+            onAdd={props.onAddPesticide}
+            onEdit={props.onEditPesticide}
+            onArchive={
+              current.pesticide === undefined
+                ? undefined
+                : {
+                    controlId: Controls.archivePesticideControlId(current.pesticide.id),
+                    onClick: () => {
+                      setPesticideArchiveCompleted(false);
+                      setPesticideArchiveTarget(current.pesticide);
+                    },
+                  }
+            }
+            onClose={() => {
+              closeEditor(current);
+            }}
+          />
+        );
+      case "saveMix":
+        return (
+          <SaveSubstrateMixSheet
+            onSave={(name, maybeNotes) =>
+              props.onAddSubstrateMix(name, maybeNotes, current.substrate)
+            }
+            onClose={() => {
+              closeEditor(current);
+            }}
+          />
+        );
+      case "loadMix":
+        return (
+          <LoadSubstrateMixSheet
+            mixes={props.substrateMixes}
+            components={props.substrateComponents}
+            onLoad={(mix) => {
+              loadSubstrateIntoForm?.(mix.substrate);
+              closeEditor(current);
+            }}
+            onRequestDelete={props.onRequestDeleteSubstrateMix}
+            onClose={() => {
+              closeEditor(current);
+            }}
+          />
+        );
+    }
+  };
 
   onMount(() => {
     background.forEach((element) => {
@@ -226,6 +284,19 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           onEditSubstrateComponent={(component, controlId) => {
             setEditor({ kind: "substrate", component, returnFocusId: controlId });
           }}
+          onSaveSubstrateMix={(substrate) => {
+            setEditor({
+              kind: "saveMix",
+              substrate,
+              returnFocusId: Controls.saveSubstrateMixControlId,
+            });
+          }}
+          onLoadSubstrateMix={() => {
+            setEditor({ kind: "loadMix", returnFocusId: Controls.loadSubstrateMixControlId });
+          }}
+          onRegisterSubstrateLoader={(load) => {
+            loadSubstrateIntoForm = load;
+          }}
           onAddPesticide={() => {
             setEditor({
               kind: "pesticide",
@@ -254,12 +325,10 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
       <Show keyed when={editor()}>
         {(current) => (
           <aside
-            class="sheet sheet--nomenclature-editor"
+            class="sheet sheet--catalog-editor"
             classList={{ "sheet--closing": closingSheet() === "editor" }}
             inert={closingSheet() === "editor"}
-            aria-label={
-              current.kind === "substrate" ? "Substrate component editor" : "Pesticide editor"
-            }
+            aria-label={secondarySheetLabels[current.kind]}
             aria-modal="true"
             role="dialog"
           >

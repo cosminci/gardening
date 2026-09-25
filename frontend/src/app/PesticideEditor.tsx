@@ -2,7 +2,7 @@ import { For, Show, createSignal, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
 import { pesticideTypeLabels } from "./JournalLabels";
-import "./nomenclature-editor.css";
+import "./catalog-editor.css";
 
 export interface ArchiveAction {
   readonly controlId: string;
@@ -72,13 +72,13 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
       ref={(element) => {
         panel = element;
       }}
-      class="nomenclature-editor"
+      class="catalog-editor"
       aria-label={
         props.pesticide === undefined ? "Add pesticide" : `Edit ${props.pesticide.data.name}`
       }
       tabIndex="-1"
     >
-      <header class="nomenclature-editor__header">
+      <header class="catalog-editor__header">
         <h2>{props.pesticide === undefined ? "Add pesticide" : "Edit pesticide"}</h2>
         <button
           class="icon-action sheet-collapse"
@@ -92,7 +92,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
         </button>
       </header>
       <form
-        class="nomenclature-editor__form"
+        class="catalog-editor__form"
         aria-label={
           props.pesticide === undefined ? "Add pesticide" : `Edit ${props.pesticide.data.name}`
         }
@@ -143,14 +143,14 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
         <Show
           when={!archived()}
-          fallback={<p class="nomenclature-editor__archived-status">Archived</p>}
+          fallback={<p class="catalog-editor__archived-status">Archived</p>}
         >
-          <footer class="nomenclature-editor__actions">
+          <footer class="catalog-editor__actions">
             <Show when={props.onArchive}>
               {(onArchive) => (
                 <button
                   id={onArchive().controlId}
-                  class="nomenclature-editor__archive"
+                  class="catalog-editor__archive"
                   type="button"
                   onClick={() => {
                     onArchive().onClick();

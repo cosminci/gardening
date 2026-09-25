@@ -98,7 +98,7 @@ describe("HttpPesticideClient", () => {
             data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
             status: "archived",
           }),
-          jsonResponse({ message: "nomenclature not found" }, 404),
+          jsonResponse({ message: "pesticide not found" }, 404),
           jsonResponse({ message: "pesticide is already archived" }, 409),
         ],
         requests,
@@ -125,11 +125,11 @@ describe("HttpPesticideClient", () => {
   it("should distinguish missing or archived records from catalog failures", async () => {
     const client = makeHttpPesticideClient(
       respondingWith([
-        jsonResponse({ message: "nomenclatures could not be read" }, 500),
-        jsonResponse({ message: "nomenclature could not be saved" }, 500),
-        jsonResponse({ message: "nomenclature not found" }, 404),
+        jsonResponse({ message: "pesticides could not be read" }, 500),
+        jsonResponse({ message: "pesticide could not be saved" }, 500),
+        jsonResponse({ message: "pesticide not found" }, 404),
         jsonResponse({ message: "pesticide is archived" }, 409),
-        jsonResponse({ message: "nomenclature could not be saved" }, 500),
+        jsonResponse({ message: "pesticide could not be saved" }, 500),
         jsonResponse({ message: "pesticide could not be archived" }, 500),
       ]),
     );

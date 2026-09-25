@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { PlantSheet } from "../../src/app/PlantSheet";
@@ -6,7 +6,7 @@ import * as Journal from "../../src/domain/Journal";
 
 const perlite: Journal.SubstrateComponent = {
   id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000003"),
-  data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null },
+  data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
 };
 
 describe("PlantSheet", () => {
@@ -25,6 +25,11 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
         onCancel={() => undefined}
       />
     ));
@@ -87,6 +92,11 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
         onCancel={() => undefined}
       />
     ));
@@ -142,6 +152,11 @@ describe("PlantSheet", () => {
         onSubmit={() => Promise.resolve()}
         onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
         onEditComponent={onEditComponent}
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
         onCancel={() => undefined}
       />
     ));
@@ -168,7 +183,7 @@ describe("PlantSheet", () => {
   it("should keep the existing mix when defining an extra component for a stocked catalog", async () => {
     const pumice: Journal.SubstrateComponent = {
       id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000005"),
-      data: { name: Journal.nomenclatureName("Pumice"), maybeInfo: null },
+      data: { name: Journal.substrateComponentName("Pumice"), maybeInfo: null },
     };
     const [components, setComponents] = createSignal<readonly Journal.SubstrateComponent[]>([
       perlite,
@@ -192,6 +207,11 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
         onCancel={() => undefined}
       />
     ));
@@ -233,6 +253,11 @@ describe("PlantSheet", () => {
             onEditComponent={() =>
               Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
             }
+            substrateMixes={[]}
+            onAddSubstrateMix={() =>
+              Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+            }
+            onRequestDeleteSubstrateMix={() => undefined}
             onCancel={() => {
               setOpen(false);
             }}
@@ -297,6 +322,11 @@ describe("PlantSheet", () => {
         onEditComponent={() =>
           Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
         }
+        substrateMixes={[]}
+        onAddSubstrateMix={() =>
+          Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+        }
+        onRequestDeleteSubstrateMix={() => undefined}
         onCancel={() => undefined}
       />
     ));
@@ -351,6 +381,11 @@ describe("PlantSheet", () => {
             onEditComponent={() =>
               Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
             }
+            substrateMixes={[]}
+            onAddSubstrateMix={() =>
+              Promise.resolve({ kind: "addFailed" as const, reason: new Error("offline") })
+            }
+            onRequestDeleteSubstrateMix={() => undefined}
             onCancel={() => {
               setOpen(false);
             }}
@@ -364,5 +399,76 @@ describe("PlantSheet", () => {
       expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
     });
     expect(screen.getByRole("button", { name: "Edit Fern" })).toHaveFocus();
+  });
+
+  it("should save the current substrate as a mix and load a saved mix back", async () => {
+    const pineBark: Journal.SubstrateComponent = {
+      id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000004"),
+      data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+    };
+    const savedMix: Journal.SubstrateMix = {
+      id: Journal.substrateMixId("00000000-0000-4000-8000-000000000012"),
+      name: Journal.substrateMixName("Perlite mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+    };
+    const existingMix: Journal.SubstrateMix = {
+      id: Journal.substrateMixId("00000000-0000-4000-8000-000000000011"),
+      name: Journal.substrateMixName("Bark mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: pineBark.id, share: Journal.percentage(100) }]),
+    };
+    const onAddSubstrateMix = vi.fn().mockResolvedValue({ kind: "added", entry: savedMix });
+    const onRequestDeleteSubstrateMix = vi.fn();
+    render(() => (
+      <PlantSheet
+        target={{ kind: "add" }}
+        components={[perlite, pineBark]}
+        substrateMixes={[existingMix]}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onAddSubstrateMix={onAddSubstrateMix}
+        onRequestDeleteSubstrateMix={onRequestDeleteSubstrateMix}
+        onCancel={() => undefined}
+      />
+    ));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save mix" }));
+    const saveSheet = screen.getByRole("dialog", { name: "Save substrate mix" });
+    fireEvent.input(within(saveSheet).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Perlite mix" },
+    });
+    fireEvent.click(within(saveSheet).getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Save substrate mix" })).toBeNull();
+    });
+    expect(onAddSubstrateMix).toHaveBeenCalledWith(
+      Journal.substrateMixName("Perlite mix"),
+      null,
+      Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Load saved mix" }));
+    const loadSheet = screen.getByRole("dialog", { name: "Load substrate mix" });
+    expect(within(loadSheet).getByText("Bark mix")).toBeInTheDocument();
+    fireEvent.click(within(loadSheet).getByRole("button", { name: "Load" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Load substrate mix" })).toBeNull();
+    });
+    expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(pineBark.id);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load saved mix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Bark mix" }));
+    expect(onRequestDeleteSubstrateMix).toHaveBeenCalledWith(existingMix);
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse load mix editor" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Load substrate mix" })).toBeNull();
+    });
   });
 });

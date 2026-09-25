@@ -943,6 +943,48 @@ describe("browsing the journal", () => {
     expect(createPlant).not.toHaveBeenCalled();
   });
 
+  it("should show saved substrate mixes in the plant editor and collapse it on Escape", async () => {
+    const existingMix: Journal.SubstrateMix = {
+      id: Journal.substrateMixId("00000000-0000-4000-8000-000000000013"),
+      name: Journal.substrateMixName("Bark mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([
+        {
+          component: Journal.substrateComponentId("00000000-0000-4000-8000-000000000004"),
+          share: Journal.percentage(100),
+        },
+      ]),
+    };
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      getSubstrateMixesResult: { kind: "read", entries: [existingMix] },
+    });
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load saved mix" }));
+    expect(screen.getByRole("dialog", { name: "Load substrate mix" })).toBeInTheDocument();
+    expect(screen.getByText("Bark mix")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Load substrate mix" })).toBeNull();
+    });
+    fireEvent.keyDown(window, { key: "Escape" });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
+  });
+
   it("should edit an active plant's details without logging an operation and refocus the edit control", async () => {
     const base = JournalFixtures.buildJournal({
       attentionProjection: unavailableFicusAttention,

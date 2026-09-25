@@ -22,6 +22,9 @@ interface OperationFormProps {
     component: Journal.SubstrateComponent,
     returnFocusId: string,
   ) => void;
+  readonly onSaveSubstrateMix: (substrate: Journal.Substrate) => void;
+  readonly onLoadSubstrateMix: () => void;
+  readonly onRegisterSubstrateLoader: (load: (substrate: Journal.Substrate) => void) => void;
   readonly onAddPesticide: () => void;
   readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
   readonly inactive?: boolean;
@@ -51,6 +54,11 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
         : [{ component: initialSubstrateComponent.id, share: 100 }],
   );
   const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
+  untrack(() => {
+    props.onRegisterSubstrateLoader((substrate) => {
+      setParts(substrate.map((part) => ({ component: part.component, share: part.share })));
+    });
+  });
   const [operationDate, setOperationDate] = createSignal(formatLocalMinute(new Date()));
   const [dateError, setDateError] = createSignal(false);
   const [validationError, setValidationError] = createSignal<string>();
@@ -177,6 +185,17 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
               onChange={setParts}
               onAddComponent={props.onAddSubstrateComponent}
               onEditComponent={props.onEditSubstrateComponent}
+              onSaveMix={() => {
+                props.onSaveSubstrateMix(
+                  Journal.substrate(
+                    parts().map((part) => ({
+                      component: part.component,
+                      share: Journal.percentage(part.share),
+                    })),
+                  ),
+                );
+              }}
+              onLoadMix={props.onLoadSubstrateMix}
             />
           }
         >
