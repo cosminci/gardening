@@ -460,6 +460,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /pesticides/{pesticideId}/archive:
+    post:
+      summary: Archive a pesticide
+      operationId: postPesticidesPesticideidArchive
+      parameters:
+      - name: pesticideId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pesticide'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '500':
           description: ''
           content:
@@ -736,12 +783,15 @@ components:
       required:
       - id
       - data
+      - status
       properties:
         id:
           type: string
           format: uuid
         data:
           $ref: '#/components/schemas/PesticideData'
+        status:
+          $ref: '#/components/schemas/PesticideStatus'
     PesticideData:
       title: PesticideData
       type: object
@@ -758,6 +808,12 @@ components:
           type:
           - string
           - 'null'
+    PesticideStatus:
+      title: PesticideStatus
+      type: string
+      enum:
+      - active
+      - archived
     PesticideType:
       title: PesticideType
       type: string

@@ -11,6 +11,7 @@ const neem = {
     pesticideType: "insecticide" as const,
     maybeInfo: Journal.nomenclatureInfo("Dilute first"),
   },
+  status: "active" as const,
 };
 
 describe("HttpPesticideClient", () => {
@@ -23,6 +24,7 @@ describe("HttpPesticideClient", () => {
             {
               id: pesticideId,
               data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
+              status: "active",
             },
           ]),
         ],
@@ -48,10 +50,15 @@ describe("HttpPesticideClient", () => {
             {
               id: pesticideId,
               data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
+              status: "active",
             },
             201,
           ),
-          jsonResponse({ id: pesticideId, data: { name: "Neem", type: "treatment", info: null } }),
+          jsonResponse({
+            id: pesticideId,
+            data: { name: "Neem", type: "treatment", info: null },
+            status: "active",
+          }),
         ],
         requests,
       ),
@@ -70,7 +77,10 @@ describe("HttpPesticideClient", () => {
     const requestBodies = await Promise.all(requests.map((request) => request.json()));
 
     expect(added).toEqual({ kind: "added", entry: neem });
-    expect(edited).toEqual({ kind: "edited", entry: { id: pesticideId, data: editedData } });
+    expect(edited).toEqual({
+      kind: "edited",
+      entry: { id: pesticideId, data: editedData, status: "active" },
+    });
     expect(requestedPaths).toEqual(["POST /pesticides", `PUT /pesticides/${pesticideId}`]);
     expect(requestBodies).toEqual([
       { name: "Neem oil", type: "insecticide", info: "Dilute first" },
@@ -78,37 +88,79 @@ describe("HttpPesticideClient", () => {
     ]);
   });
 
-  it("should distinguish missing records from catalog failures", async () => {
+  it("should archive a pesticide and distinguish an unknown or already-archived one", async () => {
+    const requests: Request[] = [];
+    const client = makeHttpPesticideClient(
+      respondingWith(
+        [
+          jsonResponse({
+            id: pesticideId,
+            data: { name: "Neem oil", type: "insecticide", info: "Dilute first" },
+            status: "archived",
+          }),
+          jsonResponse({ message: "nomenclature not found" }, 404),
+          jsonResponse({ message: "pesticide is already archived" }, 409),
+        ],
+        requests,
+      ),
+    );
+
+    const archived = await client.archivePesticide(pesticideId);
+    const missing = await client.archivePesticide(pesticideId);
+    const alreadyArchived = await client.archivePesticide(pesticideId);
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
+    );
+
+    expect(archived).toEqual({ kind: "archived", entry: { ...neem, status: "archived" } });
+    expect(missing).toEqual({ kind: "pesticideMissing" });
+    expect(alreadyArchived).toEqual({ kind: "alreadyArchived" });
+    expect(requestedPaths).toEqual([
+      `POST /pesticides/${pesticideId}/archive`,
+      `POST /pesticides/${pesticideId}/archive`,
+      `POST /pesticides/${pesticideId}/archive`,
+    ]);
+  });
+
+  it("should distinguish missing or archived records from catalog failures", async () => {
     const client = makeHttpPesticideClient(
       respondingWith([
         jsonResponse({ message: "nomenclatures could not be read" }, 500),
         jsonResponse({ message: "nomenclature could not be saved" }, 500),
         jsonResponse({ message: "nomenclature not found" }, 404),
+        jsonResponse({ message: "pesticide is archived" }, 409),
         jsonResponse({ message: "nomenclature could not be saved" }, 500),
+        jsonResponse({ message: "pesticide could not be archived" }, 500),
       ]),
     );
 
     const read = await client.getPesticides();
     const added = await client.addPesticide(neem.data);
     const missing = await client.editPesticide(pesticideId, neem.data);
+    const archived = await client.editPesticide(pesticideId, neem.data);
     const failed = await client.editPesticide(pesticideId, neem.data);
+    const archiveFailed = await client.archivePesticide(pesticideId);
 
     expect(read.kind).toBe("readFailed");
     expect(added.kind).toBe("addFailed");
-    expect(missing).toEqual({ kind: "recordMissing" });
+    expect(missing).toEqual({ kind: "pesticideMissing" });
+    expect(archived).toEqual({ kind: "pesticideArchived" });
     expect(failed.kind).toBe("editFailed");
+    expect(archiveFailed.kind).toBe("archiveFailed");
   });
 
   it("should preserve network failure classifications", async () => {
     const reason = new Error("offline");
-    const client = makeHttpPesticideClient(respondingWith(new Array<Error>(3).fill(reason)));
+    const client = makeHttpPesticideClient(respondingWith(new Array<Error>(4).fill(reason)));
 
     const read = await client.getPesticides();
     const added = await client.addPesticide(neem.data);
     const edited = await client.editPesticide(pesticideId, neem.data);
+    const archived = await client.archivePesticide(pesticideId);
 
     expect(read).toEqual({ kind: "readFailed", reason });
     expect(added).toEqual({ kind: "addFailed", reason });
     expect(edited).toEqual({ kind: "editFailed", reason });
+    expect(archived).toEqual({ kind: "archiveFailed", reason });
   });
 });

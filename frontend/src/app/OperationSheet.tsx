@@ -4,6 +4,7 @@ import type * as Journal from "../domain/Journal";
 import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
 import type { DeleteAction } from "./OperationForm";
+import { PesticideArchiveConfirmation } from "./PesticideArchiveConfirmation";
 import { PesticideEditor } from "./PesticideEditor";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
@@ -36,7 +37,8 @@ interface OperationSheetProps {
   readonly onEditPesticide: (
     id: Journal.PesticideId,
     data: Journal.PesticideData,
-  ) => Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
+  ) => Promise<Journal.PesticideEditResult>;
+  readonly onArchivePesticide: (id: Journal.PesticideId) => Promise<Journal.PesticideArchiveResult>;
   readonly onCancel: () => void;
   readonly onDelete?: DeleteAction | undefined;
   readonly deleteConfirming?: boolean | undefined;
@@ -62,6 +64,8 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   let dialog!: HTMLElement;
   const [editor, setEditor] = createSignal<NomenclatureEditor>();
   const [closingSheet, setClosingSheet] = createSignal<Sheet>();
+  const [pesticideArchiveTarget, setPesticideArchiveTarget] = createSignal<Journal.Pesticide>();
+  const [pesticideArchiveCompleted, setPesticideArchiveCompleted] = createSignal(false);
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
@@ -105,10 +109,37 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   };
 
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || props.deleteConfirming === true) return;
+    if (
+      event.key !== "Escape" ||
+      props.deleteConfirming === true ||
+      pesticideArchiveTarget() !== undefined
+    )
+      return;
     const currentEditor = editor();
     if (currentEditor !== undefined) closeEditor(currentEditor);
     else closeOperation();
+  };
+
+  const confirmArchivePesticide = async (
+    pesticide: Journal.Pesticide,
+  ): Promise<string | undefined> => {
+    let result: Journal.PesticideArchiveResult;
+    try {
+      result = await props.onArchivePesticide(pesticide.id);
+    } catch {
+      return "The pesticide could not be archived.";
+    }
+    if (result.kind === "pesticideMissing") return "This pesticide no longer exists.";
+    if (result.kind === "alreadyArchived") return "This pesticide was already archived.";
+    if (result.kind === "archiveFailed") return "The pesticide could not be archived.";
+    setPesticideArchiveCompleted(true);
+    setPesticideArchiveTarget(undefined);
+    const currentEditor = editor();
+    // The archive action is only reachable from within this pesticide's own open editor, so the
+    // editor is always still open here; the false side is unreachable at runtime.
+    /* v8 ignore next */
+    if (currentEditor !== undefined) closeEditor(currentEditor);
+    return undefined;
   };
 
   const editorContent = (current: NomenclatureEditor) =>
@@ -126,6 +157,17 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
         pesticide={current.pesticide}
         onAdd={props.onAddPesticide}
         onEdit={props.onEditPesticide}
+        onArchive={
+          current.pesticide === undefined
+            ? undefined
+            : {
+                controlId: Controls.archivePesticideControlId(current.pesticide.id),
+                onClick: () => {
+                  setPesticideArchiveCompleted(false);
+                  setPesticideArchiveTarget(current.pesticide);
+                },
+              }
+        }
         onClose={() => {
           closeEditor(current);
         }}
@@ -223,6 +265,18 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
           >
             {editorContent(current)}
           </aside>
+        )}
+      </Show>
+      <Show when={pesticideArchiveTarget()} keyed>
+        {(pesticide) => (
+          <PesticideArchiveConfirmation
+            pesticide={pesticide}
+            completed={pesticideArchiveCompleted()}
+            onConfirm={() => confirmArchivePesticide(pesticide)}
+            onCancel={() => {
+              setPesticideArchiveTarget(undefined);
+            }}
+          />
         )}
       </Show>
     </div>

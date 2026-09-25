@@ -97,6 +97,7 @@ export const buildJournal = ({
   getPesticidesResult = { kind: "read", entries: [] },
   pesticideAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  pesticideArchiveResult = { kind: "archiveFailed", reason: new Error("unexpected write") },
   logged = [],
   edited = [],
   deleted = [],
@@ -104,6 +105,7 @@ export const buildJournal = ({
   editedComponents = [],
   addedPesticides = [],
   editedPesticides = [],
+  archivedPesticides = [],
   operationWindows = [],
 }: {
   attentionProjection?: Journal.AttentionProjection;
@@ -119,7 +121,8 @@ export const buildJournal = ({
   componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
   getPesticidesResult?: Journal.CatalogReadResult<Journal.Pesticide>;
   pesticideAddResult?: Journal.CatalogAddResult<Journal.Pesticide>;
-  pesticideEditResult?: Journal.CatalogEditResult<Journal.Pesticide>;
+  pesticideEditResult?: Journal.PesticideEditResult;
+  pesticideArchiveResult?: Journal.PesticideArchiveResult;
   logged?: { plantId: string; date: Journal.Instant; details: Journal.OperationDetails }[];
   edited?: { operationId: string; details: Journal.OperationDetails }[];
   deleted?: Journal.OperationId[];
@@ -130,6 +133,7 @@ export const buildJournal = ({
   }[];
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
+  archivedPesticides?: Journal.PesticideId[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): PlantClient &
   OperationClient &
@@ -224,6 +228,10 @@ export const buildJournal = ({
     editPesticide: (id, data) => {
       editedPesticides.push({ id, data });
       return Promise.resolve(pesticideEditResult);
+    },
+    archivePesticide: (id) => {
+      archivedPesticides.push(id);
+      return Promise.resolve(pesticideArchiveResult);
     },
   };
 };

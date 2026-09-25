@@ -58,6 +58,7 @@ describe("browsing the journal", () => {
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
+        status: "active" as const,
       },
     ];
     const operationWindows: {

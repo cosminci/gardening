@@ -35,6 +35,9 @@ export const nomenclatureInfo = (value: string): NomenclatureInfo => value as No
 export const pesticideTypes = ["fungicide", "insecticide", "treatment"] as const;
 export type PesticideType = (typeof pesticideTypes)[number];
 
+export const pesticideStatuses = ["active", "archived"] as const;
+export type PesticideStatus = (typeof pesticideStatuses)[number];
+
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];
 
@@ -71,6 +74,7 @@ export interface PesticideData {
 export interface Pesticide {
   readonly id: PesticideId;
   readonly data: PesticideData;
+  readonly status: PesticideStatus;
 }
 
 export interface PlantDetails {
@@ -237,3 +241,15 @@ export type CatalogEditResult<A> =
   | { readonly kind: "edited"; readonly entry: A }
   | { readonly kind: "recordMissing" }
   | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type PesticideEditResult =
+  | { readonly kind: "edited"; readonly entry: Pesticide }
+  | { readonly kind: "pesticideMissing" }
+  | { readonly kind: "pesticideArchived" }
+  | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type PesticideArchiveResult =
+  | { readonly kind: "archived"; readonly entry: Pesticide }
+  | { readonly kind: "pesticideMissing" }
+  | { readonly kind: "alreadyArchived" }
+  | { readonly kind: "archiveFailed"; readonly reason: Error };

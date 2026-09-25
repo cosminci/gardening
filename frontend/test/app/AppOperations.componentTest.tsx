@@ -1008,6 +1008,7 @@ Vitest.describe("changing the journal", () => {
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
+        status: "active" as const,
       },
       {
         id: Journal.pesticideId("00000000-0000-4000-8001-000000000006"),
@@ -1016,6 +1017,7 @@ Vitest.describe("changing the journal", () => {
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
+        status: "active" as const,
       },
     ];
     const addedPesticide: Journal.PesticideData = {
@@ -1039,8 +1041,14 @@ Vitest.describe("changing the journal", () => {
       attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
-      pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
-      pesticideEditResult: { kind: "edited", entry: { id: neemId, data: editedPesticide } },
+      pesticideAddResult: {
+        kind: "added",
+        entry: { id: soapId, data: addedPesticide, status: "active" },
+      },
+      pesticideEditResult: {
+        kind: "edited",
+        entry: { id: neemId, data: editedPesticide, status: "active" },
+      },
       addedPesticides,
       editedPesticides,
     });
@@ -1133,6 +1141,200 @@ Vitest.describe("changing the journal", () => {
       Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
   });
+
+  Vitest.it(
+    "should archive an active pesticide, close its editor, and stop listing it for new selection",
+    async () => {
+      const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+      const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
+      const soap = {
+        id: soapId,
+        data: {
+          name: Journal.nomenclatureName("Insecticidal soap"),
+          pesticideType: "insecticide" as const,
+          maybeInfo: null,
+        },
+        status: "active" as const,
+      };
+      const archivedPesticides: Journal.PesticideId[] = [];
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: {
+          kind: "read",
+          entries: [
+            {
+              id: neemId,
+              data: {
+                name: Journal.nomenclatureName("Neem oil"),
+                pesticideType: "insecticide",
+                maybeInfo: null,
+              },
+              status: "active",
+            },
+            soap,
+          ],
+        },
+        pesticideArchiveResult: {
+          kind: "archived",
+          entry: {
+            id: neemId,
+            data: {
+              name: Journal.nomenclatureName("Neem oil"),
+              pesticideType: "insecticide",
+              maybeInfo: null,
+            },
+            status: "archived",
+          },
+        },
+        archivedPesticides,
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      const operation = Testing.screen.getByRole("dialog", { name: "Operation editor" });
+      Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Archive permanently" }),
+      );
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+        ).toBeNull();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(
+        Testing.screen.queryByRole("checkbox", { name: "Neem oil" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.getByRole("checkbox", { name: "Insecticidal soap" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("dialog", { name: "Operation editor" })).toBe(
+        operation,
+      );
+      Vitest.expect(archivedPesticides).toEqual([neemId]);
+    },
+  );
+
+  Vitest.it("should cancel archiving a pesticide and restore focus without writing", async () => {
+    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const neem = {
+      id: neemId,
+      data: {
+        name: Journal.nomenclatureName("Neem oil"),
+        pesticideType: "insecticide" as const,
+        maybeInfo: null,
+      },
+      status: "active" as const,
+    };
+    const archivePesticide = Vitest.vi.fn(() =>
+      Promise.resolve({
+        kind: "archived" as const,
+        entry: { ...neem, status: "archived" as const },
+      }),
+    );
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: { kind: "read", entries: [neem] },
+      }),
+      archivePesticide,
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+    const archiveControl = Testing.screen.getByRole("button", { name: "Archive" });
+    archiveControl.focus();
+    Testing.fireEvent.click(archiveControl);
+    const warning = Testing.screen.getByRole("alertdialog");
+    Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
+
+    Vitest.expect(archivePesticide).not.toHaveBeenCalled();
+    await Testing.waitFor(() => {
+      Vitest.expect(archiveControl).toHaveFocus();
+    });
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  Vitest.it(
+    "should dismiss only the archive confirmation, not the pesticide editor, on Escape",
+    async () => {
+      const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: {
+          kind: "read",
+          entries: [
+            {
+              id: neemId,
+              data: {
+                name: Journal.nomenclatureName("Neem oil"),
+                pesticideType: "insecticide",
+                maybeInfo: null,
+              },
+              status: "active",
+            },
+          ],
+        },
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      Vitest.expect(Testing.screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      Testing.fireEvent.keyDown(window, { key: "Escape" });
+
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+      ).toBeInTheDocument();
+    },
+  );
 
   Vitest.it(
     "should reorder plant cards when a pushed attention projection changes urgency",
@@ -1350,6 +1552,7 @@ Vitest.describe("changing the journal", () => {
               pesticideType: "insecticide",
               maybeInfo: null,
             },
+            status: "active",
           },
         ],
       },

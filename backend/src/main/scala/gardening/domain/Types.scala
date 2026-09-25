@@ -67,7 +67,14 @@ enum PesticideType:
 final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Option[NomenclatureInfo])
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
 final case class PesticideData(name: NomenclatureName, pesticideType: PesticideType, maybeInfo: Option[NomenclatureInfo])
-final case class Pesticide(id: PesticideId, data: PesticideData)
+
+enum PesticideStatus derives CanEqual:
+  case Active, Archived
+
+object PesticideStatus:
+  given Eq[PesticideStatus] = Eq.fromUniversalEquals
+
+final case class Pesticide(id: PesticideId, data: PesticideData, status: PesticideStatus)
 
 type Percentage = Int :| Interval.Closed[1, 100]
 

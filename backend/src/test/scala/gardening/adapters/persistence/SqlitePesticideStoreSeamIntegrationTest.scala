@@ -4,7 +4,7 @@ import cats.syntax.option.*
 import com.augustnagro.magnum.Transactor
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.PesticideStore
+import gardening.domain.pesticide.{PesticideArchiveResult, PesticideEditResult, PesticideStore}
 import org.flywaydb.core.Flyway
 
 import java.sql.Connection
@@ -16,7 +16,7 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
 
   private val pesticideId   = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
   private val pesticideData = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, none)
-  private val pesticide     = Pesticide(pesticideId, pesticideData)
+  private val pesticide     = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)
 
   test("should read seeded pesticides and persist additions and edits"):
     Using.resource(storeResource): resource =>
@@ -31,30 +31,55 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
       val afterUpdate = store.getPesticides
 
       val expectedSeeded = Vector(
-        ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some),
-        ("SWITCH 62.5 WG", PesticideType.Fungicide, none),
-        ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some),
-        ("SIMFONIA", PesticideType.Insecticide, "organic".some),
-        ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none),
-        ("MOSPILAN 20SG", PesticideType.Insecticide, none),
-        ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some),
-        ("H2O2", PesticideType.Treatment, none)
+        ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some, PesticideStatus.Active),
+        ("SWITCH 62.5 WG", PesticideType.Fungicide, none, PesticideStatus.Active),
+        ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some, PesticideStatus.Active),
+        ("SIMFONIA", PesticideType.Insecticide, "organic".some, PesticideStatus.Active),
+        ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none, PesticideStatus.Active),
+        ("MOSPILAN 20SG", PesticideType.Insecticide, none, PesticideStatus.Active),
+        ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some, PesticideStatus.Active),
+        ("H2O2", PesticideType.Treatment, none, PesticideStatus.Active)
       )
       seeded match
         case CatalogReadResult.Read(pesticides) =>
           val actualSeeded =
-            pesticides.map(pesticide => (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value)))
+            pesticides.map(pesticide =>
+              (pesticide.data.name.value, pesticide.data.pesticideType, pesticide.data.maybeInfo.map(_.value), pesticide.status)
+            )
           assertEquals(actualSeeded, expectedSeeded)
         case other => fail(s"expected Read, got $other")
       assertEquals(added, CatalogAddResult.Added(pesticide))
       afterAdd match
         case CatalogReadResult.Read(pesticides) => assertEquals(pesticides.lastOption, pesticide.some)
         case other                              => fail(s"expected Read, got $other")
-      assertEquals(edited, CatalogEditResult.Edited(pesticide.copy(data = editedData)))
-      assertEquals(missing, CatalogEditResult.RecordMissing)
+      assertEquals(edited, PesticideEditResult.Edited(pesticide.copy(data = editedData)))
+      assertEquals(missing, PesticideEditResult.PesticideMissing)
       afterUpdate match
         case CatalogReadResult.Read(pesticides) => assertEquals(pesticides.lastOption.map(_.data), editedData.some)
         case other                              => fail(s"expected Read, got $other")
+
+  test("should archive an active pesticide and reject editing or re-archiving it"):
+    Using.resource(storeResource): resource =>
+      val store = resource.store
+      val _     = store.addPesticide(pesticide)
+
+      val archived      = store.archivePesticide(pesticideId)
+      val editArchived  = store.editPesticide(pesticideId, pesticideData)
+      val reArchived    = store.archivePesticide(pesticideId)
+      val stillArchived = store.getPesticides
+
+      assertEquals(archived, PesticideArchiveResult.Archived(pesticide.copy(status = PesticideStatus.Archived)))
+      assertEquals(editArchived, PesticideEditResult.PesticideArchived)
+      assertEquals(reArchived, PesticideArchiveResult.AlreadyArchived)
+      stillArchived match
+        case CatalogReadResult.Read(pesticides) => assertEquals(pesticides.lastOption.map(_.status), PesticideStatus.Archived.some)
+        case other                              => fail(s"expected Read, got $other")
+
+  test("should reject archiving an unknown pesticide"):
+    Using.resource(storeResource): resource =>
+      val missing = resource.store.archivePesticide(PesticideId(UUID.randomUUID()))
+
+      assertEquals(missing, PesticideArchiveResult.PesticideMissing)
 
   test("should reject invalid stored pesticide values"):
     Using.resource(storeResource): resource =>
@@ -74,15 +99,19 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
     Using.resource(storeResource): resource =>
       val readOnlyStore = SqlitePesticideStore.make(Transactor(resource.dataSource, connectionConfig = makeReadOnly))
 
-      val addResult  = readOnlyStore.addPesticide(pesticide)
-      val editResult = readOnlyStore.editPesticide(pesticideId, pesticideData)
+      val addResult     = readOnlyStore.addPesticide(pesticide)
+      val editResult    = readOnlyStore.editPesticide(pesticideId, pesticideData)
+      val archiveResult = readOnlyStore.archivePesticide(pesticideId)
 
       addResult match
         case CatalogAddResult.AddFailed(_) => ()
         case other                         => fail(s"expected AddFailed, got $other")
       editResult match
-        case CatalogEditResult.EditFailed(_) => ()
-        case other                           => fail(s"expected EditFailed, got $other")
+        case PesticideEditResult.EditFailed(_) => ()
+        case other                             => fail(s"expected EditFailed, got $other")
+      archiveResult match
+        case PesticideArchiveResult.ArchiveFailed(_) => ()
+        case other                                   => fail(s"expected ArchiveFailed, got $other")
 
   test("should report read failures when the pesticide schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>

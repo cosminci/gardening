@@ -42,9 +42,27 @@
 .nomenclature-editor__actions {
   display: flex;
   justify-content: center;
+  gap: 0.6rem;
   margin-top: auto;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
+}
+
+.nomenclature-editor__archive {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 0.5rem;
+  background: var(--danger);
+  color: white;
+  cursor: pointer;
+}
+
+.nomenclature-editor__archived-status {
+  margin: auto 0 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  text-align: center;
 }
 
 @media (max-width: 28rem) {

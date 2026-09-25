@@ -178,6 +178,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pesticides/{pesticideId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a pesticide */
+        post: operations["postPesticidesPesticideidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/substrate/components": {
         parameters: {
             query?: never;
@@ -300,6 +317,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             data: components["schemas"]["PesticideData"];
+            status: components["schemas"]["PesticideStatus"];
         };
         /** PesticideData */
         PesticideData: {
@@ -307,6 +325,11 @@ export interface components {
             type: components["schemas"]["PesticideType"];
             info: string | null;
         };
+        /**
+         * PesticideStatus
+         * @enum {string}
+         */
+        PesticideStatus: "active" | "archived";
         /**
          * PesticideType
          * @enum {string}
@@ -1026,6 +1049,67 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPesticidesPesticideidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pesticideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
