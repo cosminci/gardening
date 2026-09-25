@@ -5,7 +5,6 @@ import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.WateringHistory.*
 import io.github.iltotore.iron.autoRefine
-import ox.{Ox, forkDiscard, sleep}
 
 import language.experimental.captureChecking
 
@@ -20,21 +19,8 @@ trait PlantAttentionMonitor:
 
 object PlantAttentionMonitor:
 
-  def make(recomputeInterval: FiniteDuration)(using
-      store: PlantAttentionStore^,
-      clock: Clock^,
-      ox: Ox
-  ): Either[Throwable, PlantAttentionMonitor^{store, clock}] =
-    computeProjection.map { projection =>
-      val monitor = new LivePlantAttentionMonitor(projection)
-      forkDiscard {
-        Iterator.continually {
-          sleep(recomputeInterval)
-          val _ = monitor.refreshAll
-        }.foreach(identity)
-      }
-      monitor
-    }
+  def make(using store: PlantAttentionStore^, clock: Clock^): Either[Throwable, PlantAttentionMonitor^{store, clock}] =
+    computeProjection.map(new LivePlantAttentionMonitor(_))
 
   private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using store: PlantAttentionStore^, clock: Clock^)
       extends PlantAttentionMonitor:

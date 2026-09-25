@@ -30,7 +30,7 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
   )
 
   test("should expose the attention projection with its existing wire shape"):
-    val server = buildServer(projection)
+    val server = buildServer(buildAttention(Refs(), Vector(projection)))
 
     val response = basicRequest.get(Uri.unsafeParse("http://test/attention")).send(server)
 
@@ -59,52 +59,52 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), StatusCode.Ok -> json(expected))
 
   test("should expose the HTTP and websocket feed endpoints for the composition root to wire up"):
-    val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = projection
-      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
+    val attention = buildAttention(Refs(), Vector(projection))
 
-    val endpoints = supervised(AttentionApi.serverEndpoints(using attention))
+    val endpoints = AttentionApi.serverEndpoints(using attention)
 
-    assertEquals(endpoints.size, 2)
+    val describedEndpoints = endpoints.map(server =>
+      s"${server.endpoint.method.getOrElse(fail("endpoint without a method"))} ${server.endpoint
+          .showPathTemplate()}"
+    )
+    val expectedEndpoints = List("GET /attention", "GET /attention/feed")
+    assertEquals(describedEndpoints, expectedEndpoints)
 
   test("should push the current projection immediately on connect, then again only once it changes"):
-    val calls         = AtomicInteger(0)
-    val stableRepeats = 5
-    val initial       = AttentionProjection(date, Vector.empty)
-    val changed       = AttentionProjection(date.plusSeconds(1), Vector.empty)
-    val attention     = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = if calls.getAndIncrement() < stableRepeats then initial else changed
-      override def refreshAll: RefreshAttentionResult = fail("the push adapter must not trigger recomputation")
+    val initial   = AttentionProjection(date, Vector.empty)
+    val changed   = AttentionProjection(date.plusSeconds(1), Vector.empty)
+    val attention = buildAttention(Refs(), Vector(initial, initial, changed))
 
-    val pushed = supervised:
-      val feed           = AttentionApi.AttentionFeed.startBroadcasting(attention, pollInterval = 1.milli)
+    val pollInterval = 1.milli
+    val pushed       = supervised:
       val stillConnected = Flow.tick(1.hour, "still connected")
-      feed.subscribe()(stillConnected).take(2).runToList()
-    val expectedPushed = List(initial, changed)
+      AttentionApi.attentionFeed(attention, pollInterval)(stillConnected).take(2).runToList()
 
+    val expectedPushed = List(initial, changed)
     assertEquals(pushed, expectedPushed)
 
-  test("should replay the last broadcast projection immediately to a newly connected browser"):
-    val projection = AttentionProjection(date, Vector.empty)
-    val attention  = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = projection
-      override def refreshAll: RefreshAttentionResult = fail("the push adapter must not trigger recomputation")
+  test("should push the current projection immediately to every newly connected browser"):
+    val pollInterval = 1.milli
 
     val (firstConnectionPushed, secondConnectionPushed) = supervised:
-      val feed             = AttentionApi.AttentionFeed.startBroadcasting(attention, pollInterval = 1.milli)
-      val firstConnection  = Flow.tick(1.hour, "still connected")
-      val first            = feed.subscribe()(firstConnection).take(1).runToList()
-      val secondConnection = Flow.tick(1.hour, "still connected")
-      val second           = feed.subscribe()(secondConnection).take(1).runToList()
+      val first =
+        AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(Flow.tick(1.hour, "connected")).take(1).runToList()
+      val second =
+        AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(Flow.tick(1.hour, "connected")).take(1).runToList()
       (first, second)
 
     assertEquals(firstConnectionPushed, List(projection))
     assertEquals(secondConnectionPushed, List(projection))
 
-  private def buildServer(projection: AttentionProjection) =
-    val attention = new PlantAttentionMonitor:
-      override def current: AttentionProjection       = projection
-      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
+  private case class Refs(attentionReads: AtomicInteger = AtomicInteger(0))
+
+  private def buildAttention(refs: Refs, projections: Vector[AttentionProjection]): PlantAttentionMonitor =
+    new PlantAttentionMonitor:
+      override def current: AttentionProjection =
+        projections.lift(refs.attentionReads.getAndIncrement()).orElse(projections.lastOption).getOrElse(fail("missing attention projection"))
+      override def refreshAll: RefreshAttentionResult = fail("attention must not be refreshed by a read path")
+
+  private def buildServer(attention: PlantAttentionMonitor) =
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(List(AttentionApi.httpServerEndpoint(using attention)))
       .backend()

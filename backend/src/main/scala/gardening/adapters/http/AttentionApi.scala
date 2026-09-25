@@ -1,16 +1,12 @@
 package gardening.adapters.http
 
-import cats.Eq
-import cats.syntax.eq.*
 import gardening.domain.PlantId
 import gardening.domain.attention.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
-import ox.channels.Channel
 import ox.flow.Flow
-import ox.{Ox, discard, forkDiscard, sleep}
 import sttp.capabilities.WebSockets
 import sttp.shared.Identity
 import sttp.tapir.*
@@ -21,7 +17,6 @@ import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.netty.sync.OxStreams
 
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
 import scala.util.Try
 
@@ -54,47 +49,18 @@ object AttentionApi:
     getAttentionEndpoint.handleSuccess(_ => attention.current)
 
   /**
-   * Neither tapir's `webSocketBody` (strictly per-connection) nor Ox's `Channel`/`Source` (competing-consumer, not broadcast) provide a
-   * multi-subscriber topic, so this hand-rolls the minimal one needed: a single poll-and-detect loop fanning out to a registry of per-connection
-   * channels, instead of every connection polling and comparing on its own.
+   * Neither tapir's `webSocketBody` nor Ox provide a broadcast/topic primitive, so each connection independently ticks and pushes the monitor's
+   * current projection (an in-memory read, kept fresh by the recompute loop), deduplicating unchanged values. Merging the drained incoming frames
+   * ends the feed as soon as the client disconnects.
    */
-  def serverEndpoints(using attention: PlantAttentionMonitor, ox: Ox): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
-    val feed = AttentionFeed.startBroadcasting(attention, feedPollInterval)
-    // tapir-sttp-stub-server cannot run an OxStreams endpoint's logic, so this dispatch can't be seam-tested like the HTTP one;
-    // AttentionFeed itself is exercised directly in AttentionApiSeamIntegrationTest.
+  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
+    // tapir-sttp-stub-server can't run an OxStreams endpoint's logic, so this dispatch isn't seam-tested; `attentionFeed` is exercised directly.
     // $COVERAGE-OFF$
-    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => feed.subscribe()))
+    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => attentionFeed(attention, feedPollInterval)))
     // $COVERAGE-ON$
 
-  final private[http] class AttentionFeed private (attention: PlantAttentionMonitor):
-    private val subscribers = AtomicReference(Set.empty[Channel[AttentionProjection]])
-    private val latest      = AtomicReference(attention.current)
-
-    private[http] def subscribe(): OxStreams.Pipe[String, AttentionProjection] = incoming =>
-      val connection = Channel.unlimited[AttentionProjection]
-      subscribers.updateAndGet(_ + connection).discard
-      connection.sendOrClosed(latest.get()).discard
-      Flow
-        .fromSource(connection)
-        .merge(incoming.drain(), propagateDoneRight = true)
-        .onComplete(subscribers.updateAndGet(_ - connection).discard)
-
-    private def broadcastOnChange(pollInterval: FiniteDuration)(using Ox): Unit =
-      forkDiscard:
-        Iterator.continually {
-          sleep(pollInterval)
-          val projection         = attention.current
-          val previousMeasuredAt = latest.getAndSet(projection).measuredAt
-          if previousMeasuredAt =!= projection.measuredAt then subscribers.get().foreach(_.sendOrClosed(projection).discard)
-        }.foreach(identity)
-
-  private[http] object AttentionFeed:
-    private[http] def startBroadcasting(attention: PlantAttentionMonitor, pollInterval: FiniteDuration)(using Ox): AttentionFeed =
-      val feed = new AttentionFeed(attention)
-      feed.broadcastOnChange(pollInterval)
-      feed
-
-  private given Eq[Instant] = Eq.fromUniversalEquals
+  private[http] def attentionFeed(attention: PlantAttentionMonitor, pollInterval: FiniteDuration): OxStreams.Pipe[String, AttentionProjection] =
+    incoming => Flow.tick(pollInterval).map(_ => attention.current).debounceBy(_.measuredAt).merge(incoming.drain(), propagateDoneRight = true)
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")

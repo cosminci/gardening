@@ -6,7 +6,7 @@ import gardening.domain.attention.PlantAttentionMonitor
 import gardening.domain.journal.PlantJournal
 import gardening.domain.pesticide.PesticideCatalog
 import gardening.domain.substrate.SubstrateComponentCatalog
-import ox.Ox
+import ox.{Ox, discard, forkDiscard, sleep}
 
 final case class Programs(
     plantJournal: PlantJournal,
@@ -21,7 +21,9 @@ object Programs:
     val store          = SqlitePlantJournalStore.make(resources.transactor)
     val substrateStore = SqliteSubstrateComponentStore.make(resources.transactor)
     val pesticideStore = SqlitePesticideStore.make(resources.transactor)
-    PlantAttentionMonitor.make(AppConfig.attentionRecomputeInterval)(using store, SystemClock).map: attention =>
+    PlantAttentionMonitor.make(using store, SystemClock).map: attention =>
+      forkDiscard:
+        Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
         PlantJournal.make(using store, substrateStore, pesticideStore, UuidIdGenerator),
         attention,
