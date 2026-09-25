@@ -8,7 +8,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.util.chaining.scalaUtilChainingOps
 
-class SubstrateComponentCatalogComponentTest extends munit.FunSuite:
+class SubstrateComponentCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private val componentId   = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
   private val componentData = SubstrateComponentData(NomenclatureName("Pumice"), NomenclatureInfo("porous").some)
@@ -27,6 +27,11 @@ class SubstrateComponentCatalogComponentTest extends munit.FunSuite:
     assertEquals(editResult, CatalogEditResult.RecordMissing)
     assertEquals(refs.added.get(), Vector(component))
     assertEquals(refs.edited.get(), Vector(componentId -> componentData))
+
+  test("should return the edited substrate component"):
+    val editResult = buildCatalog(editResult = CatalogEditResult.Edited(component)).editSubstrateComponent(componentId, componentData)
+
+    assertEquals(editResult, CatalogEditResult.Edited(component))
 
   test("should preserve catalog failures"):
     val failure = RuntimeException("storage unavailable")

@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.*
 import scala.jdk.DurationConverters.*
 
-class PlantAttentionMonitorComponentTest extends munit.FunSuite:
+class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplicits:
 
   private val referenceTime = Instant.parse("2026-01-01T00:00:00Z")
   private val componentId   = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
@@ -188,7 +188,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
 
     assertEquals(monitor.current, expectedProjection)
 
-  test(s"should return ${WateringAttention.Overdue} when refreshed to a later time without new waterings"):
+  test(s"should return ${WateringAttention.Overdue} then ${WateringAttention.RedAlert} as refreshes advance without new waterings"):
     val initialMeasurementTime = referenceTime
     val averageInterval        = 1.day
     val initialElapsed         = 12.hours
@@ -210,6 +210,16 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
     val expectedRefresh     = RefreshAttentionResult.Refreshed(refreshedProjection)
 
     assertEquals(refreshResult, expectedRefresh)
+
+    val laterMeasurementTime = refreshedMeasurementTime + 1.day
+    currentTime.set(laterMeasurementTime)
+    val laterRefreshResult = monitor.refreshAll
+
+    val laterElapsed    = refreshedElapsed + 1.day
+    val laterWatering   = WateringAttention.RedAlert(sampleCount = 5, averageInterval = averageInterval, elapsed = laterElapsed)
+    val laterProjection = AttentionProjection(measuredAt = laterMeasurementTime, plants = Vector(PlantAttention(plant.id, laterWatering)))
+
+    assertEquals(laterRefreshResult, RefreshAttentionResult.Refreshed(laterProjection))
 
   test(s"should infer ${WateringAttention.Current} from a fifth recorded watering when refreshed"):
     val measurementTime       = referenceTime
