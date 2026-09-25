@@ -4,7 +4,7 @@ import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
 import gardening.domain.pesticide.{GetPesticideResult, PesticideStore, UpdatePesticideResult}
-import gardening.domain.substrate.SubstrateComponentStore
+import gardening.domain.substrate.SubstrateStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 
@@ -54,7 +54,7 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
   private val operation        = Operation(OperationId("o1"), PlantId("p1"), date, care)
   private val firstPage        = OperationWindow(offset = 0, size = 3)
   private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
-    .map(id => SubstrateComponent(id, SubstrateComponentData(NomenclatureName(id.value.toString), none)))
+    .map(id => SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(id.value.toString), none)))
 
   test("should create an active plant with initial substrate independently of operations"):
     val refs    = Refs()
@@ -790,12 +790,18 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
         refs.restoredOperations.updateAndGet(_ :+ operation).pipe(_ => restoreOperationResult)
       override def updatePlant(plant: Plant): UpdatePlantResult =
         refs.updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
-    val substrateStore = new SubstrateComponentStore:
+    val substrateStore = new SubstrateStore:
       override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                              = componentReadResult
       override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
         fail("journal must not write substrate components")
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
         fail("journal must not edit substrate components")
+      override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
+        fail("journal must not read substrate mixes")
+      override def addSubstrateMix(mix: SubstrateMix): CatalogAddResult[SubstrateMix] =
+        fail("journal must not write substrate mixes")
+      override def deleteSubstrateMix(id: java.util.UUID): CatalogDeleteResult =
+        fail("journal must not delete substrate mixes")
     val pesticideStore = new PesticideStore:
       override def getPesticides: CatalogReadResult[Pesticide]                     = pesticideReadResult
       override def getPesticide(id: PesticideId): GetPesticideResult               = fail("journal must not read a single pesticide")

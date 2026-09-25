@@ -12,3 +12,7 @@ enum CatalogEditResult[+A]:
   case Edited(entry: A)
   case RecordMissing
   case EditFailed(reason: Throwable)
+
+enum CatalogDeleteResult:
+  case Deleted
+  case DeleteFailed(reason: Throwable)

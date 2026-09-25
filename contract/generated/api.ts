@@ -195,7 +195,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/substrate/components": {
+    "/substrates/components": {
         parameters: {
             query?: never;
             header?: never;
@@ -203,17 +203,17 @@ export interface paths {
             cookie?: never;
         };
         /** List substrate components */
-        get: operations["getSubstrateComponents"];
+        get: operations["getSubstratesComponents"];
         put?: never;
         /** Add a substrate component */
-        post: operations["postSubstrateComponents"];
+        post: operations["postSubstratesComponents"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/substrate/components/{componentId}": {
+    "/substrates/components/{componentId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -222,9 +222,44 @@ export interface paths {
         };
         get?: never;
         /** Edit a substrate component */
-        put: operations["putSubstrateComponentsComponentid"];
+        put: operations["putSubstratesComponentsComponentid"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/mixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List substrate mixes */
+        get: operations["getSubstratesMixes"];
+        put?: never;
+        /** Save a substrate mix */
+        post: operations["postSubstratesMixes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/mixes/{mixId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a substrate mix */
+        delete: operations["deleteSubstratesMixesMixid"];
         options?: never;
         head?: never;
         patch?: never;
@@ -403,6 +438,20 @@ export interface components {
         SubstrateComponentData: {
             name: string;
             info: string | null;
+        };
+        /** SubstrateMix */
+        SubstrateMix: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            notes: string | null;
+            substrate?: components["schemas"]["SubstratePart"][];
+        };
+        /** SubstrateMixData */
+        SubstrateMixData: {
+            name: string;
+            notes: string | null;
+            substrate?: components["schemas"]["SubstratePart"][];
         };
         /** SubstratePart */
         SubstratePart: {
@@ -1127,7 +1176,7 @@ export interface operations {
             };
         };
     };
-    getSubstrateComponents: {
+    getSubstratesComponents: {
         parameters: {
             query?: never;
             header?: never;
@@ -1154,7 +1203,7 @@ export interface operations {
             };
         };
     };
-    postSubstrateComponents: {
+    postSubstratesComponents: {
         parameters: {
             query?: never;
             header?: never;
@@ -1194,7 +1243,7 @@ export interface operations {
             };
         };
     };
-    putSubstrateComponentsComponentid: {
+    putSubstratesComponentsComponentid: {
         parameters: {
             query?: never;
             header?: never;
@@ -1226,6 +1275,116 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateMixData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteSubstratesMixesMixid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mixId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

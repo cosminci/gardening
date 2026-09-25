@@ -513,10 +513,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /substrate/components:
+  /substrates/components:
     get:
       summary: List substrate components
-      operationId: getSubstrateComponents
+      operationId: getSubstratesComponents
       responses:
         '200':
           description: ''
@@ -534,7 +534,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       summary: Add a substrate component
-      operationId: postSubstrateComponents
+      operationId: postSubstratesComponents
       requestBody:
         content:
           application/json:
@@ -560,10 +560,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /substrate/components/{componentId}:
+  /substrates/components/{componentId}:
     put:
       summary: Edit a substrate component
-      operationId: putSubstrateComponentsComponentid
+      operationId: putSubstratesComponentsComponentid
       parameters:
       - name: componentId
         in: path
@@ -590,6 +590,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/mixes:
+    get:
+      summary: List substrate mixes
+      operationId: getSubstratesMixes
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubstrateMix'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Save a substrate mix
+      operationId: postSubstratesMixes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateMixData'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateMix'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/mixes/{mixId}:
+    delete:
+      summary: Delete a substrate mix
+      operationId: deleteSubstratesMixesMixid
+      parameters:
+      - name: mixId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
+        '400':
           description: ''
           content:
             application/json:
@@ -971,6 +1049,46 @@ components:
           type:
           - string
           - 'null'
+    SubstrateMix:
+      title: SubstrateMix
+      type: object
+      required:
+      - id
+      - name
+      - notes
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        notes:
+          type:
+          - string
+          - 'null'
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
+    SubstrateMixData:
+      title: SubstrateMixData
+      type: object
+      required:
+      - name
+      - notes
+      properties:
+        name:
+          type: string
+        notes:
+          type:
+          - string
+          - 'null'
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
     SubstratePart:
       title: SubstratePart
       type: object

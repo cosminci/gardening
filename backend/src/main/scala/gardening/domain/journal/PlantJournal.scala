@@ -6,7 +6,7 @@ import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
 import gardening.domain.pesticide.PesticideStore
-import gardening.domain.substrate.SubstrateComponentStore
+import gardening.domain.substrate.SubstrateStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.numeric.GreaterEqual
@@ -34,7 +34,7 @@ object PlantJournal:
 
   def make(using
       store: PlantJournalStore^,
-      substrateStore: SubstrateComponentStore^,
+      substrateStore: SubstrateStore^,
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^
   )(using log: Logger^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log} =
@@ -42,7 +42,7 @@ object PlantJournal:
 
   private class LivePlantJournal(using
       store: PlantJournalStore^,
-      substrateStore: SubstrateComponentStore^,
+      substrateStore: SubstrateStore^,
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^
   )(using log: Logger^) extends PlantJournal:
