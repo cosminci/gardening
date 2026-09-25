@@ -91,16 +91,19 @@ object PlantApi:
         else
           patch match
             case Vector(PlantPatchOperation("replace", "/details/status", value)) if value.equals(Json.fromString("archived")) =>
-              journal.archivePlant(PlantId(plantId)) match
-                case ArchivePlantResult.Archived         => attention.refreshAll.pipe(_ => ().asRight)
-                case ArchivePlantResult.PlantMissing     => plantMissing.asLeft
-                case ArchivePlantResult.AlreadyArchived  => plantArchived.asLeft
-                case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft
+              journal.editPlant(PlantId(plantId), _.copy(status = PlantStatus.Archived)) match
+                case EditPlantResult.Edited(_)     => attention.refreshAll.pipe(_ => ().asRight)
+                case EditPlantResult.PlantMissing  => plantMissing.asLeft
+                case EditPlantResult.PlantArchived => plantArchived.asLeft
+                case _                             => ApiError("plant could not be archived").asLeft
             case Vector(PlantPatchOperation("replace", "/details", value)) =>
               value.as[PlantCreation] match
                 case Left(_)     => unsupportedPlantPatch.asLeft
                 case Right(edit) =>
-                  journal.editPlant(PlantId(plantId), edit.species, edit.maybeNickname, edit.location, edit.substrate) match
+                  journal.editPlant(
+                    PlantId(plantId),
+                    _.copy(species = edit.species, maybeNickname = edit.maybeNickname, location = edit.location, substrate = edit.substrate)
+                  ) match
                     case EditPlantResult.Edited(_)            => ().asRight
                     case EditPlantResult.PlantMissing         => plantMissing.asLeft
                     case EditPlantResult.PlantArchived        => plantArchived.asLeft

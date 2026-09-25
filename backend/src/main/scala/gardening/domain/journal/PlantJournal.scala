@@ -23,8 +23,7 @@ trait PlantJournal:
   def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult
   def getPlants(status: PlantStatus): GetPlantsResult
   def getArchivedCount: ArchivedCountResult
-  def archivePlant(id: PlantId): ArchivePlantResult
-  def editPlant(id: PlantId, species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): EditPlantResult
+  def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult
   def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
@@ -64,42 +63,36 @@ object PlantJournal:
 
     override def getArchivedCount: ArchivedCountResult = store.getArchivedCount
 
-    override def archivePlant(id: PlantId): ArchivePlantResult = operationMutex.exclusively:
-      store.getPlant(id) match
-        case GetPlantResult.RecordMissing                                                => ArchivePlantResult.PlantMissing
-        case GetPlantResult.ReadFailed(reason)                                           => ArchivePlantResult.ArchiveFailed(reason)
-        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived =>
-          ArchivePlantResult.AlreadyArchived
-        case GetPlantResult.Read(plant) =>
-          val archived = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
-          store.updatePlant(archived) match
-            case UpdatePlantResult.Updated              => ArchivePlantResult.Archived
-            case UpdatePlantResult.UpdateFailed(reason) => ArchivePlantResult.ArchiveFailed(reason)
+    override def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult = operationMutex.exclusively:
+      val outcome =
+        for
+          current <- readEditablePlant(id)
+          updated = current.copy(details = edit(current.details))
+          _      <- rejectUnknownSubstrate(current.details.substrate, updated.details.substrate)
+          edited <- persistEdit(updated)
+        yield edited
+      outcome.fold(identity, EditPlantResult.Edited.apply)
 
-    override def editPlant(
-        id: PlantId,
-        species: Species,
-        maybeNickname: Option[Nickname],
-        location: Location,
-        substrate: Substrate
-    ): EditPlantResult = operationMutex.exclusively:
+    private def readEditablePlant(id: PlantId): Either[EditPlantResult, Plant] =
       store.getPlant(id) match
-        case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing
-        case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason)
-        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived
-        case GetPlantResult.Read(plant)                                                  =>
-          substrateStore.getSubstrateComponents match
-            case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason)
-            case CatalogReadResult.Read(components)   =>
-              val known = components.map(_.id).toSet
-              if !substrate.parts.forall(part => known.contains(part.componentId)) then EditPlantResult.UnknownComponent
-              else
-                val edited = plant.copy(details =
-                  plant.details.copy(species = species, maybeNickname = maybeNickname, location = location, substrate = substrate)
-                )
-                store.updatePlant(edited) match
-                  case UpdatePlantResult.Updated              => EditPlantResult.Edited(edited)
-                  case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason)
+        case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing.asLeft
+        case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason).asLeft
+        case GetPlantResult.Read(plant) if plant.details.status === PlantStatus.Archived => EditPlantResult.PlantArchived.asLeft
+        case GetPlantResult.Read(plant)                                                  => plant.asRight
+
+    private def rejectUnknownSubstrate(current: Substrate, requested: Substrate): Either[EditPlantResult, Unit] =
+      if requested === current then ().asRight
+      else
+        substrateStore.getSubstrateComponents match
+          case CatalogReadResult.ReadFailed(reason) => EditPlantResult.CatalogReadFailed(reason).asLeft
+          case CatalogReadResult.Read(components)   =>
+            val known = components.map(_.id).toSet
+            Either.cond(requested.parts.forall(part => known.contains(part.componentId)), (), EditPlantResult.UnknownComponent)
+
+    private def persistEdit(plant: Plant): Either[EditPlantResult, Plant] =
+      store.updatePlant(plant) match
+        case UpdatePlantResult.Updated              => plant.asRight
+        case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason).asLeft
 
     override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plantId, window)

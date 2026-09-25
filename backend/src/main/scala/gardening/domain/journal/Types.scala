@@ -48,12 +48,6 @@ object ArchivedCountResult:
     require(count >= 0L, "archived plant count must be non-negative")
   final case class ReadFailed(reason: Throwable) extends ArchivedCountResult
 
-enum ArchivePlantResult:
-  case Archived
-  case PlantMissing
-  case AlreadyArchived
-  case ArchiveFailed(reason: Throwable)
-
 enum EditPlantResult:
   case Edited(plant: Plant)
   case PlantMissing

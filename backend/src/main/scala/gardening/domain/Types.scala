@@ -106,6 +106,8 @@ object Substrate:
     else if parts.map(part => part.share: Int).sum > 100 then SubstrateError.ExceedsTotal.asLeft
     else parts.asRight
 
+  given Eq[Substrate] = Eq.fromUniversalEquals
+
   extension (substrate: Substrate) def parts: List[SubstratePart] = substrate
 
 final case class Plant(id: PlantId, details: PlantDetails)

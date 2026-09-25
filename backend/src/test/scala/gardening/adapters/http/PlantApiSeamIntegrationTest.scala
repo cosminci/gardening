@@ -115,10 +115,10 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     val refreshFailedRefs = Refs()
 
     val archived = patch(archivePath, archivePatch, buildPlantApi(archivedRefs))
-    val missing  = patch(archivePath, archivePatch, buildPlantApi(missingRefs, archivePlantResult = ArchivePlantResult.PlantMissing))
-    val repeat   = patch(archivePath, archivePatch, buildPlantApi(repeatRefs, archivePlantResult = ArchivePlantResult.AlreadyArchived))
+    val missing  = patch(archivePath, archivePatch, buildPlantApi(missingRefs, editPlantResult = EditPlantResult.PlantMissing))
+    val repeat   = patch(archivePath, archivePatch, buildPlantApi(repeatRefs, editPlantResult = EditPlantResult.PlantArchived))
     val failed   =
-      patch(archivePath, archivePatch, buildPlantApi(failedRefs, archivePlantResult = ArchivePlantResult.ArchiveFailed(RuntimeException("secret"))))
+      patch(archivePath, archivePatch, buildPlantApi(failedRefs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
     val refreshedLate = patch(
       archivePath,
       archivePatch,
@@ -235,7 +235,6 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       createPlantResult: CreatePlantResult = CreatePlantResult.Created(plant),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
-      archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
       editPlantResult: EditPlantResult = EditPlantResult.Edited(plant),
       refreshResult: RefreshAttentionResult = RefreshAttentionResult.Refreshed(AttentionProjection(date, Vector.empty))
   ) =
@@ -246,16 +245,9 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         plantsResult
-      override def getArchivedCount: ArchivedCountResult         = archivedCountResult
-      override def archivePlant(id: PlantId): ArchivePlantResult = archivePlantResult
-      override def editPlant(
-          id: PlantId,
-          species: Species,
-          maybeNickname: Option[Nickname],
-          location: Location,
-          substrate: Substrate
-      ): EditPlantResult =
-        refs.editedDetails.updateAndGet(_ :+ (id -> PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active)))
+      override def getArchivedCount: ArchivedCountResult                                       = archivedCountResult
+      override def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult =
+        refs.editedDetails.updateAndGet(_ :+ (id -> edit(plant.details)))
         editPlantResult
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         fail("plant HTTP must not read operations")
