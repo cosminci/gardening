@@ -14,11 +14,12 @@ import scala.util.Using
 object Main:
 
   def main(args: Array[String]): Unit =
-    val version       = sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-dev")
-    val staticDir     = sys.env.getOrElse("GARDENING_STATIC_DIR", "static")
-    val port          = sys.env.get("GARDENING_PORT").flatMap(_.toIntOption).getOrElse(8080)
-    val host          = sys.env.getOrElse("GARDENING_HOST", "0.0.0.0")
-    val dbPath        = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
+    val version   = sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-dev")
+    val staticDir = sys.env.getOrElse("GARDENING_STATIC_DIR", "static")
+    val port      = sys.env.get("GARDENING_PORT").flatMap(_.toIntOption).getOrElse(8080)
+    val host      = sys.env.getOrElse("GARDENING_HOST", "0.0.0.0")
+    val dbPath    = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
+
     given log: Logger = new Logger:
       private val underlying           = LoggerFactory.getLogger("gardening")
       def info(message: String): Unit  = underlying.info(message)

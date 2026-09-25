@@ -188,7 +188,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
 
     assertEquals(monitor.current, expectedProjection)
 
-  test(s"should return ${WateringAttention.Overdue} when refreshed to a later time without new waterings"):
+  test(s"should return ${WateringAttention.Overdue} then ${WateringAttention.RedAlert} as refreshes advance without new waterings"):
     val initialMeasurementTime = referenceTime
     val averageInterval        = 1.day
     val initialElapsed         = 12.hours
@@ -210,6 +210,16 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val expectedRefresh     = RefreshAttentionResult.Refreshed(refreshedProjection)
 
     assertEquals(refreshResult, expectedRefresh)
+
+    val laterMeasurementTime = refreshedMeasurementTime + 1.day
+    currentTime.set(laterMeasurementTime)
+    val laterRefreshResult = monitor.refreshAll
+
+    val laterElapsed    = refreshedElapsed + 1.day
+    val laterWatering   = WateringAttention.RedAlert(sampleCount = 5, averageInterval = averageInterval, elapsed = laterElapsed)
+    val laterProjection = AttentionProjection(measuredAt = laterMeasurementTime, plants = Vector(PlantAttention(plant.id, laterWatering)))
+
+    assertEquals(laterRefreshResult, RefreshAttentionResult.Refreshed(laterProjection))
 
   test(s"should infer ${WateringAttention.Current} from a fifth recorded watering when refreshed"):
     val measurementTime       = referenceTime

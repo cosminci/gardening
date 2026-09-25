@@ -21,7 +21,7 @@ Hotspots — every public method on those four services, one info line per succe
 | Service | Mutations (info + error) | Reads (error-only) |
 | --- | --- | --- |
 | `PlantJournal` | createPlant, editPlant (including archiving), logOperation, editOperation, deleteOperation | getPlants, getArchivedCount, getOperations, getOperationDateRange |
-| `PlantAttentionMonitor` | — | refreshAll (recomputation isn't a business mutation, so no info line even on success) |
+| `PlantAttentionMonitor` | — | refreshAll (recomputation itself isn't a business mutation, but a per-plant watering level transition — e.g. Current to Overdue — is; refreshAll logs one info line naming only the plants that transitioned and their before/after level, nothing when levels are unchanged) |
 | `SubstrateComponentCatalog` | addSubstrateComponent, editSubstrateComponent | getSubstrateComponents |
 | `PesticideCatalog` | addPesticide, editPesticide | getPesticides |
 
@@ -67,6 +67,7 @@ The HTTP adapter that turns `CreateFailed`/`ReadFailed` into a 500 does **not** 
 - An unexpected DB read/write failure produces exactly one error line (operation + cause type + cause message); nothing logs it again on the way to the HTTP response.
 - Each successful mutation (create/edit/archive/delete a plant or operation; add/edit a substrate component or pesticide) produces exactly one info line (action + id). Reads produce no line on success.
 - A failed background recomputation cycle produces exactly one line; the next cycle still runs on schedule.
+- A recomputation cycle where one or more plants' watering level (Unavailable/Current/Overdue/RedAlert) changed since the previous cycle produces exactly one info line naming only the transitioned plants and their before/after level. A cycle with no level changes produces no line.
 - Startup logs one info line (listening address + version) once ready, or one error line + non-zero exit if it can't start (bad DB connection, failed migration).
 - Every line is a single line. No raw stack traces.
 

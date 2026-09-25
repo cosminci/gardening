@@ -1,6 +1,7 @@
 package gardening.domain.attention
 
 import cats.syntax.either.*
+import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.WateringHistory.*
@@ -38,8 +39,16 @@ object PlantAttentionMonitor:
       computeProjection match
         case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason).tap(_ => log.error("refresh attention", reason))
         case Right(projection) =>
+          val previousLevels = currentProjection.get().plants.map(p => p.plantId -> p.watering.level).toMap
           currentProjection.set(projection)
+          logLevelTransitions(projection, previousLevels)
           RefreshAttentionResult.Refreshed(projection)
+
+    private def logLevelTransitions(projection: AttentionProjection, previousLevels: Map[PlantId, AttentionLevel]): Unit =
+      val transitions = projection.plants.flatMap: plant =>
+        val nextLevel = plant.watering.level
+        previousLevels.get(plant.plantId).filter(_ =!= nextLevel).map(previousLevel => s"${plant.plantId.value}:$previousLevel->$nextLevel")
+      if transitions.nonEmpty then log.info(s"attention changed ${transitions.mkString(",")}")
 
   private def computeProjection(using store: PlantAttentionStore^, clock: Clock^) =
     store.getAttentionSamples(size = 20) match
