@@ -21,6 +21,35 @@ Aliases support listing, adding, and permanently deleting. Renaming or changing 
 
 The substrate-component catalog and the substrate-mix alias catalog share one HTTP boundary instead of two separate ones; today only substrate components have one.
 
+### Domain type
+
+```scala
+opaque type SubstrateMixAliasId = UUID
+object SubstrateMixAliasId:
+  def apply(value: UUID): SubstrateMixAliasId           = value
+  def parse(value: String): Option[SubstrateMixAliasId] = Try(UUID.fromString(value)).toOption
+  extension (id: SubstrateMixAliasId) def value: UUID   = id
+
+final case class SubstrateMixAliasData(name: NomenclatureName, maybeNotes: Option[NomenclatureInfo], substrate: Substrate)
+final case class SubstrateMixAlias(id: SubstrateMixAliasId, data: SubstrateMixAliasData)
+```
+
+Reuses the existing `NomenclatureName`/`NomenclatureInfo` opaque types and the existing `Substrate` type, the same way `SubstrateComponent` already reuses them.
+
+### Database schema (Flyway migration)
+
+```sql
+-- V2__create_substrate_mix_alias_table.sql
+create table substrate_mix_alias (
+    id text primary key check (length(id) = 36),
+    name text not null,
+    notes text,
+    substrate text not null check (json_valid(substrate))
+);
+```
+
+`substrate` stores the same JSON-encoded component/share list already used for `plant.substrate`, so an alias's mix is validated and decoded with the existing `Substrate` codec.
+
 ## Acceptance Criteria
 
 - Saving the mix being edited creates a new alias with a name and optional notes, only while that mix is valid (components used once, whole-percent shares, total ≤ 100%); saving does not require the plant or operation itself to be saved.
