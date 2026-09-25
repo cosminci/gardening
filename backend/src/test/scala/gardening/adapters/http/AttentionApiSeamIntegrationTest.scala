@@ -63,10 +63,8 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
 
     val endpoints = AttentionApi.serverEndpoints(using attention)
 
-    val describedEndpoints = endpoints.map(server =>
-      s"${server.endpoint.method.getOrElse(fail("endpoint without a method"))} ${server.endpoint
-          .showPathTemplate()}"
-    )
+    val describedEndpoints = endpoints.map: server =>
+      s"${server.endpoint.method.getOrElse(fail("endpoint without a method"))} ${server.endpoint.showPathTemplate()}"
     val expectedEndpoints = List("GET /attention", "GET /attention/feed")
     assertEquals(describedEndpoints, expectedEndpoints)
 
@@ -87,10 +85,9 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
     val pollInterval = 1.milli
 
     val (firstConnectionPushed, secondConnectionPushed) = supervised:
-      val first =
-        AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(Flow.tick(1.hour, "connected")).take(1).runToList()
-      val second =
-        AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(Flow.tick(1.hour, "connected")).take(1).runToList()
+      val tick   = Flow.tick(1.hour, "connected")
+      val first  = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(tick).take(1).runToList()
+      val second = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(tick).take(1).runToList()
       (first, second)
 
     assertEquals(firstConnectionPushed, List(projection))

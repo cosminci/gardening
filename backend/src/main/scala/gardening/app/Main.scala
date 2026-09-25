@@ -21,19 +21,17 @@ object Main:
 
     Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      run(resources, version, staticDir, host, port)
+      supervisedError(EitherMode[Throwable]()):
+        Programs.make(resources).flatMap: programs =>
+          val endpoints = aggregateEndpoints(programs, version, staticDir)
+          NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
     .orThrow
 
-  private def run(resources: AppResources, version: String, staticDir: String, host: String, port: Int) =
-    supervisedError(EitherMode[Throwable]()):
-      Programs.make(resources).flatMap: programs =>
-        val endpoints =
-          List(HealthApi.serverEndpoint(version)) ++
-            PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
-            AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
-            OperationApi.serverEndpoints(using programs.plantJournal) ++
-            SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
-            PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
-            StaticSite.endpoint(staticDir)
-        val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-        ().asRight
+  private def aggregateEndpoints(programs: Programs, version: String, staticDir: String) =
+    List(HealthApi.serverEndpoint(version)) ++
+      PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
+      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
+      OperationApi.serverEndpoints(using programs.plantJournal) ++
+      SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
+      PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
+      StaticSite.endpoint(staticDir)
