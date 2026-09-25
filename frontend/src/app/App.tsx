@@ -80,6 +80,7 @@ export const App: Component<AppProps> = (props) => {
   const [attentionProjection, setAttentionProjection] = createSignal<Journal.AttentionProjection>();
   const [feedConnectionState, setFeedConnectionState] =
     createSignal<FeedConnectionState>("connecting");
+  const [lastAttentionUpdate, setLastAttentionUpdate] = createSignal<number>();
   const recentlyArchived = new Set<Journal.PlantId>();
   let activeIds = new Set<Journal.PlantId>();
   let activePlantIdsLoaded = false;
@@ -457,6 +458,7 @@ export const App: Component<AppProps> = (props) => {
           }
         }
         setAttentionProjection(proj);
+        setLastAttentionUpdate(Date.now());
       }
     });
     onCleanup(() => {
@@ -483,6 +485,7 @@ export const App: Component<AppProps> = (props) => {
         cemeteryCount={cemeteryCount()}
         selected={selected()}
         connectionState={feedConnectionState()}
+        lastUpdateAt={lastAttentionUpdate()}
         onSelect={selectView}
         onAddPlant={() => {
           setPlantSaveError(undefined);

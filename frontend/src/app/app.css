@@ -102,6 +102,32 @@ main {
   gap: 0.75rem;
 }
 
+.backend-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.backend-status__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.backend-status__age {
+  padding-left: 0.15rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
 .eyebrow {
   margin: 0 0 0.2rem;
   color: var(--leaf);
