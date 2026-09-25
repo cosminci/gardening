@@ -105,8 +105,8 @@ main {
 .backend-status {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.7rem 0.9rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
   border-radius: 0.65rem;
   background: var(--paper);
   color: var(--ink);
@@ -114,9 +114,15 @@ main {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+.backend-status__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
 .backend-status__age {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
 }
 

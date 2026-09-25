@@ -52,9 +52,9 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
           class="backend-status"
         >
           <span aria-hidden="true" class={`feed-status feed-status--${props.connectionState}`} />
-          <span aria-hidden="true">Backend</span>
-          <span aria-hidden="true" class="backend-status__age">
-            {updateAge(props.lastUpdateAt, now())}
+          <span aria-hidden="true" class="backend-status__text">
+            <span>Backend</span>
+            <span class="backend-status__age">{updateAge(props.lastUpdateAt, now())}</span>
           </span>
         </span>
         <Show when={props.loaded}>
