@@ -193,6 +193,10 @@ when the checklist records why.
   that builder, not in test use cases or separate stub classes. If a use case only checks
   the returned result and does not observe collaborator effects, call `buildX()` without
   creating `Refs`.
+- [ ] Never create more than one `Refs` instance in a single test. A test that wants to exercise
+  more than one independent scenario (for example, two distinct `buildX` collaborator setups) is
+  covering more than one use case; split it into one test per scenario, each with at most one
+  `Refs`, instead of naming the extra instances (`careRefs`, `repotRefs`, `tieRefs`, and so on).
 - [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
   cannot leak beyond its boundary and a codec cannot express the format cleanly.
 - [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need
