@@ -1250,4 +1250,89 @@ describe("browsing the journal", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
+
+  it("should report a saved plant whose garden reload rejects", async () => {
+    const added = JournalFixtures.monstera();
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus()] }],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    let gardenReads = 0;
+    const journal = {
+      ...base,
+      getPlants: (status?: string) =>
+        status === "archived"
+          ? base.getPlants()
+          : gardenReads++ === 0
+            ? base.getPlants()
+            : Promise.reject(new Error("private details")),
+      createPlant: () => Promise.resolve({ kind: "created" as const, plant: added }),
+    };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
+      target: { value: "Monstera deliciosa" },
+    });
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Kitchen" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Plant was saved, but the garden could not be loaded.",
+      );
+    });
+    expect(screen.queryByText("private details")).not.toBeInTheDocument();
+  });
+
+  it("should ignore a stale cemetery bookmark rejection after switching to the garden", async () => {
+    window.history.replaceState(null, "", "/?view=cemetery");
+    let rejectArchived: (reason: Error) => void = () => undefined;
+    const archivedRequest = new Promise<GetPlantsResult>((_resolve, reject) => {
+      rejectArchived = reject;
+    });
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const journal = {
+      ...base,
+      getPlants: (status?: string) => (status === "archived" ? archivedRequest : base.getPlants()),
+    };
+    try {
+      render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+
+      const garden = await screen.findByRole("button", { name: /Garden.*1 plant/ });
+      fireEvent.click(garden);
+      rejectArchived(new Error("stale bookmark"));
+      await archivedRequest.catch(() => undefined);
+      await Promise.resolve();
+
+      expect(screen.getByRole("article", { name: "Fern" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
 });

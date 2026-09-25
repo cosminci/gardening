@@ -162,6 +162,51 @@ describe("PlantSheet", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Choose known substrate components.");
   });
 
+  it("should keep the existing mix when defining an extra component for a stocked catalog", async () => {
+    const pumice: Journal.SubstrateComponent = {
+      id: Journal.substrateComponentId("00000000-0000-4000-8000-000000000005"),
+      data: { name: Journal.nomenclatureName("Pumice"), maybeInfo: null },
+    };
+    const [components, setComponents] = createSignal<readonly Journal.SubstrateComponent[]>([
+      perlite,
+    ]);
+    const onAddComponent = vi.fn<
+      (
+        _data: Journal.SubstrateComponentData,
+      ) => Promise<Journal.CatalogAddResult<Journal.SubstrateComponent>>
+    >(() => {
+      setComponents([perlite, pumice]);
+      return Promise.resolve({ kind: "added", entry: pumice });
+    });
+    render(() => (
+      <PlantSheet
+        components={components()}
+        saveError={undefined}
+        completed={false}
+        onSubmit={() => Promise.resolve()}
+        onAddComponent={onAddComponent}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onCancel={() => undefined}
+      />
+    ));
+    expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(perlite.id);
+    fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
+    const editor = screen.getByRole("dialog", { name: "Substrate component editor" });
+    fireEvent.input(within(editor).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Pumice" },
+    });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save" }));
+
+    await vi.waitFor(() => {
+      expect(onAddComponent).toHaveBeenCalledOnce();
+      expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
+    });
+    expect(screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(perlite.id);
+    expect(screen.queryByRole("combobox", { name: "Component 2" })).toBeNull();
+  });
+
   it("should collapse the nested editor before the plant sheet and restore focus", async () => {
     const [open, setOpen] = createSignal(false);
     render(() => (
@@ -194,6 +239,8 @@ describe("PlantSheet", () => {
     const dialog = screen.getByRole("dialog", { name: "Plant editor" });
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     expect(within(dialog).getByRole("button", { name: "Save plant" })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(within(dialog).getByRole("button", { name: "Collapse plant editor" })).toHaveFocus();
     fireEvent.keyDown(window, { key: "Tab" });
     expect(within(dialog).getByRole("button", { name: "Collapse plant editor" })).toHaveFocus();
     fireEvent.click(within(dialog).getByRole("button", { name: "Define new component" }));

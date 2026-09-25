@@ -241,6 +241,32 @@ describe("OperationForm", () => {
     ]);
   });
 
+  it("should not extend the substrate mix when every component is already chosen", () => {
+    const changes: unknown[] = [];
+    Testing.render(() => (
+      <OperationForm
+        initial={repot("o1", "2026-01-01T00:00:00Z").details}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    const extend = Testing.screen.getByRole("button", { name: "Extend mix" });
+    Testing.fireEvent.click(extend);
+    expect(Testing.screen.getByRole("combobox", { name: "Component 2" })).toBeInTheDocument();
+    expect(extend).toBeDisabled();
+
+    Testing.fireEvent.click(extend);
+    expect(Testing.screen.queryByRole("combobox", { name: "Component 3" })).toBeNull();
+    expect(changes).toEqual([]);
+  });
+
   it("should reveal pesticide choices last and clear them when deselected", async () => {
     const submitted: Journal.OperationDetails[] = [];
     let addRequests = 0;
