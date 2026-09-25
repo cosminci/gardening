@@ -121,9 +121,12 @@ main {
 }
 
 .backend-status__age {
+  min-width: 8rem;
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .eyebrow {
