@@ -100,10 +100,7 @@ object PlantApi:
               value.as[PlantCreation] match
                 case Left(_)     => unsupportedPlantPatch.asLeft
                 case Right(edit) =>
-                  journal.editPlant(
-                    PlantId(plantId),
-                    _.copy(species = edit.species, maybeNickname = edit.maybeNickname, location = edit.location, substrate = edit.substrate)
-                  ) match
+                  journal.editPlant(PlantId(plantId), _.copy(edit.species, edit.maybeNickname, edit.location, edit.substrate)) match
                     case EditPlantResult.Edited(_)            => ().asRight
                     case EditPlantResult.PlantMissing         => plantMissing.asLeft
                     case EditPlantResult.PlantArchived        => plantArchived.asLeft

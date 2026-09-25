@@ -66,13 +66,13 @@ object PlantJournal:
     override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = operationMutex.exclusively:
       val outcome =
         for
-          edited <- readEditedPlant(id, revise)
+          edited <- readAndRevise(id, revise)
           _      <- rejectUnknownSubstrate(edited.details.substrate)
           saved  <- persistEdit(edited)
         yield saved
       outcome.fold(identity, EditPlantResult.Edited.apply)
 
-    private def readEditedPlant(id: PlantId, revise: PlantDetails => PlantDetails): Either[EditPlantResult, Plant] =
+    private def readAndRevise(id: PlantId, revise: PlantDetails => PlantDetails): Either[EditPlantResult, Plant] =
       store.getPlant(id) match
         case GetPlantResult.RecordMissing                                                => EditPlantResult.PlantMissing.asLeft
         case GetPlantResult.ReadFailed(reason)                                           => EditPlantResult.EditFailed(reason).asLeft
