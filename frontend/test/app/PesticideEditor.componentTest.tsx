@@ -1,17 +1,19 @@
 import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { PesticideEditor } from "../../src/app/PesticideEditor";
-import { nomenclatureInfo, nomenclatureName, pesticideId } from "../../src/domain/Journal";
+import { pesticideInfo, pesticideName, pesticideId } from "../../src/domain/Journal";
 
 const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
 const neem = {
   id: neemId,
   data: {
-    name: nomenclatureName("Neem oil"),
+    name: pesticideName("Neem oil"),
     pesticideType: "insecticide" as const,
-    maybeInfo: nomenclatureInfo("Dilute before use.\nApply weekly."),
+    maybeInfo: pesticideInfo("Dilute before use.\nApply weekly."),
   },
+  status: "active" as const,
 };
+const archivedNeem = { ...neem, status: "archived" as const };
 
 Vitest.describe("PesticideEditor", () => {
   Vitest.it("should add a pesticide through constrained and multiline fields", async () => {
@@ -61,9 +63,9 @@ Vitest.describe("PesticideEditor", () => {
       Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
     Vitest.expect(onAdd).toHaveBeenLastCalledWith({
-      name: nomenclatureName("Soap"),
+      name: pesticideName("Soap"),
       pesticideType: "insecticide",
-      maybeInfo: nomenclatureInfo("Dilute first.\nApply weekly."),
+      maybeInfo: pesticideInfo("Dilute first.\nApply weekly."),
     });
   });
 
@@ -72,7 +74,7 @@ Vitest.describe("PesticideEditor", () => {
     async () => {
       const onEdit = Vitest.vi
         .fn()
-        .mockResolvedValueOnce({ kind: "recordMissing" })
+        .mockResolvedValueOnce({ kind: "pesticideMissing" })
         .mockResolvedValueOnce({ kind: "editFailed", reason: new Error("private") })
         .mockResolvedValueOnce({ kind: "edited", entry: neem });
       const onClose = Vitest.vi.fn();
@@ -113,10 +115,77 @@ Vitest.describe("PesticideEditor", () => {
         Vitest.expect(onClose).toHaveBeenCalledOnce();
       });
       Vitest.expect(onEdit).toHaveBeenLastCalledWith(neemId, {
-        name: nomenclatureName("Neem concentrate"),
+        name: pesticideName("Neem concentrate"),
         pesticideType: "treatment",
-        maybeInfo: nomenclatureInfo("Use weekly."),
+        maybeInfo: pesticideInfo("Use weekly."),
       });
+    },
+  );
+
+  Vitest.it(
+    "should reject saving an edit rejected because the pesticide became archived",
+    async () => {
+      const onEdit = Vitest.vi.fn().mockResolvedValueOnce({ kind: "pesticideArchived" });
+      Testing.render(() => (
+        <PesticideEditor
+          pesticide={neem}
+          onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
+          onEdit={onEdit}
+          onClose={Vitest.vi.fn()}
+        />
+      ));
+
+      Testing.fireEvent.submit(Testing.screen.getByRole("form", { name: "Edit Neem oil" }));
+
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+        "This pesticide is archived and can no longer be edited.",
+      );
+    },
+  );
+
+  Vitest.it("should offer an archive action beside save for an active existing pesticide", () => {
+    const onArchive = { controlId: "archive-pesticide-1", onClick: Vitest.vi.fn() };
+    Testing.render(() => (
+      <PesticideEditor
+        pesticide={neem}
+        onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
+        onEdit={() => Promise.resolve({ kind: "edited", entry: neem })}
+        onArchive={onArchive}
+        onClose={Vitest.vi.fn()}
+      />
+    ));
+
+    const archiveButton = Testing.screen.getByRole("button", { name: "Archive" });
+    const saveButton = Testing.screen.getByRole("button", { name: "Save" });
+    Testing.fireEvent.click(archiveButton);
+
+    Vitest.expect(
+      archiveButton.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    Vitest.expect(onArchive.onClick).toHaveBeenCalledOnce();
+  });
+
+  Vitest.it(
+    "should show an archived pesticide's status with no save or archive action and disabled fields",
+    () => {
+      Testing.render(() => (
+        <PesticideEditor
+          pesticide={archivedNeem}
+          onAdd={() => Promise.resolve({ kind: "added", entry: neem })}
+          onEdit={() => Promise.resolve({ kind: "edited", entry: neem })}
+          onArchive={{ controlId: "archive-pesticide-1", onClick: Vitest.vi.fn() }}
+          onClose={Vitest.vi.fn()}
+        />
+      ));
+
+      Vitest.expect(Testing.screen.getByText("Archived")).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.queryByRole("button", { name: "Archive" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+      Vitest.expect(Testing.screen.getByRole("combobox", { name: "Type" })).toBeDisabled();
+      Vitest.expect(Testing.screen.getByRole("textbox", { name: "Info" })).toBeDisabled();
     },
   );
 

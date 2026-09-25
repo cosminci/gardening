@@ -431,6 +431,15 @@ export const App: Component<AppProps> = (props) => {
     return result;
   };
 
+  const archivePesticide: PesticideClient["archivePesticide"] = async (id) => {
+    const result = await props.pesticideCatalog.archivePesticide(id);
+    if (result.kind === "archived")
+      setPesticides((current) =>
+        current.map((pesticide) => (pesticide.id === id ? result.entry : pesticide)),
+      );
+    return result;
+  };
+
   createEffect(() => {
     if (!ready() || initialViewLoaded) return;
     initialViewLoaded = true;
@@ -613,6 +622,7 @@ export const App: Component<AppProps> = (props) => {
             onEditSubstrateComponent={editSubstrateComponent}
             onAddPesticide={addPesticide}
             onEditPesticide={editPesticide}
+            onArchivePesticide={archivePesticide}
             onCancel={() => {
               setFormTarget(undefined);
             }}

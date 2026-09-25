@@ -61,7 +61,12 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
       <fieldset class="field-group">
         <legend>Pesticides</legend>
         <div class="choice-grid">
-          <For each={props.pesticides}>
+          <For
+            each={props.pesticides.filter(
+              (pesticide) =>
+                pesticide.status === "active" || props.selectedPesticides.has(pesticide.id),
+            )}
+          >
             {(pesticide) => (
               <div class="pesticide-choice">
                 <span

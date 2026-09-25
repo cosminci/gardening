@@ -18,24 +18,25 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
 ];
 const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
 const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
-const pesticides: readonly Journal.Pesticide[] = [
-  {
-    id: neemId,
-    data: {
-      name: Journal.nomenclatureName("Neem oil"),
-      pesticideType: "insecticide",
-      maybeInfo: Journal.nomenclatureInfo("Dilute before use.\nApply weekly."),
-    },
+const neem: Journal.Pesticide = {
+  id: neemId,
+  data: {
+    name: Journal.pesticideName("Neem oil"),
+    pesticideType: "insecticide",
+    maybeInfo: Journal.pesticideInfo("Dilute before use.\nApply weekly."),
   },
-  {
-    id: soapId,
-    data: {
-      name: Journal.nomenclatureName("Insecticidal soap"),
-      pesticideType: "insecticide",
-      maybeInfo: null,
-    },
+  status: "active",
+};
+const soap: Journal.Pesticide = {
+  id: soapId,
+  data: {
+    name: Journal.pesticideName("Insecticidal soap"),
+    pesticideType: "insecticide",
+    maybeInfo: null,
   },
-];
+  status: "active",
+};
+const pesticides: readonly Journal.Pesticide[] = [neem, soap];
 
 afterEach(() => {
   vi.useRealTimers();
@@ -339,6 +340,36 @@ describe("OperationForm", () => {
         },
       ]);
     });
+  });
+
+  it("should exclude an archived pesticide from new selection but keep an already-selected one visible", () => {
+    const archivedPesticides: readonly Journal.Pesticide[] = [
+      { ...neem, status: "archived" },
+      soap,
+    ];
+    Testing.render(() => (
+      <OperationForm
+        initial={{
+          kind: "care",
+          actions: new Set(["pesticide"]),
+          pesticides: new Set([neemId]),
+          moisture: "noReading",
+          maybeNote: null,
+        }}
+        substrateComponents={substrateComponents}
+        pesticides={archivedPesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    expect(Testing.screen.getByRole("checkbox", { name: "Neem oil" })).toBeChecked();
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
+    expect(Testing.screen.queryByRole("checkbox", { name: "Neem oil" })).not.toBeInTheDocument();
   });
 
   it("should treat a persisted None action as no selected action", async () => {

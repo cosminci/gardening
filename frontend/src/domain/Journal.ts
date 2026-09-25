@@ -13,6 +13,8 @@ export type SubstrateComponentId = Brand<string, "SubstrateComponentId">;
 export type PesticideId = Brand<string, "PesticideId">;
 export type NomenclatureName = Brand<string, "NomenclatureName">;
 export type NomenclatureInfo = Brand<string, "NomenclatureInfo">;
+export type PesticideName = Brand<string, "PesticideName">;
+export type PesticideInfo = Brand<string, "PesticideInfo">;
 
 export const plantId = (value: string): PlantId => value as PlantId;
 export const operationId = (value: string): OperationId => value as OperationId;
@@ -31,9 +33,14 @@ export const substrateComponentId = (value: string): SubstrateComponentId =>
 export const pesticideId = (value: string): PesticideId => value as PesticideId;
 export const nomenclatureName = (value: string): NomenclatureName => value as NomenclatureName;
 export const nomenclatureInfo = (value: string): NomenclatureInfo => value as NomenclatureInfo;
+export const pesticideName = (value: string): PesticideName => value as PesticideName;
+export const pesticideInfo = (value: string): PesticideInfo => value as PesticideInfo;
 
 export const pesticideTypes = ["fungicide", "insecticide", "treatment"] as const;
 export type PesticideType = (typeof pesticideTypes)[number];
+
+export const pesticideStatuses = ["active", "archived"] as const;
+export type PesticideStatus = (typeof pesticideStatuses)[number];
 
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];
@@ -63,14 +70,15 @@ export interface SubstrateComponent {
 }
 
 export interface PesticideData {
-  readonly name: NomenclatureName;
+  readonly name: PesticideName;
   readonly pesticideType: PesticideType;
-  readonly maybeInfo: NomenclatureInfo | null;
+  readonly maybeInfo: PesticideInfo | null;
 }
 
 export interface Pesticide {
   readonly id: PesticideId;
   readonly data: PesticideData;
+  readonly status: PesticideStatus;
 }
 
 export interface PlantDetails {
@@ -237,3 +245,15 @@ export type CatalogEditResult<A> =
   | { readonly kind: "edited"; readonly entry: A }
   | { readonly kind: "recordMissing" }
   | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type PesticideEditResult =
+  | { readonly kind: "edited"; readonly entry: Pesticide }
+  | { readonly kind: "pesticideMissing" }
+  | { readonly kind: "pesticideArchived" }
+  | { readonly kind: "editFailed"; readonly reason: Error };
+
+export type PesticideArchiveResult =
+  | { readonly kind: "archived"; readonly entry: Pesticide }
+  | { readonly kind: "pesticideMissing" }
+  | { readonly kind: "alreadyArchived" }
+  | { readonly kind: "archiveFailed"; readonly reason: Error };

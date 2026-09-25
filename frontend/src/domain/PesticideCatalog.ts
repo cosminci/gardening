@@ -6,5 +6,6 @@ export interface PesticideClient {
   editPesticide(
     id: Journal.PesticideId,
     data: Journal.PesticideData,
-  ): Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
+  ): Promise<Journal.PesticideEditResult>;
+  archivePesticide(id: Journal.PesticideId): Promise<Journal.PesticideArchiveResult>;
 }

@@ -354,7 +354,7 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
 
       assertEquals(store.getAttentionSamples(size = 20), GetAttentionSamplesResult.Read(Vector.empty))
 
-  test("should initialize the complete journal schema in one migration"):
+  test("should initialize the complete journal schema across all migrations"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val migration = Flyway.configure().dataSource(connection.dataSource).load()
       val _         = migration.migrate()
@@ -364,7 +364,10 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
       val older   = Operation(OperationId("o1"), PlantId("p1"), date, details)
       val newer   = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
       val store   = SqlitePlantJournalStore.make(connection.transactor)
-      assertEquals(migration.info().applied().toVector.map(_.getVersion), Vector(MigrationVersion.fromVersion("1")))
+      assertEquals(
+        migration.info().applied().toVector.map(_.getVersion),
+        Vector(MigrationVersion.fromVersion("1"), MigrationVersion.fromVersion("2"))
+      )
       assertEquals(store.addOperation(older), LogOperationResult.Logged(older.id))
       assertEquals(store.addOperation(newer), LogOperationResult.Logged(newer.id))
       assertEquals(store.getOperations(PlantId("p1"), fullWindow), GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false)))

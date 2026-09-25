@@ -4,6 +4,11 @@ import * as Journal from "../domain/Journal";
 import { pesticideTypeLabels } from "./JournalLabels";
 import "./nomenclature-editor.css";
 
+export interface ArchiveAction {
+  readonly controlId: string;
+  readonly onClick: () => void;
+}
+
 interface PesticideEditorProps {
   readonly pesticide: Journal.Pesticide | undefined;
   readonly onAdd: (
@@ -12,7 +17,8 @@ interface PesticideEditorProps {
   readonly onEdit: (
     id: Journal.Pesticide["id"],
     data: Journal.PesticideData,
-  ) => Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
+  ) => Promise<Journal.PesticideEditResult>;
+  readonly onArchive?: ArchiveAction | undefined;
   readonly onClose: () => void;
 }
 
@@ -34,9 +40,9 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
     }
     const trimmedInfo = info().trim();
     const data = {
-      name: Journal.nomenclatureName(trimmedName),
+      name: Journal.pesticideName(trimmedName),
       pesticideType: type(),
-      maybeInfo: trimmedInfo === "" ? null : Journal.nomenclatureInfo(trimmedInfo),
+      maybeInfo: trimmedInfo === "" ? null : Journal.pesticideInfo(trimmedInfo),
     };
     const result =
       props.pesticide === undefined
@@ -47,12 +53,15 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
       return;
     }
     const errors = {
-      recordMissing: "This pesticide no longer exists.",
+      pesticideMissing: "This pesticide no longer exists.",
+      pesticideArchived: "This pesticide is archived and can no longer be edited.",
       addFailed: "The pesticide could not be saved.",
       editFailed: "The pesticide could not be saved.",
     } satisfies Record<typeof result.kind, string>;
     setError(errors[result.kind]);
   };
+
+  const archived = () => props.pesticide?.status === "archived";
 
   onMount(() => {
     panel.focus();
@@ -98,6 +107,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
             aria-label="Name"
             type="text"
             value={name()}
+            disabled={archived()}
             onInput={(event) => {
               setName(event.currentTarget.value);
             }}
@@ -108,6 +118,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
           <select
             aria-label="Type"
             value={type()}
+            disabled={archived()}
             onChange={(event) => {
               setType(event.currentTarget.value as Journal.PesticideType);
             }}
@@ -123,17 +134,37 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
             aria-label="Info"
             rows="10"
             value={info()}
+            disabled={archived()}
             onInput={(event) => {
               setInfo(event.currentTarget.value);
             }}
           />
         </label>
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
-        <footer class="nomenclature-editor__actions">
-          <button class="primary-action" type="submit">
-            Save
-          </button>
-        </footer>
+        <Show
+          when={!archived()}
+          fallback={<p class="nomenclature-editor__archived-status">Archived</p>}
+        >
+          <footer class="nomenclature-editor__actions">
+            <Show when={props.onArchive}>
+              {(onArchive) => (
+                <button
+                  id={onArchive().controlId}
+                  class="nomenclature-editor__archive"
+                  type="button"
+                  onClick={() => {
+                    onArchive().onClick();
+                  }}
+                >
+                  Archive
+                </button>
+              )}
+            </Show>
+            <button class="primary-action" type="submit">
+              Save
+            </button>
+          </footer>
+        </Show>
       </form>
     </section>
   );

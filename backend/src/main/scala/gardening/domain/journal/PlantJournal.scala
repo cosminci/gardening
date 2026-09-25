@@ -199,7 +199,7 @@ object PlantJournal:
       else
         pesticideStore.getPesticides match
           case CatalogReadResult.Read(pesticides) =>
-            val known   = pesticides.map(_.id).toSet
+            val known   = pesticides.filter(_.status === PesticideStatus.Active).map(_.id).toSet
             val missing = selected.diff(known)
             Either.cond(missing.isEmpty, (), unknownPesticides(missing))
           case CatalogReadResult.ReadFailed(reason) => reason.asLeft

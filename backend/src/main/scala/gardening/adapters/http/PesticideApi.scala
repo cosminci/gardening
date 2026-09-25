@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.PesticideCatalog
+import gardening.domain.pesticide.{PesticideArchiveResult, PesticideCatalog, PesticideEditResult}
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import sttp.model.StatusCode
@@ -16,13 +16,23 @@ import sttp.tapir.server.ServerEndpoint
 
 object PesticideApi:
 
-  private val recordMissing = ApiError("nomenclature not found")
-  private val invalidId     = ApiError("invalid nomenclature id")
-  private val readFailed    = ApiError("nomenclatures could not be read")
-  private val writeFailed   = ApiError("nomenclature could not be saved")
-  private val editErrors    = oneOf[ApiError](
+  private val recordMissing     = ApiError("nomenclature not found")
+  private val invalidId         = ApiError("invalid nomenclature id")
+  private val readFailed        = ApiError("nomenclatures could not be read")
+  private val writeFailed       = ApiError("nomenclature could not be saved")
+  private val pesticideArchived = ApiError("pesticide is archived")
+  private val alreadyArchived   = ApiError("pesticide is already archived")
+  private val archiveFailed     = ApiError("pesticide could not be archived")
+  private val editErrors        = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidId),
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(recordMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(pesticideArchived),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
+  private val archiveErrors = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidId),
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(recordMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(alreadyArchived),
     oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
   )
 
@@ -32,9 +42,11 @@ object PesticideApi:
     .out(statusCode(StatusCode.Created)).out(jsonBody[Pesticide]).summary("Add a pesticide")
   private val editPesticideEndpoint = endpoint.put.in("pesticides" / path[String]("pesticideId")).in(jsonBody[PesticideData])
     .errorOut(editErrors).out(jsonBody[Pesticide]).summary("Edit a pesticide")
+  private val archivePesticideEndpoint = endpoint.post.in("pesticides" / path[String]("pesticideId") / "archive")
+    .errorOut(archiveErrors).out(jsonBody[Pesticide]).summary("Archive a pesticide")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
-    List(getPesticidesEndpoint, addPesticideEndpoint, editPesticideEndpoint)
+    List(getPesticidesEndpoint, addPesticideEndpoint, editPesticideEndpoint, archivePesticideEndpoint)
 
   def serverEndpoints(using catalog: PesticideCatalog): List[ServerEndpoint[Any, Identity]] =
     List(
@@ -49,9 +61,17 @@ object PesticideApi:
       editPesticideEndpoint.handle: (encodedId, data) =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editPesticide(id, data) match
-            case CatalogEditResult.Edited(pesticide) => pesticide.asRight
-            case CatalogEditResult.RecordMissing     => recordMissing.asLeft
-            case CatalogEditResult.EditFailed(_)     => writeFailed.asLeft
+            case PesticideEditResult.Edited(pesticide) => pesticide.asRight
+            case PesticideEditResult.PesticideMissing  => recordMissing.asLeft
+            case PesticideEditResult.PesticideArchived => pesticideArchived.asLeft
+            case PesticideEditResult.EditFailed(_)     => writeFailed.asLeft,
+      archivePesticideEndpoint.handle: encodedId =>
+        PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
+          catalog.archivePesticide(id) match
+            case PesticideArchiveResult.Archived(pesticide) => pesticide.asRight
+            case PesticideArchiveResult.PesticideMissing    => recordMissing.asLeft
+            case PesticideArchiveResult.AlreadyArchived     => alreadyArchived.asLeft
+            case PesticideArchiveResult.ArchiveFailed(_)    => archiveFailed.asLeft
     )
 
   private given CirceConfiguration = CirceConfiguration.default
@@ -67,9 +87,9 @@ object PesticideApi:
     case name            => name
   })
 
-  private given Codec[NomenclatureName] = Codec.from(Decoder.decodeString.map(NomenclatureName.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[NomenclatureInfo] = Codec.from(Decoder.decodeString.map(NomenclatureInfo.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[PesticideId]      = Codec.from(
+  private given Codec[PesticideName] = Codec.from(Decoder.decodeString.map(PesticideName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[PesticideInfo] = Codec.from(Decoder.decodeString.map(PesticideInfo.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[PesticideId]   = Codec.from(
     // Pesticide identifiers appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
@@ -77,17 +97,19 @@ object PesticideApi:
     Encoder.encodeString.contramap(_.value.toString)
   )
   private given Codec[PesticideType]          = ConfiguredEnumCodec.derived
+  private given Codec[PesticideStatus]        = ConfiguredEnumCodec.derived
   private given Codec.AsObject[PesticideData] = ConfiguredCodec.derived
   private given Codec.AsObject[Pesticide]     = ConfiguredCodec.derived
 
   // JSON bodies use Circe; Tapir does not invoke these identifier schema mappings at runtime.
   // $COVERAGE-OFF$
-  private given Schema[PesticideId]   = Schema.string.map(PesticideId.parse)(_.value.toString).format("uuid")
-  private given Schema[PesticideType] = Schema.derivedEnumeration[PesticideType].apply(encode = Some(value => lowerCamel(value.productPrefix)))
+  private given Schema[PesticideId]     = Schema.string.map(PesticideId.parse)(_.value.toString).format("uuid")
+  private given Schema[PesticideType]   = Schema.derivedEnumeration[PesticideType].apply(encode = Some(value => lowerCamel(value.productPrefix)))
+  private given Schema[PesticideStatus] = Schema.derivedEnumeration[PesticideStatus].apply(encode = Some(value => lowerCamel(value.productPrefix)))
   // $COVERAGE-ON$
-  private given Schema[NomenclatureName] = Schema.string
-  private given Schema[NomenclatureInfo] = Schema.string
-  private given Schema[PesticideData]    = Schema.derived[PesticideData].modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
+  private given Schema[PesticideName] = Schema.string
+  private given Schema[PesticideInfo] = Schema.string
+  private given Schema[PesticideData] = Schema.derived[PesticideData].modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
   private def lowerCamel(name: String) =
     name.substring(0, 1).toLowerCase + name.substring(1)
