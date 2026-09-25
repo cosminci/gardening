@@ -183,6 +183,7 @@ describe("PlantSheet", () => {
     });
     render(() => (
       <PlantSheet
+        target={{ kind: "add" }}
         components={components()}
         saveError={undefined}
         completed={false}
