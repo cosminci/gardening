@@ -726,6 +726,165 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /plants/{plantId}/photos:
+    get:
+      summary: List a bounded page of plant photos
+      operationId: getPlantsPlantidPhotos
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: offset
+        in: query
+        required: false
+        schema:
+          default: 0
+          type: integer
+          format: int32
+          minimum: 0
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          default: 12
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 24
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoPageResponse'
+        '400':
+          description: 'Invalid value for: query parameter offset, Invalid value for:
+            query parameter pageSize'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Upload a photo for a plant
+      operationId: postPlantsPlantidPhotos
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PhotoUploadPart'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddedPhoto'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /photos/{photoId}:
+    delete:
+      summary: Remove a photo
+      operationId: deletePhotosPhotoid
+      parameters:
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /photos/{photoId}/content:
+    get:
+      summary: Retrieve the raw photo content
+      operationId: getPhotosPhotoidContent
+      parameters:
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          headers:
+            Content-Type:
+              required: true
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   schemas:
     ActionType:
@@ -737,6 +896,18 @@ components:
       - pesticide
       - pruned
       - watered
+    AddedPhoto:
+      title: AddedPhoto
+      type: object
+      required:
+      - id
+      - capturedAt
+      properties:
+        id:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
     ApiError:
       title: ApiError
       type: object
@@ -946,6 +1117,40 @@ components:
       - fungicide
       - insecticide
       - treatment
+    PhotoItem:
+      title: PhotoItem
+      type: object
+      required:
+      - id
+      - capturedAt
+      properties:
+        id:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+    PhotoPageResponse:
+      title: PhotoPageResponse
+      type: object
+      required:
+      - photos
+      - hasNextPage
+      properties:
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoItem'
+        hasNextPage:
+          type: boolean
+    PhotoUploadPart:
+      title: PhotoUploadPart
+      type: object
+      required:
+      - file
+      properties:
+        file:
+          type: string
+          format: binary
     Plant:
       title: Plant
       type: object

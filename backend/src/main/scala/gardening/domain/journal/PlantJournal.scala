@@ -15,6 +15,7 @@ import monocle.syntax.all.*
 import language.experimental.captureChecking
 
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.locks.ReentrantLock
 import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
@@ -29,22 +30,30 @@ trait PlantJournal:
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def deleteOperation(id: OperationId): DeleteOperationResult
+  def addPhoto(plantId: PlantId, content: PhotoContent): AddPhotoResult
+  def removePhoto(id: PhotoId): RemovePhotoResult
+  def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult
+  def getPhotoContent(id: PhotoId): PhotoReadResult
 
 object PlantJournal:
 
   def make(using
       store: PlantJournalStore^,
+      contentStore: PhotoContentStore^,
       substrateStore: SubstrateStore^,
       pesticideStore: PesticideStore^,
-      idGen: IdGenerator^
-  )(using log: Logger^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log} =
+      idGen: IdGenerator^,
+      clock: Clock^
+  )(using log: Logger^): PlantJournal^{store, contentStore, substrateStore, pesticideStore, idGen, clock, log} =
     new LivePlantJournal
 
   private class LivePlantJournal(using
       store: PlantJournalStore^,
+      contentStore: PhotoContentStore^,
       substrateStore: SubstrateStore^,
       pesticideStore: PesticideStore^,
-      idGen: IdGenerator^
+      idGen: IdGenerator^,
+      clock: Clock^
   )(using log: Logger^) extends PlantJournal:
     private val operationMutex = ReentrantLock()
 
@@ -151,6 +160,70 @@ object PlantJournal:
                     .fold(EditOperationResult.EditFailed.apply, _ => res)
                 case failure: EditOperationResult.EditFailed => failure.tap(_ => log.error("edit operation", failure.reason))
                 case other                                   => other
+
+    override def addPhoto(plantId: PlantId, content: PhotoContent): AddPhotoResult =
+      val photo = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plantId, clock.now())
+      contentStore.put(photo.id, content) match
+        case PhotoWriteResult.WriteFailed(reason) =>
+          AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
+        case PhotoWriteResult.Written =>
+          store.addPhoto(photo) match
+            case result @ AddPhotoResult.Added(added) =>
+              log.info(s"photo added id=${added.id.value}")
+              result
+            case AddPhotoResult.PlantMissing      => compensateContentDeleteAfterMissingPlant(photo.id)
+            case AddPhotoResult.AddFailed(reason) => compensateContentDeleteAfterAddFailed(photo.id, reason)
+
+    override def removePhoto(id: PhotoId): RemovePhotoResult =
+      store.removePhoto(id) match
+        case RemovePhotoResult.PhotoMissing         => RemovePhotoResult.PhotoMissing
+        case RemovePhotoResult.RemoveFailed(reason) =>
+          RemovePhotoResult.RemoveFailed(reason).tap(_ => log.error("remove photo", reason))
+        case RemovePhotoResult.Removed(photo) =>
+          contentStore.delete(photo.id) match
+            case PhotoWriteResult.Written =>
+              log.info(s"photo removed id=${photo.id.value}")
+              RemovePhotoResult.Removed(photo)
+            case PhotoWriteResult.WriteFailed(reason) => compensateMetadataRestore(photo, reason)
+
+    override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult =
+      store.getPhotos(plantId, window).tap:
+        case GetPhotosResult.ReadFailed(reason) => log.error("get photos", reason)
+        case _                                  => ()
+
+    override def getPhotoContent(id: PhotoId): PhotoReadResult = contentStore.get(id)
+
+    private def compensateContentDeleteAfterMissingPlant(photoId: PhotoId): AddPhotoResult =
+      contentStore.delete(photoId) match
+        case PhotoWriteResult.Written                         => AddPhotoResult.PlantMissing
+        case PhotoWriteResult.WriteFailed(compensationReason) =>
+          val cause   = RuntimeException("plant missing while adding photo")
+          val wrapped = RuntimeException("photo content persisted but metadata write failed and compensation failed", cause)
+          wrapped.addSuppressed(compensationReason)
+          AddPhotoResult.AddFailed(wrapped).tap(_ => log.error("add photo", wrapped))
+
+    private def compensateContentDeleteAfterAddFailed(photoId: PhotoId, reason: Throwable): AddPhotoResult =
+      contentStore.delete(photoId) match
+        case PhotoWriteResult.Written =>
+          AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
+        case PhotoWriteResult.WriteFailed(compensationReason) =>
+          val wrapped = RuntimeException("photo content persisted but metadata write failed and compensation failed", reason)
+          wrapped.addSuppressed(compensationReason)
+          AddPhotoResult.AddFailed(wrapped).tap(_ => log.error("add photo", wrapped))
+
+    private def compensateMetadataRestore(photo: PlantPhoto, contentDeleteReason: Throwable): RemovePhotoResult =
+      store.addPhoto(photo) match
+        case AddPhotoResult.Added(_) =>
+          RemovePhotoResult.RemoveFailed(contentDeleteReason).tap(_ => log.error("remove photo", contentDeleteReason))
+        case AddPhotoResult.PlantMissing =>
+          val compensationCause = RuntimeException("plant missing while restoring photo metadata")
+          val wrapped           = RuntimeException("photo metadata removed but content deletion failed and compensation failed", contentDeleteReason)
+          wrapped.addSuppressed(compensationCause)
+          RemovePhotoResult.RemoveFailed(wrapped).tap(_ => log.error("remove photo", wrapped))
+        case AddPhotoResult.AddFailed(compensationCause) =>
+          val wrapped = RuntimeException("photo metadata removed but content deletion failed and compensation failed", contentDeleteReason)
+          wrapped.addSuppressed(compensationCause)
+          RemovePhotoResult.RemoveFailed(wrapped).tap(_ => log.error("remove photo", wrapped))
 
     override def deleteOperation(id: OperationId): DeleteOperationResult = operationMutex.exclusively:
       val outcome =

@@ -166,6 +166,7 @@ def start() -> None:
     environment = {
         **os.environ,
         "GARDENING_DB_PATH": str(DATABASE),
+        "GARDENING_PHOTOS_DIR": str(DATA / "photos"),
         "GARDENING_HOST": "127.0.0.1",
         "GARDENING_PORT": str(backend_port),
         "GARDENING_STATIC_DIR": str(STATIC_DIR),

@@ -15,6 +15,7 @@ import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
 import java.time.format.DateTimeFormatterBuilder
+import java.util.UUID
 import scala.util.Try
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -238,6 +239,60 @@ object SqlitePlantJournalStore:
           case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
 
+    override def addPhoto(photo: PlantPhoto): AddPhotoResult =
+      try
+        transact(transactor):
+          sql"""insert into plant_photo (id, plant_id, captured_at)
+               select ${photo.id.value.toString}, ${photo.plantId.value}, ${operationDateFormatter.format(photo.capturedAt)}
+               where exists (select 1 from plant where id = ${photo.plantId.value})""".update.run() match
+            case 1 => AddPhotoResult.Added(photo)
+            case _ =>
+              sql"select id from plant where id = ${photo.plantId.value}".query[String].run().headOption match
+                case None => AddPhotoResult.PlantMissing
+                // A row for this plant_id exists but insert failed: treated as AddFailed below.
+                // $COVERAGE-OFF$
+                case Some(_) => AddPhotoResult.AddFailed(RuntimeException(s"photo insert returned 0 rows for plant: ${photo.plantId.value}"))
+                // $COVERAGE-ON$
+      catch case error: SqlException => AddPhotoResult.AddFailed(error)
+
+    override def removePhoto(id: PhotoId): RemovePhotoResult =
+      try
+        transact(transactor):
+          sql"delete from plant_photo where id = ${id.value.toString} returning id, plant_id, captured_at"
+            .query[PlantPhotoRow]
+            .run()
+            .headOption match
+            case None      => RemovePhotoResult.PhotoMissing
+            case Some(row) => RemovePhotoResult.Removed(trust(toPhoto(row)))
+      catch
+        case error: SqlException       => RemovePhotoResult.RemoveFailed(error)
+        case error: DatabaseCorruption => RemovePhotoResult.RemoveFailed(error)
+
+    override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult =
+      try
+        val readSize: Int = window.size + 1
+        val offset: Int   = window.offset
+        val rows          = connect(transactor):
+          sql"""select id, plant_id, captured_at from plant_photo
+                where plant_id = ${plantId.value}
+                order by captured_at desc, id desc
+                limit $readSize offset $offset""".query[PlantPhotoRow].run()
+        val photos = trust(rows.traverse(toPhoto))
+        GetPhotosResult.Read(PhotoPage(photos.take(window.size), photos.size > window.size))
+      catch
+        case error: SqlException       => GetPhotosResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetPhotosResult.ReadFailed(error)
+
+    private def toPhoto(row: PlantPhotoRow): Either[Throwable, PlantPhoto] =
+      for
+        capturedAt <- Try(Instant.parse(row.capturedAt)).toEither.left.map(_ =>
+          RuntimeException(s"invalid stored photo capturedAt: ${row.capturedAt}")
+        )
+        id <- Try(UUID.fromString(row.id)).toEither.left.map(_ =>
+          RuntimeException(s"invalid stored photo id: ${row.id}")
+        )
+      yield PlantPhoto(PhotoId(id), PlantId(row.plantId), capturedAt)
+
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
     private def trust[A](decoded: Either[Throwable, A]) =
       // Writes are validated before persistence; a decode failure is an invariant violation.
@@ -352,3 +407,4 @@ object SqlitePlantJournalStore:
       id: String,
       wateringDates: String
   ) derives DbCodec
+  private case class PlantPhotoRow(id: String, plantId: String, capturedAt: String) derives DbCodec

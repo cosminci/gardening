@@ -245,6 +245,11 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
         fail("plant HTTP must not edit operations")
       override def deleteOperation(id: OperationId): DeleteOperationResult =
         fail("plant HTTP must not delete operations")
+      override def addPhoto(plantId: PlantId, content: gardening.domain.journal.PhotoContent): AddPhotoResult =
+        fail("plant HTTP must not add photos")
+      override def removePhoto(id: PhotoId): RemovePhotoResult                       = fail("plant HTTP must not remove photos")
+      override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult = fail("plant HTTP must not list photos")
+      override def getPhotoContent(id: PhotoId): PhotoReadResult                     = fail("plant HTTP must not read photo content")
     val attention = new PlantAttentionMonitor:
       override def current: AttentionProjection       = fail("plant HTTP must not read attention")
       override def refreshAll: RefreshAttentionResult =

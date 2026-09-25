@@ -246,6 +246,11 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
         refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
       override def deleteOperation(id: OperationId): DeleteOperationResult =
         refs.deletedOperations.updateAndGet(_ :+ id).pipe(_ => deleteOperationResult)
+      override def addPhoto(plantId: PlantId, content: gardening.domain.journal.PhotoContent): AddPhotoResult =
+        fail("operation HTTP must not add photos")
+      override def removePhoto(id: PhotoId): RemovePhotoResult                       = fail("operation HTTP must not remove photos")
+      override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult = fail("operation HTTP must not list photos")
+      override def getPhotoContent(id: PhotoId): PhotoReadResult                     = fail("operation HTTP must not read photo content")
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(OperationApi.serverEndpoints(using journal))
       .backend()
