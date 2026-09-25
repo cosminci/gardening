@@ -37,7 +37,7 @@ Push attention to the browser over a WebSocket instead of polling, and stop lett
 - Backend startup succeeds and serves plants, operations, substrates, and pesticides even before attention has ever been computed, or while its store is unavailable.
 - The garden/cemetery view, the active/archived toggle, and the add-plant control render as soon as plant, operation, substrate, and pesticide data load, regardless of attention state; the journal fails to load only for a plant, operation, substrate, or pesticide read failure, or a projection with a duplicated plant identifier or a plant outside the active set — never for a missing or pending attention entry.
 - Each active plant not yet covered by the browser's received attention shows an animated, accessibly labeled pending indicator in its leftmost column instead of a status icon, replaced in place the moment its entry arrives, honoring reduced motion; during a dropped connection a plant keeps its last known attention instead of reverting to pending.
-- The browser shows an accessibly labeled connection indicator near the journal header reflecting whether its WebSocket connection to the backend is currently up.
+- The journal header shows an accessibly labeled "Backend" connection indicator among the header actions, before the add-plant control and visible even before the journal loads, reflecting whether the WebSocket connection to the backend is currently up and showing the elapsed time since the last attention update it received (an awaiting state until the first update arrives).
 
 ## Doc Sync
 

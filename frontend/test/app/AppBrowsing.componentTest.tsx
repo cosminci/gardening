@@ -741,13 +741,12 @@ describe("browsing the journal", () => {
     ));
 
     await screen.findByRole("article", { name: "Fern" });
-    const indicator = screen.getByRole("status", { name: "Attention feed connected" });
+    const indicator = screen.getByRole("status", { name: "Backend connected" });
     expect(indicator).toBeInTheDocument();
+    expect(screen.getByText(/Updated \d+s ago/)).toBeInTheDocument();
 
     journal.setAttentionConnection("disconnected");
-    expect(
-      await screen.findByRole("status", { name: "Attention feed disconnected" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: "Backend disconnected" })).toBeInTheDocument();
   });
 
   it("should create a plant from the cemetery without logging care or measuring attention", async () => {
