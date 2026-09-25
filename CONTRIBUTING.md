@@ -95,6 +95,13 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 - Never destructure a product merely to inspect one or two members. Match the relevant member directly and access other values by name so adding a field does not break unrelated patterns.
 - Prefer optics for focused updates through nested immutable domain values rather than nested `copy` calls.
 
+## Logging
+
+- Only the four domain services (`PlantJournal`, `PlantAttentionMonitor`, `SubstrateComponentCatalog`, `PesticideCatalog`) log; adapters (persistence, HTTP) never do, since HTTP already discards the cause when it maps a failure to a status code and persistence is swappable machinery below the logged contract.
+- `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
+- Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
+- Every line is a single line — never a raw stack trace.
+
 ## Development workflow — SDD
 
 Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.agents/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:

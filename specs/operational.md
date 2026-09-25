@@ -4,7 +4,7 @@
 
 ## Alerts
 
-There is no runtime monitoring or alerting yet.
+Each domain service logs its own outcome as a single line: info for a successful mutation or a per-plant watering-level transition (Unavailable/Current/Overdue/RedAlert), error for an unexpected failure (persistence, background recomputation, or startup). Reads and recomputation cycles with no level change produce no line. Read logs directly from the container's output (`docker logs`/`journalctl`); the container caps `json-file` log storage at 10MB × 5 files. There is no aggregation or alerting yet.
 
 ## Scaling characteristics
 
