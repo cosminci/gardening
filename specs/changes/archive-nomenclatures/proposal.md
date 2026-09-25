@@ -15,7 +15,13 @@ Let a household retire a substrate component or pesticide it no longer uses, gua
 ## Domain / Design Notes
 
 - A substrate component and a pesticide each gain their own archive action and outcome: success, an unknown identity, an already-archived entry, or a failed write. The two catalogs stay independent of each other; nothing new couples them together.
-- The stored substrate-component and pesticide catalogs gain a status column via a schema migration, since neither is currently stored with one; existing rows default to active.
+- Neither the `substrate_component` nor the `pesticide` table has a status column today. A new Flyway migration adds one to each, mirroring the existing `plant.status` column and check constraint:
+
+  ```sql
+  alter table substrate_component add column status text not null default 'Active' check (status in ('Active', 'Archived'));
+  alter table pesticide add column status text not null default 'Active' check (status in ('Active', 'Archived'));
+  ```
+
 - Reading a catalog continues to return every entry regardless of status, so a plant's mix or an operation's pesticides can still resolve and display an archived entry's name and notes. Validating a new repot's substrate or a new care operation's pesticides accepts only active entries; an archived one is treated the same as an unknown one for that validation.
 - An archived substrate component or pesticide is no longer editable, mirroring an archived plant.
 
