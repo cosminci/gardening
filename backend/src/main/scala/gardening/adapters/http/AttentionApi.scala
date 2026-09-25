@@ -6,15 +6,18 @@ import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
+import ox.flow.Flow
+import sttp.capabilities.WebSockets
 import sttp.shared.Identity
 import sttp.tapir.*
 import sttp.tapir.generic.Configuration as TapirConfiguration
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
 import sttp.tapir.server.ServerEndpoint
+import sttp.tapir.server.netty.sync.OxStreams
 
 import java.time.Instant
-import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
+import scala.concurrent.duration.*
 import scala.util.Try
 
 object AttentionApi:
@@ -30,12 +33,34 @@ object AttentionApi:
         case _: WateringAttention.RedAlert    => "redAlert"
   // $COVERAGE-ON$
 
+  private val feedPollInterval = 1.second
+
   private val getAttentionEndpoint = endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
+  private val attentionFeedEndpoint = endpoint.get
+    .in("attention" / "feed")
+    .out(webSocketBody[String, CodecFormat.TextPlain, AttentionProjection, CodecFormat.Json](OxStreams))
+    .summary("Push plant attention updates")
+
+  // The feed is pushed over a websocket; it has no OpenAPI/HTTP contract to document.
   private[http] val publicEndpoints: List[AnyEndpoint] = List(getAttentionEndpoint)
 
-  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
-    List(getAttentionEndpoint.handleSuccess(_ => attention.current))
+  private[http] def httpServerEndpoint(using attention: PlantAttentionMonitor): ServerEndpoint[Any, Identity] =
+    getAttentionEndpoint.handleSuccess(_ => attention.current)
+
+  /**
+   * Neither tapir's `webSocketBody` nor Ox provide a broadcast/topic primitive, so each connection independently ticks and pushes the monitor's
+   * current projection (an in-memory read, kept fresh by the recompute loop), deduplicating unchanged values. Merging the drained incoming frames
+   * ends the feed as soon as the client disconnects.
+   */
+  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
+    // tapir-sttp-stub-server can't run an OxStreams endpoint's logic, so this dispatch isn't seam-tested; `attentionFeed` is exercised directly.
+    // $COVERAGE-OFF$
+    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => attentionFeed(attention, feedPollInterval)))
+    // $COVERAGE-ON$
+
+  private[http] def attentionFeed(attention: PlantAttentionMonitor, pollInterval: FiniteDuration): OxStreams.Pipe[String, AttentionProjection] =
+    incoming => Flow.tick(pollInterval).map(_ => attention.current).debounceBy(_.measuredAt).merge(incoming.drain(), propagateDoneRight = true)
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")

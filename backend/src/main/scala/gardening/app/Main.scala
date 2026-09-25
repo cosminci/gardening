@@ -3,14 +3,11 @@ package gardening.app
 import cats.syntax.either.*
 import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PlantApi, StaticSite, SubstrateComponentApi}
 import gardening.adapters.persistence.SqliteLocation
-import gardening.domain.attention.PlantAttentionMonitor
 import org.flywaydb.core.Flyway
-import ox.{EitherMode, forkError, sleep, supervisedError}
-import ox.either.*
+import ox.{EitherMode, supervisedError}
+import ox.either.orThrow
 import sttp.tapir.server.netty.sync.NettySyncServer
 
-import scala.concurrent.duration.*
-import scala.util.chaining.*
 import scala.util.Using
 
 object Main:
@@ -24,26 +21,17 @@ object Main:
 
     Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      Programs.make(resources).flatMap: programs =>
-        val endpoints =
-          List(HealthApi.serverEndpoint(version)) ++
-            PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
-            AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
-            OperationApi.serverEndpoints(using programs.plantJournal) ++
-            SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
-            PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
-            StaticSite.endpoint(staticDir)
-        run(programs.plantAttentionMonitor):
-          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-      .orThrow
+      supervisedError(EitherMode[Throwable]()):
+        Programs.make(resources).flatMap: programs =>
+          val endpoints = aggregateEndpoints(programs, version, staticDir)
+          NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
+    .orThrow
 
-  private def run(attention: PlantAttentionMonitor)(http: => Unit) =
-    supervisedError(EitherMode[Throwable]()):
-      val _ = forkError(pollPlantAttention(attention))
-      http.pipe(_ => ().asRight)
-
-  private def pollPlantAttention(attention: PlantAttentionMonitor) =
-    Iterator.continually {
-      sleep(5.minutes)
-      val _ = attention.refreshAll
-    }.foreach(identity).pipe(_ => ().asRight)
+  private def aggregateEndpoints(programs: Programs, version: String, staticDir: String) =
+    List(HealthApi.serverEndpoint(version)) ++
+      PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
+      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
+      OperationApi.serverEndpoints(using programs.plantJournal) ++
+      SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
+      PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
+      StaticSite.endpoint(staticDir)
