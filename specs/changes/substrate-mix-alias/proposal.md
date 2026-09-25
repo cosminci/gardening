@@ -5,7 +5,7 @@
 
 **Date:** 2026-09-25
 
-Adds a named, independently-saved substrate mix that can be saved from an in-progress edit, loaded to replace one, or permanently deleted.
+Adds a named substrate-mix alias, saved independently of any plant or operation.
 
 ## What & Why
 
@@ -21,7 +21,7 @@ Aliases support listing, adding, and permanently deleting. Renaming or changing 
 
 The substrate-component catalog and the substrate-mix alias catalog share one HTTP boundary instead of two separate ones; today only substrate components have one.
 
-Substrate components and pesticides currently share one generic name/info type across unrelated entities. This change removes that generic type: each catalog entity gets its own specifically-named name and info types, and the new alias entity follows the same rule rather than introducing another shared one.
+Substrate components and pesticides currently share one generic name/info type across unrelated entities. This change removes that generic type: `SubstrateComponentData` and `PesticideData` move to their own `SubstrateComponentName`/`SubstrateComponentInfo` and `PesticideName`/`PesticideInfo` types, and the new alias entity gets its own `SubstrateMixAliasName`/`SubstrateMixAliasNotes` rather than introducing another shared type.
 
 ### Domain type
 
@@ -29,7 +29,7 @@ Substrate components and pesticides currently share one generic name/info type a
 final case class SubstrateMixAlias(id: UUID, name: SubstrateMixAliasName, notes: Option[SubstrateMixAliasNotes], substrate: Substrate)
 ```
 
-`substrate` is the same `Substrate` type already used for `Plant.substrate` and a repot `Operation`'s substrate — an alias just persists that value under a name, independently of any plant or operation. `SubstrateComponentData` and `PesticideData` move from the shared generic name/info type to their own `SubstrateComponentName`/`SubstrateComponentInfo` and `PesticideName`/`PesticideInfo` types, the same shape `SubstrateMixAliasName`/`SubstrateMixAliasNotes` follow.
+`substrate` is the same `Substrate` type already used for `Plant.substrate` and a repot `Operation`'s substrate — an alias just persists that value under a name.
 
 ### Database schema (Flyway migration)
 
@@ -56,14 +56,12 @@ create table substrate_mix_alias (
 - The load view states clearly when no aliases exist yet.
 - The load view offers deleting an alias, guarded by the same irreversible-action confirmation used for archiving a plant and deleting an operation; cancelling leaves the alias unchanged.
 - Deleting an alias always succeeds: no plant or operation depends on an alias continuing to exist.
-- Aliases are stored in a new database table, added via a Flyway schema migration, alongside the existing substrate-component and pesticide catalogs.
 
 ## Doc Sync
 
 - GLOSSARY.md — remove the generic "Nomenclature" term; reword the substrate-component and pesticide entries to stand on their own. Define substrate-mix alias: a named, independently-saved substrate mix with optional notes; unlike a substrate component, it may be permanently deleted.
 - specs/design.md — domain model gains the substrate-mix alias entity, referencing substrate components, independent of any plant or operation, deletable without a reference check.
-- specs/contracts.md — point to the regenerated contract; substrate components and substrate-mix aliases now sit under one shared HTTP resource instead of two.
-- specs/testing.md — note the alias persistence boundary, the load-time rejection when saved components are unavailable, and that deletion is unconditional.
+- specs/contracts.md — add the substrate-mix alias catalog and its store to the existing editable-catalog-use-cases and storage rows, alongside substrate components and pesticides.
 
 ## Out of Scope
 
