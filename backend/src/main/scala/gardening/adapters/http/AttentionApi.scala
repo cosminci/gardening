@@ -6,15 +6,19 @@ import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
+import ox.flow.Flow
+import sttp.capabilities.WebSockets
 import sttp.shared.Identity
 import sttp.tapir.*
 import sttp.tapir.generic.Configuration as TapirConfiguration
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
 import sttp.tapir.server.ServerEndpoint
+import sttp.tapir.server.netty.sync.OxStreams
 
 import java.time.Instant
-import scala.concurrent.duration.{FiniteDuration, MILLISECONDS}
+import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.duration.*
 import scala.util.Try
 
 object AttentionApi:
@@ -30,12 +34,38 @@ object AttentionApi:
         case _: WateringAttention.RedAlert    => "redAlert"
   // $COVERAGE-ON$
 
+  private val feedPollInterval = 1.second
+
   private val getAttentionEndpoint = endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
+  private val attentionFeedEndpoint = endpoint.get
+    .in("attention" / "feed")
+    .out(webSocketBody[String, CodecFormat.TextPlain, AttentionProjection, CodecFormat.Json](OxStreams))
+    .summary("Push plant attention updates")
+
+  // The feed is pushed over a websocket; it has no OpenAPI/HTTP contract to document.
   private[http] val publicEndpoints: List[AnyEndpoint] = List(getAttentionEndpoint)
 
-  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
-    List(getAttentionEndpoint.handleSuccess(_ => attention.current))
+  private[http] def httpServerEndpoint(using attention: PlantAttentionMonitor): ServerEndpoint[Any, Identity] =
+    getAttentionEndpoint.handleSuccess(_ => attention.current)
+
+  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
+    // tapir-sttp-stub-server cannot run an OxStreams endpoint's logic, so this dispatch can't be seam-tested like the HTTP one;
+    // pushAttention itself is exercised directly in AttentionApiSeamIntegrationTest.
+    // $COVERAGE-OFF$
+    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => pushAttention(attention)))
+    // $COVERAGE-ON$
+
+  private[http] def pushAttention(
+      attention: PlantAttentionMonitor,
+      pollInterval: FiniteDuration = feedPollInterval
+  ): OxStreams.Pipe[String, AttentionProjection] = incoming =>
+    val lastBroadcast = AtomicReference(Option.empty[Instant])
+    val updates       = Flow.tick(pollInterval).mapConcat { _ =>
+      val projection = attention.current
+      if lastBroadcast.getAndSet(Some(projection.measuredAt)).contains(projection.measuredAt) then Nil else List(projection)
+    }
+    updates.merge(incoming.drain(), propagateDoneRight = true)
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")

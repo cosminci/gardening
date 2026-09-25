@@ -3,11 +3,13 @@ package gardening.domain.attention
 import cats.syntax.option.*
 import gardening.domain.*
 import io.github.iltotore.iron.autoRefine
+import ox.supervised
 
 import language.experimental.captureChecking
 
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.concurrent.duration.*
 import scala.jdk.DurationConverters.*
@@ -303,6 +305,20 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
 
     assertEquals(monitorResult, expectedResult)
 
+  test("should recompute on its own schedule without an explicit refresh"):
+    val secondRead = CountDownLatch(1)
+    val readCount  = AtomicInteger(0)
+    val store      = new PlantAttentionStore:
+      override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
+        if readCount.getAndIncrement() > 0 then secondRead.countDown()
+        GetAttentionSamplesResult.Read(Vector.empty)
+
+    val recomputedOnSchedule = supervised:
+      val _ = PlantAttentionMonitor.make(recomputeInterval = 1.milli)(using store, () => referenceTime).getOrElse(fail("initial attention failed"))
+      secondRead.await(2, TimeUnit.SECONDS)
+
+    assertEquals(recomputedOnSchedule, true)
+
   extension (instant: Instant)
     private def +(duration: FiniteDuration) = instant.plus(duration.toJava)
     private def -(duration: FiniteDuration) = instant.minus(duration.toJava)
@@ -314,7 +330,8 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
   private def buildMonitor(
       refs: Refs = Refs(),
       now: () => Instant = () => referenceTime,
-      getAttentionSamplesResults: Vector[GetAttentionSamplesResult] = Vector(GetAttentionSamplesResult.Read(Vector.empty))
+      getAttentionSamplesResults: Vector[GetAttentionSamplesResult] = Vector(GetAttentionSamplesResult.Read(Vector.empty)),
+      recomputeInterval: FiniteDuration = 1.hour
   ) =
     val readIndex = AtomicInteger()
     val store     = new PlantAttentionStore:
@@ -324,4 +341,4 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite:
           .lift(readIndex.getAndIncrement())
           .orElse(getAttentionSamplesResults.lastOption)
           .getOrElse(fail("missing getAttentionSamples result"))
-    PlantAttentionMonitor.make(using store, () => now())
+    supervised(PlantAttentionMonitor.make(recomputeInterval)(using store, () => now()))

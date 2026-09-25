@@ -5,12 +5,14 @@ import gardening.domain.*
 import gardening.domain.attention.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
+import ox.flow.Flow
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, basicRequest}
 import sttp.model.{StatusCode, Uri}
 import sttp.tapir.server.stub.TapirStubInterpreter
 
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.*
 
 class AttentionApiSeamIntegrationTest extends munit.FunSuite:
@@ -55,12 +57,37 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
          |}""".stripMargin
     assertEquals(response.code -> jsonBody(response), StatusCode.Ok -> json(expected))
 
+  test("should expose the HTTP and websocket feed endpoints for the composition root to wire up"):
+    val attention = new PlantAttentionMonitor:
+      override def current: AttentionProjection       = projection
+      override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
+
+    val endpoints = AttentionApi.serverEndpoints(using attention)
+    val _         = AttentionApi.pushAttention(attention)
+
+    assertEquals(endpoints.size, 2)
+
+  test("should push the current projection immediately on connect, then again only once it changes"):
+    val calls         = AtomicInteger(0)
+    val stableRepeats = 5
+    val initial       = AttentionProjection(date, Vector.empty)
+    val changed       = AttentionProjection(date.plusSeconds(1), Vector.empty)
+    val attention     = new PlantAttentionMonitor:
+      override def current: AttentionProjection       = if calls.getAndIncrement() < stableRepeats then initial else changed
+      override def refreshAll: RefreshAttentionResult = fail("the push adapter must not trigger recomputation")
+
+    val stillConnected = Flow.tick(1.hour, "still connected")
+    val pushed         = AttentionApi.pushAttention(attention, pollInterval = 1.milli)(stillConnected).take(2).runToList()
+    val expectedPushed = List(initial, changed)
+
+    assertEquals(pushed, expectedPushed)
+
   private def buildServer(projection: AttentionProjection) =
     val attention = new PlantAttentionMonitor:
       override def current: AttentionProjection       = projection
       override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(AttentionApi.serverEndpoints(using attention))
+      .whenServerEndpointsRunLogic(List(AttentionApi.httpServerEndpoint(using attention)))
       .backend()
 
   private def jsonBody(response: Response[Either[String, String]]) = parse(response.body.merge).fold(error => fail(error.message), identity)
