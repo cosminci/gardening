@@ -134,6 +134,17 @@ def terminate(processes: list[subprocess.Popen[bytes]]) -> None:
             process.wait()
 
 
+def await_frontend(build: subprocess.Popen[bytes]) -> None:
+    index = STATIC_DIR / "index.html"
+    deadline = time.monotonic() + BACKEND_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        require(build.poll() is None, "The frontend build stopped before it produced a bundle.")
+        if index.is_file():
+            return
+        time.sleep(0.5)
+    raise RuntimeError("The frontend build did not produce a bundle in time.")
+
+
 def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
     health = f"http://127.0.0.1:{backend_port}/health"
     deadline = time.monotonic() + BACKEND_READY_TIMEOUT
@@ -160,16 +171,26 @@ def start() -> None:
         "GARDENING_STATIC_DIR": str(STATIC_DIR),
     }
     try:
-        print("Building the frontend…", flush=True)
-        build = subprocess.run(["npm", "run", "build"], cwd=ROOT / "frontend", env=environment, check=False)
-        require(build.returncode == 0, "Frontend build failed; fix the errors above and retry.")
+        print("Building the frontend and watching for changes…", flush=True)
+        if STATIC_DIR.exists():
+            shutil.rmtree(STATIC_DIR)
+        processes.append(
+            subprocess.Popen(
+                ["npm", "run", "build", "--", "--watch"],
+                cwd=ROOT / "frontend",
+                env=environment,
+                start_new_session=True,
+            )
+        )
+        await_frontend(processes[0])
         print("Starting the backend…", flush=True)
         processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=environment, start_new_session=True))
-        await_backend(backend_port, processes[0])
+        await_backend(backend_port, processes[1])
         print(f"Local app: http://127.0.0.1:{backend_port}", flush=True)
+        print("Frontend edits rebuild automatically; hard-refresh the browser to load them.", flush=True)
         while all(process.poll() is None for process in processes):
             time.sleep(0.2)
-        raise RuntimeError("The local backend stopped; shutting down.")
+        raise RuntimeError("A local process stopped; shutting down.")
     finally:
         terminate(processes)
 
@@ -182,9 +203,11 @@ def main() -> None:
             "'cd frontend && npm ci'. For a NAS copy, set GARDENING_NAS_SSH and "
             "GARDENING_NAS_DB_PATH, then add --refresh; type 'replace' to discard "
             "an existing local journal (or pass --yes). The NAS needs sqlite3. "
-            "The frontend is built and the backend serves it on GARDENING_PORT "
-            "(default 8080); set it if that port is occupied. For frontend work "
-            "with hot reload, run 'cd frontend && npm run dev' separately. "
+            "The frontend is built in watch mode and the backend serves it on "
+            "GARDENING_PORT (default 8080); set it if that port is occupied. "
+            "Frontend edits rebuild automatically, so hard-refresh the browser "
+            "to load them without restarting the backend. For live hot reload, "
+            "run 'cd frontend && npm run dev' separately. "
             "Local edits never sync back to the NAS."
         ),
     )
