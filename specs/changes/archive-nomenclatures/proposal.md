@@ -14,14 +14,17 @@ Let a household retire a substrate component or pesticide it no longer uses, gua
 
 ## Domain / Design Notes
 
-- `SubstrateComponent` and `Pesticide` each gain a `status`, using a new `NomenclatureStatus` shared between them the same way they already share `NomenclatureName`/`NomenclatureInfo` — not the unrelated `PlantStatus`:
+- `SubstrateComponent` and `Pesticide` each gain their own `status`, each with its own enum:
 
   ```scala
-  enum NomenclatureStatus derives CanEqual:
+  enum SubstrateComponentStatus derives CanEqual:
     case Active, Archived
 
-  final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData, status: NomenclatureStatus)
-  final case class Pesticide(id: PesticideId, data: PesticideData, status: NomenclatureStatus)
+  enum PesticideStatus derives CanEqual:
+    case Active, Archived
+
+  final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData, status: SubstrateComponentStatus)
+  final case class Pesticide(id: PesticideId, data: PesticideData, status: PesticideStatus)
   ```
 
 - A substrate component and a pesticide each gain their own archive action and outcome: success, an unknown identity, an already-archived entry, or a failed write. The two catalogs stay independent of each other; nothing new couples them together.
