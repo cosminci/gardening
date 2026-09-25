@@ -743,7 +743,7 @@ describe("browsing the journal", () => {
     await screen.findByRole("article", { name: "Fern" });
     const indicator = screen.getByRole("status", { name: "Backend connected" });
     expect(indicator).toBeInTheDocument();
-    expect(screen.getByText(/Updated \d+s ago/)).toBeInTheDocument();
+    expect(screen.getByText(/Just updated|Updated \d+s ago/)).toBeInTheDocument();
 
     journal.setAttentionConnection("disconnected");
     expect(await screen.findByRole("status", { name: "Backend disconnected" })).toBeInTheDocument();

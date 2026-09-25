@@ -27,6 +27,7 @@ const connectionStateLabel = (state: FeedConnectionState) => {
 const updateAge = (lastUpdateAt: number | undefined, now: number) => {
   if (lastUpdateAt === undefined) return "Awaiting first update";
   const seconds = Math.max(0, Math.floor((now - lastUpdateAt) / 1000));
+  if (seconds <= 5) return "Just updated";
   return `Updated ${String(seconds)}s ago`;
 };
 
@@ -45,17 +46,17 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
         <h1>Plant Journal</h1>
       </div>
       <div class="masthead__actions">
-        <div class="backend-status">
-          <span
-            role="status"
-            aria-label={connectionStateLabel(props.connectionState)}
-            class="backend-status__pill"
-          >
-            <span aria-hidden="true" class={`feed-status feed-status--${props.connectionState}`} />
-            <span aria-hidden="true">Backend</span>
+        <span
+          role="status"
+          aria-label={connectionStateLabel(props.connectionState)}
+          class="backend-status"
+        >
+          <span aria-hidden="true" class={`feed-status feed-status--${props.connectionState}`} />
+          <span aria-hidden="true">Backend</span>
+          <span aria-hidden="true" class="backend-status__age">
+            {updateAge(props.lastUpdateAt, now())}
           </span>
-          <span class="backend-status__age">{updateAge(props.lastUpdateAt, now())}</span>
-        </div>
+        </span>
         <Show when={props.loaded}>
           <button
             id="add-plant"

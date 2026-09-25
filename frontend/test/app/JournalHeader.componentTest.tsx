@@ -52,18 +52,29 @@ describe("journal header backend indicator", () => {
   it("should await the first attention update before reporting freshness", () => {
     render(() => <JournalHeader {...baseProps} lastUpdateAt={undefined} />);
 
-    expect(screen.getByText("Awaiting first update")).toBeInTheDocument();
+    const pill = screen.getByRole("status", { name: "Backend connected" });
+    expect(pill).toContainElement(screen.getByText("Awaiting first update"));
   });
 
-  it("should report and tick the elapsed time since the last attention update", () => {
+  it("should report a recent update as just updated for the first five seconds", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:05Z"));
     const lastUpdateAt = Date.parse("2026-01-01T00:00:00Z");
 
     render(() => <JournalHeader {...baseProps} lastUpdateAt={lastUpdateAt} />);
-    expect(screen.getByText("Updated 5s ago")).toBeInTheDocument();
 
-    vi.advanceTimersByTime(3000);
+    expect(screen.getByText("Just updated")).toBeInTheDocument();
+  });
+
+  it("should report and tick the elapsed time once an update ages past five seconds", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:06Z"));
+    const lastUpdateAt = Date.parse("2026-01-01T00:00:00Z");
+
+    render(() => <JournalHeader {...baseProps} lastUpdateAt={lastUpdateAt} />);
+    expect(screen.getByText("Updated 6s ago")).toBeInTheDocument();
+
+    vi.advanceTimersByTime(2000);
 
     expect(screen.getByText("Updated 8s ago")).toBeInTheDocument();
   });
