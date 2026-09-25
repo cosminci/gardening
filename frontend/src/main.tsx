@@ -1,9 +1,9 @@
 import { render } from "solid-js/web";
 import { makeHttpOperationClient } from "./adapters/http/HttpOperationClient";
 import { makeHttpPesticideClient } from "./adapters/http/HttpPesticideClient";
-import { makeHttpPlantAttentionClient } from "./adapters/http/HttpPlantAttentionClient";
 import { makeHttpPlantClient } from "./adapters/http/HttpPlantClient";
 import { makeHttpSubstrateComponentClient } from "./adapters/http/HttpSubstrateComponentClient";
+import { makeWsPlantAttentionFeed } from "./adapters/ws/WsPlantAttentionFeed";
 import { App } from "./app/App";
 import "./app/controls.css";
 
@@ -14,7 +14,7 @@ if (root !== null) {
       <App
         plants={makeHttpPlantClient()}
         operations={makeHttpOperationClient()}
-        attention={makeHttpPlantAttentionClient()}
+        attention={makeWsPlantAttentionFeed((url) => new WebSocket(url))}
         substrates={makeHttpSubstrateComponentClient()}
         pesticideCatalog={makeHttpPesticideClient()}
       />

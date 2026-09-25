@@ -23,8 +23,9 @@ type PlantCardProps = PlantCardBaseProps &
   (
     | {
         readonly kind?: "garden";
-        readonly attention: Journal.PlantAttention;
-        readonly measuredAt: Journal.Instant;
+        readonly plant: Journal.Plant;
+        readonly watering?: Journal.WateringAttention | undefined;
+        readonly measuredAt?: Journal.Instant | undefined;
         readonly onLog: () => void;
         readonly onArchive: () => void;
         readonly onEditPlant: (plant: Journal.Plant) => void;
@@ -157,8 +158,7 @@ const WateringStatus: Component<{
 };
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
-  const plant = () => (props.kind === "cemetery" ? props.plant : props.attention.plant);
-  const name = () => plantDisplayName(plant());
+  const name = () => plantDisplayName(props.plant);
   const recentOperations = () => [...props.operationPage.operations].reverse();
 
   return (
@@ -183,37 +183,41 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <span class="recorded-life__dates">Dates unknown</span>
             )}
           </aside>
-        ) : (
+        ) : props.watering !== undefined && props.measuredAt !== undefined ? (
           <WateringStatus
-            watering={props.attention.watering}
+            watering={props.watering}
             measuredAt={props.measuredAt}
             plantName={name()}
-            plantId={plant().id}
+            plantId={props.plant.id}
           />
+        ) : (
+          <aside class="attention-pending" aria-label={`Attention pending for ${name()}`}>
+            <span class="attention-pending__icon" aria-hidden="true" />
+          </aside>
         )}
         <div class="plant-summary">
           <header class="plant-card__header">
             <div>
-              <p class="eyebrow">{plant().details.location}</p>
+              <p class="eyebrow">{props.plant.details.location}</p>
               <h2>{name()}</h2>
-              <p class="plant-card__species">{plant().details.species}</p>
+              <p class="plant-card__species">{props.plant.details.species}</p>
             </div>
             {props.kind !== "cemetery" && (
               <div class="plant-card__actions">
                 <button
-                  id={editPlantControlId(plant().id)}
+                  id={editPlantControlId(props.plant.id)}
                   class="edit-plant"
                   type="button"
                   aria-label={`Edit ${name()}`}
                   title={`Edit ${name()}`}
                   onClick={() => {
-                    props.onEditPlant(plant());
+                    props.onEditPlant(props.plant);
                   }}
                 >
                   Edit
                 </button>
                 <button
-                  id={`archive-plant-${plant().id}`}
+                  id={`archive-plant-${props.plant.id}`}
                   class="archive-plant"
                   type="button"
                   aria-label={`Archive ${name()}`}
@@ -229,7 +233,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>
-            <dd>{formatSubstrate(plant().details.substrate, props.substrateComponents)}</dd>
+            <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
           </dl>
         </div>
         <Show
@@ -258,7 +262,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         </Show>
         {props.kind !== "cemetery" && (
           <button
-            id={logOperationControlId(plant().id)}
+            id={logOperationControlId(props.plant.id)}
             class="add-operation"
             type="button"
             aria-label={`Log operation for ${name()}`}
@@ -273,7 +277,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
       </div>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory
-          plantId={plant().id}
+          plantId={props.plant.id}
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           getOperations={props.getOperations}

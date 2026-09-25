@@ -2,7 +2,11 @@ import * as Journal from "../../src/domain/Journal";
 import type { OperationClient } from "../../src/domain/Operation";
 import type { PesticideClient } from "../../src/domain/PesticideCatalog";
 import type { PlantClient } from "../../src/domain/Plant";
-import type { PlantAttentionClient } from "../../src/domain/PlantAttention";
+import type {
+  FeedConnectionState,
+  FeedEvent,
+  PlantAttentionFeed,
+} from "../../src/domain/PlantAttention";
 import type { SubstrateComponentClient } from "../../src/domain/SubstrateComponentCatalog";
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
@@ -11,10 +15,6 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
   { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
   { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
 ];
-const emptyAttentionResult: Journal.GetAttentionResult = {
-  kind: "read",
-  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants: [] },
-};
 
 export const ficus = (): Journal.Plant => ({
   id: Journal.plantId("p1"),
@@ -85,7 +85,7 @@ export const operationsPage = (
 });
 
 export const buildJournal = ({
-  getAttentionResults,
+  attentionProjection,
   getPlantsResults,
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
@@ -106,7 +106,7 @@ export const buildJournal = ({
   editedPesticides = [],
   operationWindows = [],
 }: {
-  getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
+  attentionProjection?: Journal.AttentionProjection;
   getPlantsResults?: readonly [Journal.GetPlantsResult, ...Journal.GetPlantsResult[]];
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
@@ -133,21 +133,50 @@ export const buildJournal = ({
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
 } = {}): PlantClient &
   OperationClient &
-  PlantAttentionClient &
+  PlantAttentionFeed &
   SubstrateComponentClient &
-  PesticideClient => {
-  const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
-  let attentionReads = 0;
+  PesticideClient & {
+    pushAttention(projection: Journal.AttentionProjection): void;
+    setAttentionConnection(state: FeedConnectionState): void;
+  } => {
   let plantReads = 0;
-  const plants = [ficus(), monstera()].filter(
+  const defaultPlants = [ficus(), monstera()].filter(
     (plant) =>
-      attentionResponses[0].kind === "read" &&
-      attentionResponses[0].projection.plants.some((sample) => sample.plantId === plant.id),
+      attentionProjection === undefined ||
+      attentionProjection.plants.some((sample) => sample.plantId === plant.id),
   );
-  const plantResponses = getPlantsResults ?? ([{ kind: "read", plants }] as const);
+  const plantResponses = getPlantsResults ?? ([{ kind: "read", plants: defaultPlants }] as const);
   const operationReads = new Map<string, number>();
+  const listeners: ((event: FeedEvent) => void)[] = [];
+
+  const subscribe = (listener: (event: FeedEvent) => void) => {
+    listeners.push(listener);
+    listener({ kind: "connectionState", state: "connected" });
+    if (attentionProjection !== undefined) {
+      listener({ kind: "projection", projection: attentionProjection });
+    }
+    return () => {
+      const idx = listeners.indexOf(listener);
+      if (idx >= 0) listeners.splice(idx, 1);
+    };
+  };
+
+  const pushAttention = (projection: Journal.AttentionProjection) => {
+    for (const listener of [...listeners]) {
+      listener({ kind: "projection", projection });
+    }
+  };
+
+  const setAttentionConnection = (state: FeedConnectionState) => {
+    for (const listener of [...listeners]) {
+      listener({ kind: "connectionState", state });
+    }
+  };
 
   return {
+    subscribe,
+    pushAttention,
+    setAttentionConnection,
     getPlants: () => Promise.resolve(queuedResult(plantResponses, plantReads++)),
     createPlant: () =>
       Promise.resolve({ kind: "createFailed", reason: new Error("unexpected write") }),
@@ -156,10 +185,6 @@ export const buildJournal = ({
     archivePlant: () =>
       Promise.resolve({ kind: "archiveFailed", reason: new Error("unexpected write") }),
     editPlant: () => Promise.resolve({ kind: "editFailed", reason: new Error("unexpected write") }),
-    getAttention: () => {
-      const read = attentionReads++;
-      return Promise.resolve(queuedResult(attentionResponses, read));
-    },
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });
       const results = getOperationsByPlantId[id];

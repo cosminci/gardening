@@ -6,13 +6,11 @@ import {
   milliseconds,
   nickname,
   nomenclatureName,
-  operationId,
   pesticideId,
   plantId,
 } from "../../src/domain/Journal";
-import type * as Journal from "../../src/domain/Journal";
+import * as Journal from "../../src/domain/Journal";
 import type {
-  GetAttentionResult,
   GetOperationsResult,
   GetPlantsResult,
   OperationWindow,
@@ -22,18 +20,15 @@ import type {
 } from "../../src/domain/Journal";
 import * as JournalFixtures from "./JournalTestSupport";
 
-const unavailableFicusAttentionResult = {
-  kind: "read",
-  projection: {
-    measuredAt: instant("2026-01-01T00:00:00Z"),
-    plants: [
-      {
-        plantId: JournalFixtures.ficus().id,
-        watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
-      },
-    ],
-  },
-} satisfies GetAttentionResult;
+const unavailableFicusAttention: Journal.AttentionProjection = {
+  measuredAt: instant("2026-01-01T00:00:00Z"),
+  plants: [
+    {
+      plantId: JournalFixtures.ficus().id,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    },
+  ],
+};
 
 describe("browsing the journal", () => {
   it("should show each plant with its three most recent operations, oldest first", async () => {
@@ -82,15 +77,12 @@ describe("browsing the journal", () => {
         elapsed: milliseconds("176400000"),
       },
     };
-    const browsingAttentionResult: GetAttentionResult = {
-      kind: "read",
-      projection: {
-        measuredAt: instant("2026-01-01T00:00:00Z"),
-        plants: [monsteraUnavailableAttention, ficusRedAlertAttention],
-      },
+    const browsingAttention: Journal.AttentionProjection = {
+      measuredAt: instant("2026-01-01T00:00:00Z"),
+      plants: [monsteraUnavailableAttention, ficusRedAlertAttention],
     };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [browsingAttentionResult],
+      attentionProjection: browsingAttention,
       getPlantsResults: [
         { kind: "read", plants: [JournalFixtures.monstera(), JournalFixtures.ficus()] },
       ],
@@ -197,20 +189,17 @@ describe("browsing the journal", () => {
         elapsed: milliseconds("1"),
       },
     };
-    const browsingAttentionResult: GetAttentionResult = {
-      kind: "read",
-      projection: {
-        measuredAt: instant("2026-01-01T00:00:00Z"),
-        plants: [
-          recentlyWateredCurrentAttention,
-          urgentRedAlertAttention,
-          unknownUnavailableAttention,
-        ],
-      },
+    const browsingAttention: Journal.AttentionProjection = {
+      measuredAt: instant("2026-01-01T00:00:00Z"),
+      plants: [
+        recentlyWateredCurrentAttention,
+        urgentRedAlertAttention,
+        unknownUnavailableAttention,
+      ],
     };
     const operationWindows: { plantId: PlantId; window: OperationWindow }[] = [];
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [browsingAttentionResult],
+      attentionProjection: browsingAttention,
       getPlantsResults: [
         { kind: "read", plants: [unknownPlant, urgentPlant, recentlyWateredPlant] },
       ],
@@ -244,7 +233,7 @@ describe("browsing the journal", () => {
 
   it("should identify a journal containing one active plant", async () => {
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
 
@@ -270,7 +259,7 @@ describe("browsing the journal", () => {
 
   it("should select the cemetery from its focusable control", async () => {
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     render(() => (
@@ -298,7 +287,7 @@ describe("browsing the journal", () => {
   it("should restore the cemetery from its URL after refresh and respond to navigation", async () => {
     window.history.replaceState(null, "", "/?from=bookmark#journal");
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const mounted = render(() => (
@@ -347,7 +336,7 @@ describe("browsing the journal", () => {
   it("should report an unavailable cemetery when its bookmarked URL cannot load", async () => {
     window.history.replaceState(null, "", "/?view=cemetery");
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {
@@ -386,7 +375,7 @@ describe("browsing the journal", () => {
       plantId: archivedPlant.id,
     };
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage()],
         p2: [
@@ -457,7 +446,7 @@ describe("browsing the journal", () => {
       details: { ...JournalFixtures.monstera().details, status: "archived" as const },
     };
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage()],
         p2: [JournalFixtures.operationsPage()],
@@ -505,7 +494,7 @@ describe("browsing the journal", () => {
       details: { ...JournalFixtures.monstera().details, status: "archived" as const },
     };
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage()],
         p2: [JournalFixtures.operationsPage()],
@@ -553,7 +542,7 @@ describe("browsing the journal", () => {
 
   it("should report an unreadable cemetery list rather than showing partial cards", async () => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {
@@ -587,7 +576,7 @@ describe("browsing the journal", () => {
       rejectArchived = reject;
     });
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {
@@ -631,7 +620,7 @@ describe("browsing the journal", () => {
       finishHistory = resolve;
     });
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const getOperationDates = vi.fn(() =>
@@ -681,7 +670,7 @@ describe("browsing the journal", () => {
   it("should show a failed archived count read instead of a guessed number", async () => {
     const journal = {
       ...JournalFixtures.buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       }),
       getArchivedCount: () =>
@@ -705,30 +694,10 @@ describe("browsing the journal", () => {
     expect(screen.queryByRole("button", { name: /Cemetery.*0/ })).toBeNull();
   });
 
-  it("should report an attention read failure without showing its reason", async () => {
-    const reason = new Error("private details");
-    const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [{ kind: "readFailed", reason }],
-    });
-
-    render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-      />
-    ));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-    expect(screen.queryByText("private details")).not.toBeInTheDocument();
-  });
-
-  it("should show an active plant without a measured sample when its watering history is insufficient", async () => {
+  it("should show a pending indicator for an active plant not in the received attention projection", async () => {
     const missing = JournalFixtures.monstera();
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), missing] }],
       getOperationsByPlantId: {
         p1: [JournalFixtures.operationsPage()],
@@ -747,14 +716,44 @@ describe("browsing the journal", () => {
     ));
 
     const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
-    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
+    expect(
+      within(newCard).getByRole("complementary", {
+        name: "Attention pending for Monstera deliciosa",
+      }),
+    ).toBeInTheDocument();
     expect(within(newCard).getByText("No operations yet.")).toBeInTheDocument();
+  });
+
+  it("should show the attention feed connection state indicator", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+
+    await screen.findByRole("article", { name: "Fern" });
+    const indicator = screen.getByRole("status", { name: "Attention feed connected" });
+    expect(indicator).toBeInTheDocument();
+
+    journal.setAttentionConnection("disconnected");
+    expect(
+      await screen.findByRole("status", { name: "Attention feed disconnected" }),
+    ).toBeInTheDocument();
   });
 
   it("should create a plant from the cemetery without logging care or measuring attention", async () => {
     const added = JournalFixtures.monstera();
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getPlantsResults: [
         { kind: "read", plants: [JournalFixtures.ficus()] },
         { kind: "read", plants: [JournalFixtures.ficus(), added] },
@@ -767,7 +766,6 @@ describe("browsing the journal", () => {
     const createPlant = vi
       .fn<(_details: NewPlantDetails) => Promise<Journal.CreatePlantResult>>()
       .mockResolvedValue({ kind: "created", plant: added });
-    const getAttention = vi.fn(() => base.getAttention());
     const logOperation = vi.fn(
       (id: PlantId, date: Journal.Instant, details: Journal.OperationDetails) =>
         base.logOperation(id, date, details),
@@ -775,7 +773,6 @@ describe("browsing the journal", () => {
     const journal = {
       ...base,
       createPlant,
-      getAttention,
       logOperation,
       getPlants: (status?: "active" | "archived") =>
         status === "archived"
@@ -807,7 +804,11 @@ describe("browsing the journal", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
 
     const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
-    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
+    expect(
+      within(newCard).getByRole("complementary", {
+        name: "Attention pending for Monstera deliciosa",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Garden.*2 plants/ })).toHaveFocus();
     expect(createPlant).toHaveBeenCalledOnce();
     expect(createPlant.mock.calls[0]?.[0]).toMatchObject({
@@ -815,14 +816,13 @@ describe("browsing the journal", () => {
       location: "Kitchen",
       substrate: [{ share: 100 }],
     });
-    expect(getAttention).toHaveBeenCalledOnce();
     expect(logOperation).not.toHaveBeenCalled();
   });
 
   it("should keep invalid and failed plant creation editable without duplicating a saved plant", async () => {
     const added = JournalFixtures.monstera();
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getPlantsResults: [
         { kind: "read", plants: [JournalFixtures.ficus()] },
         { kind: "readFailed", reason: new Error("offline") },
@@ -873,43 +873,6 @@ describe("browsing the journal", () => {
     expect(screen.getByRole("button", { name: /Garden.*1 plant/ })).toHaveFocus();
   });
 
-  it("should show unavailable cadence after four waterings across history pages", async () => {
-    const added = JournalFixtures.monstera();
-    const watered = JournalFixtures.care({
-      id: "o1",
-      date: "2026-01-01T00:00:00Z",
-      moisture: "wet",
-    });
-    const operations = Array.from({ length: 4 }, (_, index) => ({
-      ...watered,
-      id: operationId(`watering-${String(index)}`),
-      plantId: added.id,
-    }));
-    const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
-      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), added] }],
-      getOperationsByPlantId: {
-        p1: [JournalFixtures.operationsPage()],
-        p2: [
-          JournalFixtures.operationsPage(operations.slice(0, 3), true),
-          JournalFixtures.operationsPage(operations.slice(3)),
-        ],
-      },
-    });
-    render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-      />
-    ));
-
-    const newCard = await screen.findByRole("article", { name: "Monstera deliciosa" });
-    expect(within(newCard).getByText("Insufficient watering operations.")).toBeInTheDocument();
-  });
-
   it.each([
     [{ kind: "unknownComponent" as const }, "Choose known substrate components."],
     [
@@ -919,7 +882,7 @@ describe("browsing the journal", () => {
     [new Error("private connection"), "The plant could not be saved."],
   ])("should keep the plant sheet open after creation cannot proceed", async (outcome, message) => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {
@@ -953,79 +916,9 @@ describe("browsing the journal", () => {
     expect(screen.queryByText("private connection")).not.toBeInTheDocument();
   });
 
-  it("should fail a missing sample when older pages contain five waterings", async () => {
-    const missing = JournalFixtures.monstera();
-    const watered = JournalFixtures.care({
-      id: "o1",
-      date: "2026-01-01T00:00:00Z",
-      moisture: "wet",
-    });
-    const olderWaterings = Array.from({ length: 5 }, (_, index) => ({
-      ...watered,
-      id: operationId(`water-${String(index)}`),
-      plantId: missing.id,
-    }));
-    const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
-      getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus(), missing] }],
-      getOperationsByPlantId: {
-        p1: [JournalFixtures.operationsPage()],
-        p2: [
-          JournalFixtures.operationsPage(olderWaterings.slice(0, 3), true),
-          JournalFixtures.operationsPage(olderWaterings.slice(3)),
-        ],
-      },
-    });
-
-    render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-      />
-    ));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-  });
-
-  it.each([
-    [[JournalFixtures.operationsPage([], true)], "an incomplete empty page"],
-    [
-      [
-        JournalFixtures.operationsPage([JournalFixtures.repot("o1", "2026-01-01T00:00:00Z")], true),
-        { kind: "readFailed" as const, reason: new Error("private history") },
-      ],
-      "an unreadable older page",
-    ],
-  ])("should reject %s for a missing attention sample", async (pages) => {
-    const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
-      getPlantsResults: [
-        { kind: "read", plants: [JournalFixtures.ficus(), JournalFixtures.monstera()] },
-      ],
-      getOperationsByPlantId: {
-        p1: [JournalFixtures.operationsPage()],
-        p2: pages as [GetOperationsResult, ...GetOperationsResult[]],
-      },
-    });
-    render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-      />
-    ));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
-  });
-
   it("should cancel plant creation without a write and return focus to Add plant", async () => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const createPlant = vi.fn((details: NewPlantDetails) => base.createPlant(details));
@@ -1052,7 +945,7 @@ describe("browsing the journal", () => {
 
   it("should edit an active plant's details without logging an operation and refocus the edit control", async () => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const editPlant = vi
@@ -1089,7 +982,7 @@ describe("browsing the journal", () => {
 
   it("should report an edited plant whose garden reload rejects", async () => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     let gardenReads = 0;
@@ -1138,7 +1031,7 @@ describe("browsing the journal", () => {
     [new Error("private connection"), "The plant could not be saved."],
   ])("should keep the plant sheet open when editing reports %o", async (outcome, message) => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {
@@ -1166,7 +1059,7 @@ describe("browsing the journal", () => {
 
   it("should cancel editing without a write and return focus to the edit control", async () => {
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const editPlant = vi.fn((id: PlantId, details: NewPlantDetails) => base.editPlant(id, details));
@@ -1191,103 +1084,40 @@ describe("browsing the journal", () => {
     expect(editPlant).not.toHaveBeenCalled();
   });
 
-  it("should ignore an obsolete missing-attention history read after switching views", async () => {
-    const added = JournalFixtures.monstera();
-    let finishHistory: (result: GetOperationsResult) => void = () => undefined;
-    const olderHistory = new Promise<GetOperationsResult>((resolve) => {
-      finishHistory = resolve;
-    });
-    const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
-      getPlantsResults: [
-        { kind: "read", plants: [JournalFixtures.ficus()] },
-        { kind: "read", plants: [JournalFixtures.ficus(), added] },
-      ],
-      getOperationsByPlantId: {
-        p1: [JournalFixtures.operationsPage()],
-        p2: [
-          JournalFixtures.operationsPage(
-            [JournalFixtures.repot("o1", "2026-01-01T00:00:00Z")],
-            true,
-          ),
-        ],
-      },
-    });
-    let finishRequestedHistory: () => void = () => undefined;
-    const journal = {
-      ...base,
-      createPlant: () => Promise.resolve({ kind: "created" as const, plant: added }),
-      getPlants: (status?: "active" | "archived") =>
-        status === "archived"
-          ? Promise.resolve({ kind: "read" as const, plants: [] })
-          : base.getPlants(),
-      getOperations: (id: PlantId, window: OperationWindow) => {
-        if (id === added.id && window.offset > 0) {
-          finishRequestedHistory();
-          return olderHistory;
-        }
-        return base.getOperations(id, window);
-      },
-    };
-    const requestedHistory = new Promise<void>((resolve) => {
-      finishRequestedHistory = resolve;
-    });
-    render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-      />
-    ));
-    await screen.findByRole("article", { name: "Fern" });
-    fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
-    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
-    fireEvent.input(within(dialog).getByRole("textbox", { name: "Species" }), {
-      target: { value: "Monstera" },
-    });
-    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
-      target: { value: "Kitchen" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save plant" }));
-    await requestedHistory;
-    fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
-    finishHistory({ kind: "readFailed", reason: new Error("obsolete read") });
-    await olderHistory;
-
-    expect(screen.getByRole("button", { name: /Cemetery.*0 plants/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("should fail the journal load when current plants cannot be read or attention is unmatched", async () => {
+  it("should fail the journal load when current plants cannot be read or pushed attention is unmatched", async () => {
     const unrelatedSample = {
       plantId: JournalFixtures.monstera().id,
       watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
     };
-    const mismatchedAttention: GetAttentionResult = {
-      kind: "read",
-      projection: {
-        ...unavailableFicusAttentionResult.projection,
-        plants: [...unavailableFicusAttentionResult.projection.plants, unrelatedSample],
-      },
+    const mismatchedAttention: Journal.AttentionProjection = {
+      ...unavailableFicusAttention,
+      plants: [...unavailableFicusAttention.plants, unrelatedSample],
+    };
+    const ficusSample: Journal.AttentionSample = {
+      plantId: JournalFixtures.ficus().id,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const duplicateAttention: Journal.AttentionProjection = {
+      ...unavailableFicusAttention,
+      plants: [ficusSample, ficusSample],
     };
     const cases = [
       {
         plants: { kind: "readFailed" as const, reason: new Error("private plant details") },
-        attention: unavailableFicusAttentionResult,
+        attentionProjection: unavailableFicusAttention,
       },
       {
         plants: { kind: "read" as const, plants: [JournalFixtures.ficus()] },
-        attention: mismatchedAttention,
+        attentionProjection: mismatchedAttention,
+      },
+      {
+        plants: { kind: "read" as const, plants: [JournalFixtures.ficus()] },
+        attentionProjection: duplicateAttention,
       },
     ];
-    for (const { plants, attention } of cases) {
+    for (const { plants, attentionProjection } of cases) {
       const journal = JournalFixtures.buildJournal({
-        getAttentionResults: [attention],
+        attentionProjection,
         getPlantsResults: [plants],
       });
       const view = render(() => (
@@ -1307,10 +1137,91 @@ describe("browsing the journal", () => {
     }
   });
 
+  it("should fail when a pushed projection contains a plant outside the active set", async () => {
+    const ficusPlant = JournalFixtures.ficus();
+    const monsteraPlant = JournalFixtures.monstera();
+    const ficusOnlyProjection: Journal.AttentionProjection = {
+      measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+      plants: [
+        {
+          plantId: ficusPlant.id,
+          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+        },
+      ],
+    };
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: ficusOnlyProjection,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+
+    journal.pushAttention({
+      measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
+      plants: [
+        {
+          plantId: ficusPlant.id,
+          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+        },
+        {
+          plantId: monsteraPlant.id,
+          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+        },
+      ],
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+  });
+
+  it("should remove archived plant ids from the recently-archived set when a projection omits them", async () => {
+    const ficusPlant = JournalFixtures.ficus();
+    const base = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getPlantsResults: [
+        { kind: "read", plants: [ficusPlant] },
+        { kind: "read", plants: [] },
+      ],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const journal = {
+      ...base,
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+      archivePlant: () => Promise.resolve({ kind: "archived" as const }),
+    };
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive permanently" }));
+    await screen.findByRole("button", { name: /Garden.*0 plants/ });
+
+    journal.pushAttention({ measuredAt: Journal.instant("2026-01-02T00:00:00Z"), plants: [] });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("should report an operation history read failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [{ kind: "readFailed", reason }] },
     });
 
@@ -1329,9 +1240,10 @@ describe("browsing the journal", () => {
   });
 
   it("should report an unexpected rejected request", async () => {
+    const base = JournalFixtures.buildJournal();
     const journal = {
-      ...JournalFixtures.buildJournal(),
-      getAttention: () => Promise.reject(new Error("private details")),
+      ...base,
+      getPlants: () => Promise.reject(new Error("private details")),
     };
 
     render(() => (
@@ -1395,7 +1307,7 @@ describe("browsing the journal", () => {
   it("should report a saved plant whose garden reload rejects", async () => {
     const added = JournalFixtures.monstera();
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getPlantsResults: [{ kind: "read", plants: [JournalFixtures.ficus()] }],
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
@@ -1446,7 +1358,7 @@ describe("browsing the journal", () => {
       rejectArchived = reject;
     });
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const journal = {

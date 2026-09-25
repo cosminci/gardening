@@ -2,19 +2,17 @@ import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import { instant } from "../../src/domain/Journal";
+import type { AttentionProjection } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
 
-const unavailableFicusAttentionResult = {
-  kind: "read" as const,
-  projection: {
-    measuredAt: instant("2026-01-01T00:00:00Z"),
-    plants: [
-      {
-        plantId: ficus().id,
-        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
-      },
-    ],
-  },
+const unavailableFicusAttention: AttentionProjection = {
+  measuredAt: instant("2026-01-01T00:00:00Z"),
+  plants: [
+    {
+      plantId: ficus().id,
+      watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+    },
+  ],
 };
 
 const openDeleteConfirmation = () => {
@@ -30,7 +28,7 @@ describe("operation delete failures", () => {
   it("should report when an operation no longer exists", async () => {
     const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
     const journal = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       deleteOperationResult: { kind: "operationMissing" },
     });
@@ -54,7 +52,7 @@ describe("operation delete failures", () => {
   it("should reject deleting the plant's current latest repot", async () => {
     const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
     const journal = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       deleteOperationResult: { kind: "cannotDeleteLatestRepot" },
     });
@@ -82,7 +80,7 @@ describe("operation delete failures", () => {
     const reason = new Error("private details");
     const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
     const journal = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       deleteOperationResult: { kind: "deleteFailed", reason },
     });
@@ -109,7 +107,7 @@ describe("operation delete failures", () => {
     const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
     const journal = {
       ...buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [operationsPage([existing])] },
       }),
       deleteOperation: () => Promise.reject(new Error("private details")),
@@ -136,15 +134,19 @@ describe("operation delete failures", () => {
   it("should report when the journal cannot refresh after deleting", async () => {
     const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
     const base = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage([existing])] },
       deleteOperationResult: { kind: "deleted" },
     });
-    let attentionReads = 0;
+    let gardenReads = 0;
     const journal = {
       ...base,
-      getAttention: () =>
-        attentionReads++ === 0 ? base.getAttention() : Promise.reject(new Error("private details")),
+      getPlants: (status?: string) =>
+        status === "archived"
+          ? Promise.resolve({ kind: "read" as const, plants: [] })
+          : gardenReads++ === 0
+            ? base.getPlants()
+            : Promise.reject(new Error("private details")),
     };
     render(() => (
       <App
