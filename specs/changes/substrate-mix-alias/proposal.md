@@ -39,7 +39,6 @@ Reuses the existing `NomenclatureName`/`NomenclatureInfo` opaque types and the e
 ### Database schema (Flyway migration)
 
 ```sql
--- V2__create_substrate_mix_alias_table.sql
 create table substrate_mix_alias (
     id text primary key check (length(id) = 36),
     name text not null,
