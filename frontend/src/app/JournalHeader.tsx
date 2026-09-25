@@ -1,18 +1,38 @@
 import { Show } from "solid-js";
 import type { Component } from "solid-js";
+import type { FeedConnectionState } from "../domain/PlantAttention";
 
 interface JournalHeaderProps {
   readonly loaded: boolean;
   readonly gardenCount: number;
   readonly cemeteryCount: number;
   readonly selected: "garden" | "cemetery";
+  readonly connectionState: FeedConnectionState;
   readonly onSelect: (view: "garden" | "cemetery") => void;
   readonly onAddPlant: () => void;
 }
 
+const connectionStateLabel = (state: FeedConnectionState) => {
+  switch (state) {
+    case "connecting":
+      return "Attention feed connecting";
+    case "connected":
+      return "Attention feed connected";
+    case "disconnected":
+      return "Attention feed disconnected";
+  }
+};
+
 export const JournalHeader: Component<JournalHeaderProps> = (props) => (
   <header class="masthead">
-    <h1>Plant Journal</h1>
+    <div class="masthead__heading">
+      <h1>Plant Journal</h1>
+      <span
+        role="status"
+        aria-label={connectionStateLabel(props.connectionState)}
+        class={`feed-status feed-status--${props.connectionState}`}
+      />
+    </div>
     <Show when={props.loaded}>
       <div class="masthead__actions">
         <button

@@ -4,6 +4,7 @@ import {
   Show,
   Switch,
   createEffect,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -13,7 +14,7 @@ import type * as Journal from "../domain/Journal";
 import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
-import type { PlantAttentionClient } from "../domain/PlantAttention";
+import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
 import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
@@ -30,15 +31,14 @@ import "./app.css";
 interface AppProps {
   readonly plants: PlantClient;
   readonly operations: OperationClient;
-  readonly attention: PlantAttentionClient;
+  readonly attention: PlantAttentionFeed;
   readonly substrates: SubstrateComponentClient;
   readonly pesticideCatalog: PesticideClient;
 }
 
 interface GardenHistory {
   readonly kind: "garden";
-  readonly attention: Journal.PlantAttention;
-  readonly measuredAt: Journal.Instant;
+  readonly plant: Journal.Plant;
   readonly page: Journal.OperationPage;
 }
 
@@ -77,31 +77,69 @@ export const App: Component<AppProps> = (props) => {
   const [plantSaveError, setPlantSaveError] = createSignal<string>();
   const [creationReloadFailed, setCreationReloadFailed] = createSignal(false);
   const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
+  const [attentionProjection, setAttentionProjection] = createSignal<Journal.AttentionProjection>();
+  const [feedConnectionState, setFeedConnectionState] =
+    createSignal<FeedConnectionState>("connecting");
   const recentlyArchived = new Set<Journal.PlantId>();
+  let activeIds = new Set<Journal.PlantId>();
+  let activePlantIdsLoaded = false;
   let loadVersion = 0;
-  let latestAttention: Journal.AttentionProjection | undefined;
   let initialViewLoaded = false;
-  const histories = () => (selected() === "garden" ? gardenHistories() : cemeteryHistories());
+  let unsubscribeFeed: (() => void) | undefined;
 
-  const loadJournal = async (animate = false, cachedAttention?: Journal.AttentionProjection) => {
+  const orderedGardenHistories = createMemo(() => {
+    const proj = attentionProjection();
+    const histories = gardenHistories();
+    if (proj === undefined) return histories;
+    const samplesById = new Map(proj.plants.map((s) => [s.plantId, s]));
+    const pending: GardenHistory[] = [];
+    const knownHistories: GardenHistory[] = [];
+    const plantAttentions: { plant: Journal.Plant; watering: Journal.WateringAttention }[] = [];
+    for (const h of histories) {
+      const sample = samplesById.get(h.plant.id);
+      if (sample !== undefined) {
+        knownHistories.push(h);
+        plantAttentions.push({ plant: h.plant, watering: sample.watering });
+      } else {
+        pending.push(h);
+      }
+    }
+    const ordered = orderPlantAttention(plantAttentions);
+    const sortedKnown = knownHistories.toSorted(
+      (a, b) =>
+        ordered.findIndex((pa) => pa.plant.id === a.plant.id) -
+        ordered.findIndex((pa) => pa.plant.id === b.plant.id),
+    );
+    return [...pending, ...sortedKnown];
+  });
+
+  const histories = () =>
+    selected() === "garden" ? orderedGardenHistories() : cemeteryHistories();
+
+  const isProjectionValid = (
+    proj: Journal.AttentionProjection,
+    ids: Set<Journal.PlantId>,
+  ): boolean => {
+    const samples = proj.plants;
+    if (samples.length !== new Set(samples.map((s) => s.plantId)).size) return false;
+    const filtered = samples.filter((s) => !recentlyArchived.has(s.plantId));
+    return !filtered.some((s) => !ids.has(s.plantId));
+  };
+
+  const loadJournal = async (animate = false) => {
     const version = ++loadVersion;
     const plants = props.plants;
     const operations = props.operations;
-    const [plantsResult, countResult, attentionResult, componentsResult, pesticidesResult] =
-      await Promise.all([
-        plants.getPlants(),
-        plants.getArchivedCount(),
-        cachedAttention === undefined
-          ? props.attention.getAttention()
-          : Promise.resolve({ kind: "read" as const, projection: cachedAttention }),
-        props.substrates.getSubstrateComponents(),
-        props.pesticideCatalog.getPesticides(),
-      ]);
+    const [plantsResult, countResult, componentsResult, pesticidesResult] = await Promise.all([
+      plants.getPlants(),
+      plants.getArchivedCount(),
+      props.substrates.getSubstrateComponents(),
+      props.pesticideCatalog.getPesticides(),
+    ]);
     if (version !== loadVersion) return;
     if (
       plantsResult.kind !== "read" ||
       countResult.kind !== "read" ||
-      attentionResult.kind !== "read" ||
       componentsResult.kind !== "read" ||
       pesticidesResult.kind !== "read"
     ) {
@@ -110,28 +148,19 @@ export const App: Component<AppProps> = (props) => {
     }
     setSubstrateComponents(componentsResult.entries);
     setPesticides(pesticidesResult.entries);
-    latestAttention = attentionResult.projection;
 
-    const attentionSamples = attentionResult.projection.plants;
-    for (const id of recentlyArchived)
-      if (!attentionSamples.some((sample) => sample.plantId === id)) recentlyArchived.delete(id);
-    const attentionById = new Map(
-      attentionSamples
-        .filter((sample) => !recentlyArchived.has(sample.plantId))
-        .map((sample) => [sample.plantId, sample]),
-    );
-    const activeIds = new Set(plantsResult.plants.map((plant) => plant.id));
-    if (
-      attentionSamples.length !== new Set(attentionSamples.map((sample) => sample.plantId)).size ||
-      [...attentionById.keys()].some((id) => !activeIds.has(id))
-    ) {
+    const newActiveIds = new Set(plantsResult.plants.map((plant) => plant.id));
+    const proj = attentionProjection();
+    if (proj !== undefined && !isProjectionValid(proj, newActiveIds)) {
       setView("failed");
       return;
     }
+    activeIds = newActiveIds;
+    activePlantIdsLoaded = true;
+
     const results = await Promise.all(
       plantsResult.plants.map(async (plant) => ({
         plant,
-        sample: attentionById.get(plant.id),
         operationsResult: await operations.getOperations(plant.id, {
           offset: 0,
           size: recentOperationCount,
@@ -140,35 +169,16 @@ export const App: Component<AppProps> = (props) => {
     );
     if (version !== loadVersion) return;
     const loaded: GardenHistory[] = [];
-    for (const { plant, sample, operationsResult } of results) {
+    for (const { plant, operationsResult } of results) {
       if (operationsResult.kind !== "read") {
         setView("failed");
         return;
       }
-      let watering = sample?.watering;
-      if (watering === undefined) {
-        const count = await countWaterings(plant.id, operationsResult.page, operations);
-        if (version !== loadVersion) return;
-        if (count === undefined || count >= 5) {
-          setView("failed");
-          return;
-        }
-        watering = { kind: "unavailable", sampleCount: count, maybeElapsed: null };
-      }
-      loaded.push({
-        kind: "garden",
-        attention: { plant, watering },
-        measuredAt: attentionResult.projection.measuredAt,
-        page: operationsResult.page,
-      });
+      loaded.push({ kind: "garden", plant, page: operationsResult.page });
     }
-    const ordered = orderPlantAttention(loaded.map((history) => history.attention));
-    const orderedHistories = loaded.toSorted(
-      (first, second) => ordered.indexOf(first.attention) - ordered.indexOf(second.attention),
-    );
     const display = () => {
       if (version !== loadVersion) return;
-      setGardenHistories(orderedHistories);
+      setGardenHistories(loaded);
       setCemeteryCount(countResult.count);
       setReady(true);
       setView("loaded");
@@ -279,7 +289,7 @@ export const App: Component<AppProps> = (props) => {
     setPlantTarget(undefined);
     selectView("garden");
     setCreationReloadFailed(false);
-    await loadJournal(false, latestAttention).catch(() => setView("failed"));
+    await loadJournal().catch(() => setView("failed"));
     if (view() === "failed") setCreationReloadFailed(true);
     document.getElementById("garden-toggle")?.focus();
   };
@@ -305,7 +315,7 @@ export const App: Component<AppProps> = (props) => {
       return;
     }
     setPlantTarget(undefined);
-    await loadJournal(false, latestAttention).catch(() => setView("failed"));
+    await loadJournal().catch(() => setView("failed"));
     document.getElementById(editPlantControlId(plant.id))?.focus();
   };
 
@@ -433,6 +443,26 @@ export const App: Component<AppProps> = (props) => {
   });
 
   onMount(() => {
+    unsubscribeFeed = props.attention.subscribe((event) => {
+      if (event.kind === "connectionState") {
+        setFeedConnectionState(event.state);
+      } else {
+        const proj = event.projection;
+        for (const id of recentlyArchived)
+          if (!proj.plants.some((s) => s.plantId === id)) recentlyArchived.delete(id);
+        if (activePlantIdsLoaded) {
+          if (!isProjectionValid(proj, activeIds)) {
+            setView("failed");
+            return;
+          }
+        }
+        setAttentionProjection(proj);
+      }
+    });
+    onCleanup(() => {
+      unsubscribeFeed?.();
+    });
+
     const navigate = () => {
       selectView(viewFromUrl(), false);
     };
@@ -452,6 +482,7 @@ export const App: Component<AppProps> = (props) => {
         gardenCount={gardenHistories().length}
         cemeteryCount={cemeteryCount()}
         selected={selected()}
+        connectionState={feedConnectionState()}
         onSelect={selectView}
         onAddPlant={() => {
           setPlantSaveError(undefined);
@@ -487,22 +518,27 @@ export const App: Component<AppProps> = (props) => {
                     <Show when={garden()}>
                       {(entry) => (
                         <PlantCard
-                          attention={entry().attention}
-                          measuredAt={entry().measuredAt}
+                          plant={entry().plant}
+                          watering={
+                            attentionProjection()?.plants.find(
+                              (s) => s.plantId === entry().plant.id,
+                            )?.watering
+                          }
+                          measuredAt={attentionProjection()?.measuredAt}
                           operationPage={entry().page}
                           substrateComponents={substrateComponents()}
                           pesticides={pesticides()}
                           getOperations={(window) =>
-                            props.operations.getOperations(entry().attention.plant.id, window)
+                            props.operations.getOperations(entry().plant.id, window)
                           }
                           operationChange={operationChange()}
                           onLog={() => {
                             setSaveError(undefined);
-                            setFormTarget({ kind: "log", plantId: entry().attention.plant.id });
+                            setFormTarget({ kind: "log", plantId: entry().plant.id });
                           }}
                           onArchive={() => {
                             setArchiveCompleted(false);
-                            setArchiveTarget(entry().attention.plant);
+                            setArchiveTarget(entry().plant);
                           }}
                           onEditPlant={(plant) => {
                             setPlantSaveError(undefined);
@@ -618,27 +654,4 @@ export const App: Component<AppProps> = (props) => {
       </Show>
     </main>
   );
-};
-
-const countWaterings = async (
-  plantId: Journal.PlantId,
-  firstPage: Journal.OperationPage,
-  operations: OperationClient,
-): Promise<number | undefined> => {
-  let page = firstPage;
-  let count = page.operations.filter(
-    (operation) => operation.details.kind === "care" && operation.details.actions.has("watered"),
-  ).length;
-  let offset = 0;
-  while (count < 5 && page.hasNextPage) {
-    if (page.operations.length === 0) return undefined;
-    offset += page.operations.length;
-    const next = await operations.getOperations(plantId, { offset, size: 10 });
-    if (next.kind !== "read") return undefined;
-    page = next.page;
-    count += page.operations.filter(
-      (operation) => operation.details.kind === "care" && operation.details.actions.has("watered"),
-    ).length;
-  }
-  return count;
 };

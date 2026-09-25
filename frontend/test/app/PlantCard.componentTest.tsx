@@ -12,42 +12,31 @@ import { care, ficus } from "./JournalTestSupport";
 
 const ficusPlant = ficus();
 const attentionMeasuredAt = instant("2026-01-01T00:00:00Z");
-const currentFicusAttention = {
-  plant: ficusPlant,
-  watering: {
-    kind: "current" as const,
-    sampleCount: 5,
-    averageInterval: milliseconds("187200000"),
-    elapsed: milliseconds("144000000"),
-  },
+const currentWatering = {
+  kind: "current" as const,
+  sampleCount: 5,
+  averageInterval: milliseconds("187200000"),
+  elapsed: milliseconds("144000000"),
 };
-const unknownFicusAttention = {
-  plant: ficusPlant,
-  watering: {
-    kind: "unavailable" as const,
-    sampleCount: 4,
-    maybeElapsed: null,
-  },
+const unknownWatering = {
+  kind: "unavailable" as const,
+  sampleCount: 4,
+  maybeElapsed: null,
 };
-const redAlertFicusAttention = {
-  plant: ficusPlant,
-  watering: {
-    kind: "redAlert" as const,
-    sampleCount: 5,
-    averageInterval: milliseconds("3600000"),
-    elapsed: milliseconds("176400000"),
-  },
+const redAlertWatering = {
+  kind: "redAlert" as const,
+  sampleCount: 5,
+  averageInterval: milliseconds("3600000"),
+  elapsed: milliseconds("176400000"),
 };
-const overdueFicusAttention = {
-  plant: ficusPlant,
-  watering: {
-    kind: "overdue" as const,
-    sampleCount: 5,
-    averageInterval: milliseconds("86400000"),
-    elapsed: milliseconds("90000000"),
-  },
+const overdueWatering = {
+  kind: "overdue" as const,
+  sampleCount: 5,
+  averageInterval: milliseconds("86400000"),
+  elapsed: milliseconds("90000000"),
 };
 const emptyCardProps = {
+  plant: ficusPlant,
   measuredAt: attentionMeasuredAt,
   operationPage: { operations: [], hasNextPage: false },
   substrateComponents: [],
@@ -81,12 +70,23 @@ describe("plant cards", () => {
     vi.useRealTimers();
   });
 
+  it("should show a pending attention indicator when no projection has arrived", () => {
+    render(() => <PlantCard {...emptyCardProps} />);
+
+    const pending = screen.getByRole("complementary", { name: "Attention pending for Fern" });
+    expect(pending).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Watering attention details for Fern" }),
+    ).toBeNull();
+  });
+
   it("should distinguish edit controls for same-day care operations", () => {
     const componentId = substrateComponentId("00000000-0000-4000-8000-000000000003");
     const onEdit = vi.fn();
     render(() => (
       <PlantCard
-        attention={currentFicusAttention}
+        plant={ficusPlant}
+        watering={currentWatering}
         measuredAt={attentionMeasuredAt}
         operationPage={{
           operations: [
@@ -129,7 +129,7 @@ describe("plant cards", () => {
     render(() => (
       <PlantCard
         {...emptyCardProps}
-        attention={currentFicusAttention}
+        watering={currentWatering}
         operationPage={{
           operations: days.map((day) =>
             care({
@@ -151,7 +151,8 @@ describe("plant cards", () => {
 
   it("should show history access only when older operations exist", () => {
     const props = {
-      attention: currentFicusAttention,
+      plant: ficusPlant,
+      watering: currentWatering,
       measuredAt: attentionMeasuredAt,
       substrateComponents: [],
       pesticides: [],
@@ -224,7 +225,7 @@ describe("plant cards", () => {
     const onArchive = vi.fn();
 
     render(() => (
-      <PlantCard {...emptyCardProps} attention={currentFicusAttention} onArchive={onArchive} />
+      <PlantCard {...emptyCardProps} watering={currentWatering} onArchive={onArchive} />
     ));
 
     fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
@@ -236,7 +237,7 @@ describe("plant cards", () => {
     const onEditPlant = vi.fn();
 
     render(() => (
-      <PlantCard {...emptyCardProps} attention={currentFicusAttention} onEditPlant={onEditPlant} />
+      <PlantCard {...emptyCardProps} watering={currentWatering} onEditPlant={onEditPlant} />
     ));
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
@@ -251,8 +252,8 @@ describe("plant cards", () => {
     expect(screen.queryByRole("button", { name: "Edit Fern" })).not.toBeInTheDocument();
   });
 
-  it(`should render ${unknownFicusAttention.watering.kind} watering with an unavailable cadence`, () => {
-    render(() => <PlantCard {...emptyCardProps} attention={unknownFicusAttention} />);
+  it(`should render ${unknownWatering.kind} watering with an unavailable cadence`, () => {
+    render(() => <PlantCard {...emptyCardProps} watering={unknownWatering} />);
 
     expect(screen.getByLabelText("Watering cadence unavailable")).toHaveTextContent("?");
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
@@ -260,10 +261,10 @@ describe("plant cards", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent(expectedDetails);
   });
 
-  it(`should render ${currentFicusAttention.watering.kind} watering with time until it is due`, () => {
+  it(`should render ${currentWatering.kind} watering with time until it is due`, () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
-    render(() => <PlantCard {...emptyCardProps} attention={currentFicusAttention} />);
+    render(() => <PlantCard {...emptyCardProps} watering={currentWatering} />);
 
     expect(screen.getByLabelText("Watering current")).toHaveTextContent("✓");
     expect(screen.getByText("in 12h")).toBeInTheDocument();
@@ -276,10 +277,10 @@ describe("plant cards", () => {
     expect(within(tooltip).getByText("3 minutes ago")).toBeInTheDocument();
   });
 
-  it(`should render ${overdueFicusAttention.watering.kind} watering with the overdue duration`, () => {
+  it(`should render ${overdueWatering.kind} watering with the overdue duration`, () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
-    render(() => <PlantCard {...emptyCardProps} attention={overdueFicusAttention} />);
+    render(() => <PlantCard {...emptyCardProps} watering={overdueWatering} />);
 
     expect(screen.getByLabelText("Watering overdue")).toHaveTextContent("!");
     expect(screen.getByText("late 1h")).toBeInTheDocument();
@@ -287,10 +288,10 @@ describe("plant cards", () => {
     expect(within(screen.getByRole("tooltip")).getByText("1 day")).toBeInTheDocument();
   });
 
-  it(`should render ${redAlertFicusAttention.watering.kind} watering with the overdue duration`, () => {
+  it(`should render ${redAlertWatering.kind} watering with the overdue duration`, () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:01:00Z"));
-    render(() => <PlantCard {...emptyCardProps} attention={redAlertFicusAttention} />);
+    render(() => <PlantCard {...emptyCardProps} watering={redAlertWatering} />);
 
     expect(screen.getByLabelText("Watering red alert")).toHaveTextContent("×");
     expect(screen.getByText("late 2d")).toBeInTheDocument();
@@ -301,7 +302,7 @@ describe("plant cards", () => {
 
   it("should render an unrecognized persisted substrate component", () => {
     const expectedComponentId = substrateComponentId("00000000-0000-4000-8000-000000000003");
-    render(() => <PlantCard {...emptyCardProps} attention={currentFicusAttention} />);
+    render(() => <PlantCard {...emptyCardProps} watering={currentWatering} />);
 
     expect(screen.getByText(`${expectedComponentId} 100%`)).toBeInTheDocument();
   });
@@ -311,7 +312,7 @@ describe("plant cards", () => {
     render(() => (
       <PlantCard
         {...emptyCardProps}
-        attention={currentFicusAttention}
+        watering={currentWatering}
         operationPage={{
           operations: [
             care({

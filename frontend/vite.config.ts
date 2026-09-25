@@ -7,11 +7,20 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     strictPort: true,
-    proxy: Object.fromEntries(
-      ["/health", "/plants", "/attention", "/operations", "/pesticides", "/substrate"].map(
-        (path) => [path, { target: `http://127.0.0.1:${process.env["GARDENING_PORT"] ?? "8080"}` }],
+    proxy: {
+      ...Object.fromEntries(
+        ["/health", "/plants", "/attention", "/operations", "/pesticides", "/substrate"].map(
+          (path) => [
+            path,
+            { target: `http://127.0.0.1:${process.env["GARDENING_PORT"] ?? "8080"}` },
+          ],
+        ),
       ),
-    ),
+      "/attention/feed": {
+        target: `ws://127.0.0.1:${process.env["GARDENING_PORT"] ?? "8080"}`,
+        ws: true,
+      },
+    },
   },
   resolve: {
     alias: {

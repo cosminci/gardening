@@ -1,23 +1,25 @@
 import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
-import type { GetOperationsResult, OperationWindow, PlantId } from "../../src/domain/Journal";
+import type {
+  AttentionProjection,
+  GetOperationsResult,
+  OperationWindow,
+  PlantId,
+} from "../../src/domain/Journal";
 import { instant, operationId } from "../../src/domain/Journal";
 import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
-const unavailableFicusAttentionResult = {
-  kind: "read" as const,
-  projection: {
-    measuredAt: instant("2026-01-01T00:00:00Z"),
-    plants: [
-      {
-        plantId: ficus().id,
-        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
-      },
-    ],
-  },
+const unavailableFicusAttention: AttentionProjection = {
+  measuredAt: instant("2026-01-01T00:00:00Z"),
+  plants: [
+    {
+      plantId: ficus().id,
+      watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+    },
+  ],
 };
 
 Vitest.describe("animating operation changes", () => {
@@ -32,7 +34,7 @@ Vitest.describe("animating operation changes", () => {
       finishRefresh = resolve;
     });
     const base = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });
@@ -86,7 +88,7 @@ Vitest.describe("animating operation changes", () => {
       value: startViewTransition,
     });
     const base = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });

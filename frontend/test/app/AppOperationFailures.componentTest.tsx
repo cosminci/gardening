@@ -3,6 +3,7 @@ import * as Vitest from "vitest";
 import { App } from "../../src/app/App";
 import { instant, operationId } from "../../src/domain/Journal";
 import type {
+  AttentionProjection,
   GetPlantsResult,
   GetOperationsResult,
   OperationWindow,
@@ -11,17 +12,14 @@ import type {
 } from "../../src/domain/Journal";
 import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
 
-const unavailableFicusAttentionResult = {
-  kind: "read" as const,
-  projection: {
-    measuredAt: instant("2026-01-01T00:00:00Z"),
-    plants: [
-      {
-        plantId: ficus().id,
-        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
-      },
-    ],
-  },
+const unavailableFicusAttention: AttentionProjection = {
+  measuredAt: instant("2026-01-01T00:00:00Z"),
+  plants: [
+    {
+      plantId: ficus().id,
+      watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+    },
+  ],
 };
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
@@ -30,7 +28,7 @@ Vitest.describe("operation failures", () => {
   Vitest.it("should report a logging failure without showing its reason", async () => {
     const reason = new Error("private details");
     const journal = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "loggingFailed", reason },
     });
@@ -65,7 +63,7 @@ Vitest.describe("operation failures", () => {
     "should reject a new operation when its plant was archived while the form was open",
     async () => {
       const journal = buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [operationsPage()] },
         logOperationResult: { kind: "plantArchived" },
       });
@@ -97,7 +95,7 @@ Vitest.describe("operation failures", () => {
   Vitest.it("should report an unexpectedly rejected write", async () => {
     const journal = {
       ...buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [operationsPage()] },
       }),
       logOperation: () => Promise.reject(new Error("private details")),
@@ -124,15 +122,15 @@ Vitest.describe("operation failures", () => {
 
   Vitest.it("should report when the journal cannot refresh after saving", async () => {
     const base = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage()] },
       logOperationResult: { kind: "logged", id: operationId("new") },
     });
-    let attentionReads = 0;
+    let plantReads = 0;
     const journal = {
       ...base,
-      getAttention: () =>
-        attentionReads++ === 0 ? base.getAttention() : Promise.reject(new Error("private details")),
+      getPlants: () =>
+        plantReads++ === 0 ? base.getPlants() : Promise.reject(new Error("private details")),
     };
     Testing.render(() => (
       <App
@@ -167,7 +165,7 @@ Vitest.describe("operation failures", () => {
         finishOperations = resolve;
       });
       const base = buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [operationsPage()] },
       });
       let gardenReads = 0;
@@ -239,15 +237,15 @@ Vitest.describe("operation failures", () => {
       },
     );
     const base = buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [operationsPage()] },
     });
-    let attentionReads = 0;
+    let plantReads = 0;
     const journal = {
       ...base,
-      getAttention: () => {
-        attentionReads += 1;
-        return base.getAttention();
+      getPlants: () => {
+        plantReads++;
+        return base.getPlants();
       },
       logOperation: () => saving,
     };
@@ -270,7 +268,7 @@ Vitest.describe("operation failures", () => {
 
     const editor = await Testing.screen.findByRole("dialog", { name: "Operation editor" });
     await Testing.waitFor(() => {
-      Vitest.expect(attentionReads).toBe(2);
+      Vitest.expect(plantReads).toBe(2);
     });
 
     Vitest.expect(editor).toBeInTheDocument();
@@ -285,7 +283,7 @@ Vitest.describe("operation failures", () => {
         rejectGarden = reject;
       });
       const base = buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [operationsPage()] },
         logOperationResult: { kind: "logged", id: operationId("new") },
       });
