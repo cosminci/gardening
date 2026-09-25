@@ -167,5 +167,7 @@ object SubstrateApi:
   // $COVERAGE-ON$
   private given Schema[SubstrateMixData] = Schema.derived[SubstrateMixData]
     .modify(_.notes)(_.copy(isOptional = false).nullable)
+    .modify(_.substrate)(_.copy(isOptional = false))
   private given Schema[SubstrateMix] = Schema.derived[SubstrateMix]
     .modify(_.notes)(_.copy(isOptional = false).nullable)
+    .modify(_.substrate)(_.copy(isOptional = false))

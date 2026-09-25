@@ -445,13 +445,13 @@ export interface components {
             id: string;
             name: string;
             notes: string | null;
-            substrate?: components["schemas"]["SubstratePart"][];
+            substrate: components["schemas"]["SubstratePart"][];
         };
         /** SubstrateMixData */
         SubstrateMixData: {
             name: string;
             notes: string | null;
-            substrate?: components["schemas"]["SubstratePart"][];
+            substrate: components["schemas"]["SubstratePart"][];
         };
         /** SubstratePart */
         SubstratePart: {
