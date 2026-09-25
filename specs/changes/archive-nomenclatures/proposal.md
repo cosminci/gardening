@@ -14,6 +14,16 @@ Let a household retire a substrate component or pesticide it no longer uses, gua
 
 ## Domain / Design Notes
 
+- `SubstrateComponent` and `Pesticide` each gain a `status`, using a new `NomenclatureStatus` shared between them the same way they already share `NomenclatureName`/`NomenclatureInfo` — not the unrelated `PlantStatus`:
+
+  ```scala
+  enum NomenclatureStatus derives CanEqual:
+    case Active, Archived
+
+  final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData, status: NomenclatureStatus)
+  final case class Pesticide(id: PesticideId, data: PesticideData, status: NomenclatureStatus)
+  ```
+
 - A substrate component and a pesticide each gain their own archive action and outcome: success, an unknown identity, an already-archived entry, or a failed write. The two catalogs stay independent of each other; nothing new couples them together.
 - Neither the `substrate_component` nor the `pesticide` table has a status column today. A new Flyway migration adds one to each, mirroring the existing `plant.status` column and check constraint:
 
@@ -35,7 +45,7 @@ Let a household retire a substrate component or pesticide it no longer uses, gua
 
 ## Doc Sync
 
-- `specs/design.md` — Domain model: substrate components and pesticides gain the same active/archived status as a plant; archiving excludes an entry from new repot and care-operation validation and locks it from further edits, while existing references keep resolving and displaying it unchanged.
+- `specs/design.md` — Domain model: substrate components and pesticides gain their own active/archived status, matching a plant's status shape but not sharing its type; archiving excludes an entry from new repot and care-operation validation and locks it from further edits, while existing references keep resolving and displaying it unchanged.
 
 ## Out of Scope
 
