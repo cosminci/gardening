@@ -16,8 +16,10 @@ import type { PlantClient } from "../domain/Plant";
 import type { PlantAttentionClient } from "../domain/PlantAttention";
 import type { SubstrateComponentClient } from "../domain/SubstrateComponentCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
+import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
 import { JournalHeader } from "./JournalHeader";
 import { displayJournalUpdate } from "./JournalTransition";
+import * as Controls from "./OperationControlIds";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { orderPlantAttention } from "./PlantAttentionOrdering";
@@ -69,6 +71,8 @@ export const App: Component<AppProps> = (props) => {
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
   const [plantTarget, setPlantTarget] = createSignal<PlantTarget>();
+  const [deleteTarget, setDeleteTarget] = createSignal<Journal.Operation>();
+  const [deleteCompleted, setDeleteCompleted] = createSignal(false);
   const [plantSheetCompleted, setPlantSheetCompleted] = createSignal(false);
   const [plantSaveError, setPlantSaveError] = createSignal<string>();
   const [creationReloadFailed, setCreationReloadFailed] = createSignal(false);
@@ -359,6 +363,30 @@ export const App: Component<AppProps> = (props) => {
     if (formTarget() === undefined) document.getElementById(operationControlId(target))?.focus();
   };
 
+  const confirmDelete = async (operation: Journal.Operation) => {
+    let result: Journal.DeleteOperationResult;
+    try {
+      result = await props.operations.deleteOperation(operation.id);
+    } catch {
+      return "The operation could not be deleted.";
+    }
+    if (result.kind === "operationMissing") return "This operation no longer exists.";
+    if (result.kind === "cannotDeleteLatestRepot")
+      return "This is the plant's current repot and cannot be deleted.";
+    if (result.kind === "deleteFailed") return "The operation could not be deleted.";
+    setDeleteCompleted(true);
+    setDeleteTarget(undefined);
+    setFormTarget(undefined);
+    setSaveError(undefined);
+    const refresh = selected() === "garden" ? loadJournal() : loadCemetery(true);
+    const version = loadVersion;
+    await refresh.catch(() => {
+      if (version === loadVersion) setView("failed");
+    });
+    setOperationChange({ kind: "deleted" });
+    return undefined;
+  };
+
   const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
     const result = await props.substrates.addSubstrateComponent(data);
     if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
@@ -549,6 +577,18 @@ export const App: Component<AppProps> = (props) => {
             onCancel={() => {
               setFormTarget(undefined);
             }}
+            onDelete={
+              target.kind === "edit"
+                ? {
+                    controlId: Controls.deleteOperationControlId(target.operation.id),
+                    onClick: () => {
+                      setDeleteCompleted(false);
+                      setDeleteTarget(target.operation);
+                    },
+                  }
+                : undefined
+            }
+            deleteConfirming={deleteTarget() !== undefined}
           />
         )}
       </Show>
@@ -560,6 +600,18 @@ export const App: Component<AppProps> = (props) => {
             onConfirm={() => confirmArchive(plant)}
             onCancel={() => {
               setArchiveTarget(undefined);
+            }}
+          />
+        )}
+      </Show>
+      <Show when={deleteTarget()} keyed>
+        {(operation) => (
+          <DeleteOperationConfirmation
+            operation={operation}
+            completed={deleteCompleted()}
+            onConfirm={() => confirmDelete(operation)}
+            onCancel={() => {
+              setDeleteTarget(undefined);
             }}
           />
         )}

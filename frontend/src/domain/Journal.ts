@@ -219,6 +219,12 @@ export type EditOperationResult =
   | { readonly kind: "operationTypeMismatch" }
   | { readonly kind: "editFailed"; readonly reason: Error };
 
+export type DeleteOperationResult =
+  | { readonly kind: "deleted" }
+  | { readonly kind: "operationMissing" }
+  | { readonly kind: "cannotDeleteLatestRepot" }
+  | { readonly kind: "deleteFailed"; readonly reason: Error };
+
 export type CatalogReadResult<A> =
   | { readonly kind: "read"; readonly entries: readonly A[] }
   | { readonly kind: "readFailed"; readonly reason: Error };

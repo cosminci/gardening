@@ -243,6 +243,8 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
         fail("plant HTTP must not log operations")
       override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
         fail("plant HTTP must not edit operations")
+      override def deleteOperation(id: OperationId): DeleteOperationResult =
+        fail("plant HTTP must not delete operations")
     val attention = new PlantAttentionMonitor:
       override def current: AttentionProjection       = fail("plant HTTP must not read attention")
       override def refreshAll: RefreshAttentionResult =

@@ -42,6 +42,19 @@
   border-top: 1px solid var(--line);
 }
 
+.operation-form__delete {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--danger);
+  border-radius: 0.5rem;
+  background: var(--danger);
+  color: white;
+  cursor: pointer;
+}
+
+.operation-form__delete:disabled {
+  cursor: wait;
+}
+
 @media (max-width: 28rem) {
   .operation-form {
     padding: 1.25rem;

@@ -113,6 +113,268 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
   });
 
+  Vitest.it(
+    "should delete a care operation, close the editor, and refresh its history",
+    async () => {
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const deleted: Journal.OperationId[] = [];
+      const journal = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([])],
+        },
+        deleteOperationResult: { kind: "deleted" },
+        deleted,
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+      );
+
+      await Testing.waitForElementToBeRemoved(() => Testing.screen.queryByText("3rd of March"));
+
+      Vitest.expect(deleted).toEqual([Journal.operationId("o1")]);
+      Vitest.expect(Testing.screen.queryByRole("dialog", { name: "Operation editor" })).toBeNull();
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    },
+  );
+
+  Vitest.it("should cancel deleting an operation and restore focus without writing", async () => {
+    const existing = JournalFixtures.repot("o1", "2026-03-03T00:00:00Z");
+    const deleteOperation = Vitest.vi.fn(() => Promise.resolve({ kind: "deleted" as const }));
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+      }),
+      deleteOperation,
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await Testing.screen.findByText("3rd of March");
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", {
+        name: "Edit recent repot operation 1 from 3rd of March",
+      }),
+    );
+    const deleteControl = Testing.screen.getByRole("button", { name: "Delete" });
+    deleteControl.focus();
+    Testing.fireEvent.click(deleteControl);
+    const warning = Testing.screen.getByRole("alertdialog");
+    const warningText = warning.textContent;
+    Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
+
+    Vitest.expect(warningText).toContain("cannot be undone");
+    Vitest.expect(deleteOperation).not.toHaveBeenCalled();
+    await Testing.waitFor(() => {
+      Vitest.expect(deleteControl).toHaveFocus();
+    });
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  Vitest.it(
+    "should dismiss only the delete confirmation, not the operation editor, on Escape",
+    async () => {
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const deleteOperation = Vitest.vi.fn(() => Promise.resolve({ kind: "deleted" as const }));
+      const journal = {
+        ...JournalFixtures.buildJournal({
+          getAttentionResults: [unavailableFicusAttentionResult],
+          getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+        }),
+        deleteOperation,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      Testing.fireEvent.keyDown(window, { key: "Escape" });
+
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(deleteOperation).not.toHaveBeenCalled();
+    },
+  );
+
+  Vitest.it("should delete an operation while viewing the cemetery", async () => {
+    const archivedPlant = {
+      ...JournalFixtures.ficus(),
+      details: { ...JournalFixtures.ficus().details, status: "archived" as const },
+    };
+    const existing = JournalFixtures.care({
+      id: "o1",
+      date: "2026-03-03T00:00:00Z",
+      moisture: "wet",
+    });
+    const deleted: Journal.OperationId[] = [];
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        getPlantsResults: [
+          { kind: "read", plants: [] },
+          { kind: "read", plants: [archivedPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([])],
+        },
+        deleteOperationResult: { kind: "deleted" },
+        deleted,
+      }),
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+      getOperationDates: () =>
+        Promise.resolve({
+          kind: "read" as const,
+          dates: { kind: "recorded" as const, first: existing.date, last: existing.date },
+        }),
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    Testing.fireEvent.click(
+      await Testing.screen.findByRole("button", { name: /Cemetery.*1 plant/ }),
+    );
+    const card = await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(
+      Testing.within(card).getByRole("button", { name: /Edit recent care operation/ }),
+    );
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+    const warning = Testing.screen.getByRole("alertdialog");
+    Testing.fireEvent.click(
+      Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    await Testing.waitFor(() => {
+      Vitest.expect(deleted).toEqual([Journal.operationId("o1")]);
+    });
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.within(Testing.screen.getByRole("article", { name: "Fern" })).queryByText(
+          "3rd of March",
+        ),
+      ).toBeNull();
+    });
+  });
+
+  Vitest.it(
+    "should ignore a stale post-delete refresh failure after leaving the garden",
+    async () => {
+      let rejectGarden: (reason: Error) => void = () => undefined;
+      const pendingGarden = new Promise<Journal.GetPlantsResult>((_resolve, reject) => {
+        rejectGarden = reject;
+      });
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const base = JournalFixtures.buildJournal({
+        getAttentionResults: [unavailableFicusAttentionResult],
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+        deleteOperationResult: { kind: "deleted" },
+      });
+      let gardenReads = 0;
+      const journal = {
+        ...base,
+        getPlants: (status?: Journal.PlantStatus) =>
+          status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [] })
+            : gardenReads++ === 0
+              ? base.getPlants()
+              : pendingGarden,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+      );
+      await Testing.waitFor(() => {
+        Vitest.expect(gardenReads).toBe(2);
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      await Testing.screen.findByRole("region", { name: "Cemetery" });
+      rejectGarden(new Error("stale refresh"));
+      await pendingGarden.catch(() => undefined);
+      await Promise.resolve();
+
+      Vitest.expect(Testing.screen.getByRole("region", { name: "Cemetery" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
   Vitest.it("should keep another plant usable as archived attention catches up", async () => {
     const ficusPlant = JournalFixtures.ficus();
     const monsteraPlant = JournalFixtures.monstera();

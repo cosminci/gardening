@@ -7,6 +7,11 @@ import type { SubstratePartInput } from "./SubstrateFields";
 import "./form-fields.css";
 import "./operation-form.css";
 
+export interface DeleteAction {
+  readonly controlId: string;
+  readonly onClick: () => void;
+}
+
 interface OperationFormProps {
   readonly initial: Journal.OperationDetails | undefined;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
@@ -21,6 +26,7 @@ interface OperationFormProps {
   readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
   readonly inactive?: boolean;
   readonly onCancel: () => void;
+  readonly onDelete?: DeleteAction | undefined;
 }
 
 export const OperationForm: Component<OperationFormProps> = (props) => {
@@ -201,6 +207,21 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
         </label>
         <Show when={validationError()}>{(error) => <p role="alert">{error()}</p>}</Show>
         <footer class="operation-form__actions">
+          <Show when={props.onDelete}>
+            {(onDelete) => (
+              <button
+                id={onDelete().controlId}
+                class="operation-form__delete"
+                type="button"
+                disabled={submitting()}
+                onClick={() => {
+                  onDelete().onClick();
+                }}
+              >
+                Delete
+              </button>
+            )}
+          </Show>
           <button class="primary-action" type="submit" disabled={submitting()}>
             {submitting() ? "Saving…" : "Save operation"}
           </button>

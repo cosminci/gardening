@@ -3,6 +3,7 @@ import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
+import type { DeleteAction } from "./OperationForm";
 import { PesticideEditor } from "./PesticideEditor";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
@@ -37,6 +38,8 @@ interface OperationSheetProps {
     data: Journal.PesticideData,
   ) => Promise<Journal.CatalogEditResult<Journal.Pesticide>>;
   readonly onCancel: () => void;
+  readonly onDelete?: DeleteAction | undefined;
+  readonly deleteConfirming?: boolean | undefined;
 }
 
 type NomenclatureEditor =
@@ -102,7 +105,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   };
 
   const closeOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || props.deleteConfirming === true) return;
     const currentEditor = editor();
     if (currentEditor !== undefined) closeEditor(currentEditor);
     else closeOperation();
@@ -196,6 +199,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
             });
           }}
           onCancel={closeOperation}
+          onDelete={props.onDelete}
         />
         <Show when={props.saveError}>
           {(message) => (

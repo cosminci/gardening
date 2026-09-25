@@ -311,4 +311,47 @@ describe("HttpOperationClient", () => {
     expect(offlineLog).toEqual({ kind: "loggingFailed", reason });
     expect(offlineEdit).toEqual({ kind: "editFailed", reason });
   });
+
+  it("should delete an operation and preserve its outcomes", async () => {
+    const requests: Request[] = [];
+    const client = makeHttpOperationClient(
+      respondingWith(
+        [
+          new Response(null, { status: 204 }),
+          jsonResponse({ message: "operation not found" }, 404),
+          jsonResponse({ message: "cannot delete the plant's current latest repot" }, 409),
+          jsonResponse({ message: "operation could not be deleted" }, 500),
+        ],
+        requests,
+      ),
+    );
+
+    const deleted = await client.deleteOperation(Journal.operationId("o1"));
+    const missing = await client.deleteOperation(Journal.operationId("missing"));
+    const latestRepot = await client.deleteOperation(Journal.operationId("repot"));
+    const failed = await client.deleteOperation(Journal.operationId("o1"));
+
+    expect(deleted).toEqual({ kind: "deleted" });
+    expect(missing).toEqual({ kind: "operationMissing" });
+    expect(latestRepot).toEqual({ kind: "cannotDeleteLatestRepot" });
+    expect(failed).toMatchObject({ kind: "deleteFailed" });
+    const requestedPaths = requests.map(
+      (request) => `${request.method} ${new URL(request.url).pathname}`,
+    );
+    expect(requestedPaths).toEqual([
+      "DELETE /operations/o1",
+      "DELETE /operations/missing",
+      "DELETE /operations/repot",
+      "DELETE /operations/o1",
+    ]);
+  });
+
+  it("should translate a deletion network failure into an explicit domain failure", async () => {
+    const reason = new Error("offline");
+    const client = makeHttpOperationClient(respondingWith([reason]));
+
+    const offlineDelete = await client.deleteOperation(Journal.operationId("o1"));
+
+    expect(offlineDelete).toEqual({ kind: "deleteFailed", reason });
+  });
 });

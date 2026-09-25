@@ -77,6 +77,12 @@ enum EditOperationResult:
   case OperationTypeMismatch
   case EditFailed(reason: Throwable)
 
+enum DeleteOperationResult:
+  case Deleted
+  case OperationMissing
+  case CannotDeleteLatestRepot
+  case DeleteFailed(reason: Throwable)
+
 enum OperationCompensationResult:
   case Compensated
   case CompensationFailed(reason: Throwable)

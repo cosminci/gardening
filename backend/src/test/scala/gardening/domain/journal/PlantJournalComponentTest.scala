@@ -309,12 +309,15 @@ class PlantJournalComponentTest extends munit.FunSuite:
     assertEquals(failedRefs.recordedOperations.get(), Vector.empty)
 
   test("should update a plant after recording the latest repot"):
-    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
-    val newRepot     = OperationDetails.Repot(newSubstrate, maybeNote = none)
-    val refs         = Refs()
+    val newSubstrate    = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newRepot        = OperationDetails.Repot(newSubstrate, maybeNote = none)
+    val loggedOperation = Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)
+    val refs            = Refs()
+    val journal         =
+      buildJournal(refs, getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedOperation), hasNextPage = false)))
 
-    assertEquals(buildJournal(refs).logOperation(PlantId("p1"), date, newRepot), LogOperationResult.Logged(OperationId("id-1")))
-    assertEquals(refs.recordedOperations.get(), Vector(Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)))
+    assertEquals(journal.logOperation(PlantId("p1"), date, newRepot), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(refs.recordedOperations.get(), Vector(loggedOperation))
     assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should leave the plant unchanged when a recorded repot loses the ordering tie-break"):
@@ -348,6 +351,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
+    val firstOperation  = Operation(OperationId("id-1"), PlantId("p1"), date, firstRepot)
+    val secondOperation = Operation(OperationId("id-2"), PlantId("p1"), date.plusNanos(1), secondRepot)
     val firstIdCall     = CountDownLatch(1)
     val releaseFirst    = CountDownLatch(1)
     val secondIdCall    = CountDownLatch(1)
@@ -363,7 +368,12 @@ class PlantJournalComponentTest extends munit.FunSuite:
             secondIdCall.countDown()
             "id-2"
     val refs    = Refs()
-    val journal = buildJournal(refs, nextId = () => idGen.nextId())
+    val journal = buildJournal(
+      refs,
+      nextId = () => idGen.nextId(),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(firstOperation), hasNextPage = false)),
+      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(secondOperation, firstOperation), hasNextPage = false)).some
+    )
 
     val firstThread = Thread.ofVirtual().start: () =>
       val _ = journal.logOperation(PlantId("p1"), date, firstRepot)
@@ -382,6 +392,8 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val historyFailure    = RuntimeException("history failed")
     val readFailure       = RuntimeException("read failed")
     val updateFailure     = RuntimeException("update failed")
+    val loggedRepot       = Operation(OperationId("id-1"), plant.id, date, repot)
+    val selfOnlyPage      = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false))
     val unreadableHistory = Refs()
     val missingPlant      = Refs()
     val unreadable        = Refs()
@@ -389,10 +401,21 @@ class PlantJournalComponentTest extends munit.FunSuite:
 
     val historyResult =
       buildJournal(unreadableHistory, getOperationsResult = GetOperationsResult.ReadFailed(historyFailure)).logOperation(plant.id, date, repot)
-    val missingResult = buildJournal(missingPlant, getPlantResultAfterLog = GetPlantResult.RecordMissing.some).logOperation(plant.id, date, repot)
-    val readResult    =
-      buildJournal(unreadable, getPlantResultAfterLog = GetPlantResult.ReadFailed(readFailure).some).logOperation(plant.id, date, repot)
-    val updateResult = buildJournal(notUpdated, updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)).logOperation(plant.id, date, repot)
+    val missingResult = buildJournal(
+      missingPlant,
+      getOperationsResult = selfOnlyPage,
+      getPlantResultAfterLog = GetPlantResult.RecordMissing.some
+    ).logOperation(plant.id, date, repot)
+    val readResult = buildJournal(
+      unreadable,
+      getOperationsResult = selfOnlyPage,
+      getPlantResultAfterLog = GetPlantResult.ReadFailed(readFailure).some
+    ).logOperation(plant.id, date, repot)
+    val updateResult = buildJournal(
+      notUpdated,
+      getOperationsResult = selfOnlyPage,
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
+    ).logOperation(plant.id, date, repot)
 
     assertEquals(historyResult, LogOperationResult.LoggingFailed(historyFailure))
     missingResult match
@@ -408,7 +431,9 @@ class PlantJournalComponentTest extends munit.FunSuite:
   test("should report both failures when removing a recorded repot also fails"):
     val updateFailure = RuntimeException("update failed")
     val removeFailure = RuntimeException("remove failed")
+    val loggedRepot   = Operation(OperationId("id-1"), PlantId("p1"), date, repot)
     val journal       = buildJournal(
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false)),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
       removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
     )
@@ -497,7 +522,7 @@ class PlantJournalComponentTest extends munit.FunSuite:
     val journal    = buildJournal(
       refs,
       getOperationResult = GetOperationResult.Read(olderRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(olderRepot, newerRepot), hasNextPage = false)),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false)),
       updateOperationResult = editResult
     )
 
@@ -608,6 +633,86 @@ class PlantJournalComponentTest extends munit.FunSuite:
       buildJournal(updateOperationResult = EditOperationResult.EditFailed(cause)).editOperation(operation.id, care),
       EditOperationResult.EditFailed(cause)
     )
+
+  test("should delete a care operation"):
+    val refs    = Refs()
+    val journal = buildJournal(refs, getOperationResult = GetOperationResult.Read(operation))
+
+    assertEquals(journal.deleteOperation(operation.id), DeleteOperationResult.Deleted)
+    assertEquals(refs.removedOperations.get(), Vector(operation.id))
+
+  test("should delete a non-latest repot"):
+    val olderRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val newerRepot = Operation(OperationId("o2"), plant.id, date.plusSeconds(60), repot)
+    val refs       = Refs()
+    val journal    = buildJournal(
+      refs,
+      getOperationResult = GetOperationResult.Read(olderRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false))
+    )
+
+    assertEquals(journal.deleteOperation(olderRepot.id), DeleteOperationResult.Deleted)
+    assertEquals(refs.removedOperations.get(), Vector(olderRepot.id))
+
+  test("should reject deleting a plant's only repot"):
+    val onlyRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs      = Refs()
+    val result    = buildJournal(
+      refs,
+      getOperationResult = GetOperationResult.Read(onlyRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(onlyRepot), hasNextPage = false))
+    ).deleteOperation(onlyRepot.id)
+
+    assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should reject deleting the latest repot on a same-instant tie-break"):
+    val newerRepot = Operation(OperationId("o2"), plant.id, date, repot)
+    val olderRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs       = Refs()
+    val result     = buildJournal(
+      refs,
+      getOperationResult = GetOperationResult.Read(newerRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false))
+    ).deleteOperation(newerRepot.id)
+
+    assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should allow deleting a repot when its plant's history reports no repot at all"):
+    val orphanRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs        = Refs()
+    val journal     = buildJournal(
+      refs,
+      getOperationResult = GetOperationResult.Read(orphanRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+    )
+
+    assertEquals(journal.deleteOperation(orphanRepot.id), DeleteOperationResult.Deleted)
+    assertEquals(refs.removedOperations.get(), Vector(orphanRepot.id))
+
+  test("should preserve missing, unreadable, and write-failed outcomes when deleting"):
+    val readFailure    = RuntimeException("store down")
+    val historyFailure = RuntimeException("history unavailable")
+    val removeFailure  = RuntimeException("remove failed")
+    val existingRepot  = Operation(OperationId("o1"), plant.id, date, repot)
+
+    val missingResult    = buildJournal(getOperationResult = GetOperationResult.RecordMissing).deleteOperation(OperationId("nope"))
+    val unreadableResult =
+      buildJournal(getOperationResult = GetOperationResult.ReadFailed(readFailure)).deleteOperation(operation.id)
+    val historyFailedResult = buildJournal(
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.ReadFailed(historyFailure)
+    ).deleteOperation(existingRepot.id)
+    val writeFailedResult = buildJournal(
+      getOperationResult = GetOperationResult.Read(operation),
+      removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
+    ).deleteOperation(operation.id)
+
+    assertEquals(missingResult, DeleteOperationResult.OperationMissing)
+    assertEquals(unreadableResult, DeleteOperationResult.DeleteFailed(readFailure))
+    assertEquals(historyFailedResult, DeleteOperationResult.DeleteFailed(historyFailure))
+    assertEquals(writeFailedResult, DeleteOperationResult.DeleteFailed(removeFailure))
 
   final private case class Refs():
     val createdPlants: AtomicReference[Vector[Plant]]                                  = new AtomicReference(Vector.empty)

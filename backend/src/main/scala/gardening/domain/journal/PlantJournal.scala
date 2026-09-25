@@ -28,6 +28,7 @@ trait PlantJournal:
   def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult
   def logOperation(plantId: PlantId, date: Instant, op: OperationDetails): LogOperationResult
   def editOperation(id: OperationId, details: OperationDetails): EditOperationResult
+  def deleteOperation(id: OperationId): DeleteOperationResult
 
 object PlantJournal:
 
@@ -133,6 +134,35 @@ object PlantJournal:
                     .fold(identity, _ => res)
                 case failure => failure
 
+    override def deleteOperation(id: OperationId): DeleteOperationResult = operationMutex.exclusively:
+      val outcome =
+        for
+          operation <- readOperation(id)
+          _         <- rejectLatestRepot(operation)
+          deleted   <- deleteFromStore(operation.id)
+        yield deleted
+      outcome.merge
+
+    private def readOperation(id: OperationId): Either[DeleteOperationResult, Operation] =
+      store.getOperation(id) match
+        case GetOperationResult.Read(operation)    => operation.asRight
+        case GetOperationResult.RecordMissing      => DeleteOperationResult.OperationMissing.asLeft
+        case GetOperationResult.ReadFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+
+    private def rejectLatestRepot(operation: Operation): Either[DeleteOperationResult, Unit] =
+      operation.details match
+        case _: OperationDetails.Care  => ().asRight
+        case _: OperationDetails.Repot =>
+          isLatestRepot(operation) match
+            case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot.asLeft
+            case Right(false) => ().asRight
+            case Left(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+
+    private def deleteFromStore(id: OperationId): Either[DeleteOperationResult, DeleteOperationResult] =
+      store.removeOperation(id) match
+        case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted.asRight
+        case OperationCompensationResult.CompensationFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
+
     private enum PlantUpdateInterruption:
       case NotLatestRepot
       case Failed(reason: Throwable)
@@ -171,26 +201,27 @@ object PlantJournal:
         case _: OperationDetails.Care      => ().asRight
         case repot: OperationDetails.Repot =>
           for
-            maybeLatestRepot <- readLatestOtherRepot(operation)
-            _                <- maybeLatestRepot.forall(other => isNewer(operation, other)).orSkip
-            plant            <- readPlant(operation.plantId)
-            updated          <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
+            isLatest <- isLatestRepot(operation).leftMap(PlantUpdateInterruption.Failed.apply)
+            _        <- isLatest.orSkip
+            plant    <- readPlant(operation.plantId)
+            updated  <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def readLatestOtherRepot(operation: Operation) =
+    private def isLatestRepot(operation: Operation): Either[Throwable, Boolean] =
+      readLatestRepot(operation.plantId).map(_.exists(_.id.value.equals(operation.id.value)))
+
+    private def readLatestRepot(plantId: PlantId): Either[Throwable, Option[Operation]] =
       @tailrec
-      def read(window: OperationWindow): Either[PlantUpdateInterruption, Option[Operation]] =
-        store.getOperations(operation.plantId, window) match
+      def read(window: OperationWindow): Either[Throwable, Option[Operation]] =
+        store.getOperations(plantId, window) match
           case GetOperationsResult.Read(page) =>
-            page.operations
-              .find(other => !other.id.value.equals(operation.id.value) && isRepot(other)) match
+            page.operations.find(isRepot) match
               case found @ Some(_)          => found.asRight
               case None if page.hasNextPage =>
                 val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
                 read(OperationWindow(nextOffset, window.size))
               case None => none[Operation].asRight
-          case GetOperationsResult.ReadFailed(reason) =>
-            PlantUpdateInterruption.Failed(reason).asLeft
+          case GetOperationsResult.ReadFailed(reason) => reason.asLeft
 
       read(OperationWindow(offset = 0, size = 10))
 
@@ -209,10 +240,6 @@ object PlantJournal:
       store.updatePlant(plant) match
         case UpdatePlantResult.Updated              => ().asRight
         case UpdatePlantResult.UpdateFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
-
-    private def isNewer(operation: Operation, other: Operation) =
-      operation.date.isAfter(other.date) ||
-        operation.date.equals(other.date) && operation.id.value.compareTo(other.id.value) > 0
 
     extension (result: Either[PlantUpdateInterruption, Unit])
       private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =

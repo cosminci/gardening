@@ -435,4 +435,58 @@ describe("OperationForm", () => {
       expect(Testing.screen.getByRole("button", { name: "Save operation" })).toBeEnabled();
     });
   });
+
+  it("should offer no delete action for a new, unsaved operation", () => {
+    Testing.render(() => (
+      <OperationForm
+        initial={undefined}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    expect(Testing.screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("should show a delete action next to save for an existing operation", () => {
+    let deletions = 0;
+    Testing.render(() => (
+      <OperationForm
+        initial={care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "wet" }).details}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+        onDelete={{
+          controlId: "delete-operation-o1",
+          onClick: () => {
+            deletions += 1;
+          },
+        }}
+      />
+    ));
+
+    const deleteButton = Testing.screen.getByRole("button", { name: "Delete" });
+    expect(deleteButton).toHaveAttribute("type", "button");
+    expect(deleteButton).toHaveAttribute("id", "delete-operation-o1");
+    expect(
+      deleteButton.compareDocumentPosition(
+        Testing.screen.getByRole("button", { name: "Save operation" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    Testing.fireEvent.click(deleteButton);
+
+    expect(deletions).toBe(1);
+  });
 });

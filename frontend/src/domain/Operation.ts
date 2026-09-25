@@ -15,4 +15,5 @@ export interface OperationClient {
     operationId: Journal.OperationId,
     details: Journal.OperationDetails,
   ): Promise<Journal.EditOperationResult>;
+  deleteOperation(operationId: Journal.OperationId): Promise<Journal.DeleteOperationResult>;
 }

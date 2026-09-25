@@ -88,6 +88,20 @@ export const makeHttpOperationClient = (
         return { kind: "editFailed", reason: requestFailure(error) };
       }
     },
+
+    async deleteOperation(id): Promise<Journal.DeleteOperationResult> {
+      try {
+        const { error, response } = await client.DELETE("/operations/{operationId}", {
+          params: { path: { operationId: id } },
+        });
+        if (response.status === 204) return { kind: "deleted" };
+        if (response.status === 404) return { kind: "operationMissing" };
+        if (response.status === 409) return { kind: "cannotDeleteLatestRepot" };
+        return { kind: "deleteFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "deleteFailed", reason: requestFailure(error) };
+      }
+    },
   };
 };
 
