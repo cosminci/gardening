@@ -1087,6 +1087,42 @@ describe("browsing the journal", () => {
     expect(screen.getByRole("button", { name: "Edit Fern" })).toHaveFocus();
   });
 
+  it("should report an edited plant whose garden reload rejects", async () => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    let gardenReads = 0;
+    const journal = {
+      ...base,
+      getPlants: (status?: string) =>
+        status === "archived"
+          ? base.getPlants()
+          : gardenReads++ === 0
+            ? base.getPlants()
+            : Promise.reject(new Error("private details")),
+      editPlant: () => Promise.resolve({ kind: "edited" as const }),
+    };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("The journal could not be loaded.");
+    });
+    expect(screen.queryByText("private details")).not.toBeInTheDocument();
+  });
+
   it.each([
     [{ kind: "plantMissing" as const }, "This plant no longer exists."],
     [{ kind: "plantArchived" as const }, "This plant is archived and can no longer be edited."],
