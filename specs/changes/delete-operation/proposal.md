@@ -20,18 +20,13 @@ Let a household permanently remove a mistakenly logged operation from its editor
 
 ## Alternatives Considered
 
-- Recomputing the plant's current substrate from the next-latest repot after deleting the current one was considered, but adds compensation complexity for a rare correction; rejecting the deletion instead keeps the current-substrate invariant simple.
-- Leaving the plant's substrate snapshot stale after deleting its latest repot was considered, but would silently misrepresent the plant's current mix; rejecting the deletion instead surfaces the restriction explicitly.
+- Allowing deletion of a plant's current latest repot operation was considered. Recomputing its substrate from the next-latest repot afterward would add compensation complexity for a rare correction; leaving the snapshot stale instead would silently misrepresent the plant's current mix. Rejecting the deletion avoids both and keeps the current-substrate invariant simple.
 
 ## Invariants
 
 - An operation's recorded date, kind, and plant do not change under editing.
 - The plant's current substrate remains determined by its latest remaining repot operation.
 - Watering attention and the cemetery's recorded care range are computed from whichever operations remain at the time they are computed.
-
-## Tradeoffs Accepted
-
-- A plant's current latest repot operation cannot be deleted directly; removing it requires first logging a newer repot (or correcting it via editing), after which the superseded repot becomes deletable.
 
 ## Acceptance Criteria
 
@@ -44,8 +39,6 @@ Let a household permanently remove a mistakenly logged operation from its editor
 ## Doc Sync
 
 - `specs/design.md` — Domain model: add that a logged operation may be permanently deleted, except a plant's current latest repot, which must remain so the plant's current substrate stays meaningful.
-- `specs/testing.md` — Strategy: extend the repot-ordering/compensation bullet to note the latest-repot delete guard is proved through the same journal boundary.
-- `GLOSSARY.md` — **Operation**: add that an operation may be permanently deleted, except a plant's current latest **Repot operation**.
 
 ## Out of Scope
 
