@@ -15,13 +15,16 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / ".local"
 DATABASE = DATA / "gardening.db"
+STATIC_DIR = ROOT / "frontend" / "dist"
 BACKEND_PORT = 8080
-FRONTEND_PORT = 5173
+BACKEND_READY_TIMEOUT = 180
 
 REMOTE_SNAPSHOT = """set -eu
 test -f "$1" || { echo 'NAS database does not exist' >&2; exit 1; }
@@ -38,14 +41,13 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def ports() -> tuple[int, int]:
+def port() -> int:
     try:
         backend = int(os.environ.get("GARDENING_PORT", BACKEND_PORT))
-        frontend = int(os.environ.get("GARDENING_DEV_PORT", FRONTEND_PORT))
     except ValueError as error:
-        raise RuntimeError("Local ports must be numbers between 1 and 65535.") from error
-    require(0 < backend <= 65535 and 0 < frontend <= 65535 and backend != frontend, "Choose two distinct local ports between 1 and 65535.")
-    return backend, frontend
+        raise RuntimeError("GARDENING_PORT must be a number between 1 and 65535.") from error
+    require(0 < backend <= 65535, "GARDENING_PORT must be a number between 1 and 65535.")
+    return backend
 
 
 def preflight(refresh: bool) -> None:
@@ -57,13 +59,12 @@ def preflight(refresh: bool) -> None:
         "Activate the pinned Java 25 toolchain (for example, run 'mise exec -- python3 scripts/local.py').",
     )
     require((ROOT / "frontend/node_modules").is_dir(), "Run 'cd frontend && npm ci' first.")
-    for port in ports():
-        with socket.socket() as listener:
-            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                listener.bind(("127.0.0.1", port))
-            except OSError as error:
-                raise RuntimeError(f"Port {port} is unavailable on 127.0.0.1.") from error
+    with socket.socket() as listener:
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind(("127.0.0.1", port()))
+        except OSError as error:
+            raise RuntimeError(f"Port {port()} is unavailable on 127.0.0.1.") from error
     if refresh:
         require(shutil.which("ssh") is not None, "Install ssh to refresh from the NAS.")
         require(os.environ.get("GARDENING_NAS_SSH"), "Set GARDENING_NAS_SSH to the NAS SSH destination.")
@@ -133,29 +134,42 @@ def terminate(processes: list[subprocess.Popen[bytes]]) -> None:
             process.wait()
 
 
+def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
+    health = f"http://127.0.0.1:{backend_port}/health"
+    deadline = time.monotonic() + BACKEND_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        require(backend.poll() is None, "The backend stopped before it became ready.")
+        try:
+            with urllib.request.urlopen(health, timeout=2) as response:
+                if response.status == 200:
+                    return
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(0.5)
+    raise RuntimeError("The backend did not become ready in time.")
+
+
 def start() -> None:
     processes: list[subprocess.Popen[bytes]] = []
-    backend_port, frontend_port = ports()
+    backend_port = port()
     environment = {
         **os.environ,
         "GARDENING_DB_PATH": str(DATABASE),
         "GARDENING_HOST": "127.0.0.1",
         "GARDENING_PORT": str(backend_port),
+        "GARDENING_STATIC_DIR": str(STATIC_DIR),
     }
     try:
+        print("Building the frontend…", flush=True)
+        build = subprocess.run(["npm", "run", "build"], cwd=ROOT / "frontend", env=environment, check=False)
+        require(build.returncode == 0, "Frontend build failed; fix the errors above and retry.")
+        print("Starting the backend…", flush=True)
         processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=environment, start_new_session=True))
-        processes.append(
-            subprocess.Popen(
-                ["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", str(frontend_port), "--strictPort"],
-                cwd=ROOT / "frontend",
-                env=environment,
-                start_new_session=True,
-            )
-        )
-        print(f"Local app: http://127.0.0.1:{frontend_port}", flush=True)
+        await_backend(backend_port, processes[0])
+        print(f"Local app: http://127.0.0.1:{backend_port}", flush=True)
         while all(process.poll() is None for process in processes):
             time.sleep(0.2)
-        raise RuntimeError("A local app process stopped; shutting down both services.")
+        raise RuntimeError("The local backend stopped; shutting down.")
     finally:
         terminate(processes)
 
@@ -168,8 +182,10 @@ def main() -> None:
             "'cd frontend && npm ci'. For a NAS copy, set GARDENING_NAS_SSH and "
             "GARDENING_NAS_DB_PATH, then add --refresh; type 'replace' to discard "
             "an existing local journal (or pass --yes). The NAS needs sqlite3. "
-            "Set GARDENING_PORT and GARDENING_DEV_PORT if the default ports "
-            "8080 and 5173 are occupied. Local edits never sync back to the NAS."
+            "The frontend is built and the backend serves it on GARDENING_PORT "
+            "(default 8080); set it if that port is occupied. For frontend work "
+            "with hot reload, run 'cd frontend && npm run dev' separately. "
+            "Local edits never sync back to the NAS."
         ),
     )
     parser.add_argument("--refresh", action="store_true", help="replace local journal from a consistent NAS snapshot")

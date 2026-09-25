@@ -93,18 +93,18 @@ class LocalDevelopmentTest(unittest.TestCase):
         with patch.dict(local.os.environ, {"GARDENING_NAS_SSH": "", "GARDENING_NAS_DB_PATH": ""}):
             with patch.object(local.shutil, "which", return_value="/usr/bin/tool"):
                 with patch.object(local.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stderr='openjdk version "25.0.4"')):
-                    with patch.object(local, "ports", return_value=(18080, 15173)):
+                    with patch.object(local, "port", return_value=18080):
                         with patch.object(local, "ROOT", self.data):
                             with self.assertRaisesRegex(RuntimeError, "GARDENING_NAS_SSH"):
                                 local.preflight(refresh=True)
 
-    def test_ports_reject_invalid_or_identical_values(self):
+    def test_port_rejects_invalid_or_out_of_range_values(self):
         with patch.dict(local.os.environ, {"GARDENING_PORT": "nope"}):
-            with self.assertRaisesRegex(RuntimeError, "numbers"):
-                local.ports()
-        with patch.dict(local.os.environ, {"GARDENING_PORT": "5173", "GARDENING_DEV_PORT": "5173"}):
-            with self.assertRaisesRegex(RuntimeError, "distinct"):
-                local.ports()
+            with self.assertRaisesRegex(RuntimeError, "GARDENING_PORT"):
+                local.port()
+        with patch.dict(local.os.environ, {"GARDENING_PORT": "0"}):
+            with self.assertRaisesRegex(RuntimeError, "GARDENING_PORT"):
+                local.port()
 
     def test_refresh_preserves_local_journal_when_transfer_fails(self):
         self.create_journal(self.database, "local edit")
