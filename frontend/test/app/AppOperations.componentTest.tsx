@@ -437,6 +437,74 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
   });
 
+  Vitest.it(
+    "should forget a recently archived plant once the feed stops including it",
+    async () => {
+      const ficusPlant = JournalFixtures.ficus();
+      const monsteraPlant = JournalFixtures.monstera();
+      const bothPlantsAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+        plants: [ficusPlant, monsteraPlant].map((plant) => ({
+          plantId: plant.id,
+          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+        })),
+      };
+      const monsteraOnlyAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
+        plants: [
+          {
+            plantId: monsteraPlant.id,
+            watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+          },
+        ],
+      };
+      const base = JournalFixtures.buildJournal({
+        attentionProjection: bothPlantsAttention,
+        getPlantsResults: [
+          { kind: "read", plants: [ficusPlant, monsteraPlant] },
+          { kind: "read", plants: [monsteraPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage()],
+          p2: [JournalFixtures.operationsPage()],
+        },
+      });
+      const journal = {
+        ...base,
+        archivePlant: () => Promise.resolve({ kind: "archived" as const }),
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+        />
+      ));
+      Testing.fireEvent.click(await Testing.screen.findByRole("button", { name: "Archive Fern" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      await Testing.screen.findByRole("button", { name: /Garden.*1 plant/ });
+
+      journal.pushAttention(bothPlantsAttention);
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("article", { name: "Monstera deliciosa" }),
+        ).toBeInTheDocument();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+
+      journal.pushAttention(monsteraOnlyAttention);
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("article", { name: "Monstera deliciosa" }),
+        ).toBeInTheDocument();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
   Vitest.it("should keep the archive warning open when the plant cannot be archived", async () => {
     const cases = [
       { outcome: { kind: "plantMissing" as const }, message: "This plant no longer exists." },
