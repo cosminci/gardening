@@ -121,7 +121,7 @@ main {
 }
 
 .backend-status__age {
-  min-width: 8rem;
+  min-width: 5.6rem;
   color: var(--muted);
   font-size: 0.7rem;
   font-weight: 500;
