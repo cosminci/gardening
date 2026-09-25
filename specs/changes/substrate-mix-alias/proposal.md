@@ -33,7 +33,7 @@ The substrate-component catalog and the substrate-mix alias catalog share one HT
 - The load view states clearly when no aliases exist yet.
 - The load view offers deleting an alias, guarded by the same irreversible-action confirmation used for archiving a plant and deleting an operation; cancelling leaves the alias unchanged.
 - Deleting an alias always succeeds: no plant or operation depends on an alias continuing to exist.
-- Aliases are stored in their own table in the database, alongside the existing substrate-component and pesticide catalogs.
+- Aliases are stored in a new database table, added via a Flyway schema migration, alongside the existing substrate-component and pesticide catalogs.
 
 ## Doc Sync
 
