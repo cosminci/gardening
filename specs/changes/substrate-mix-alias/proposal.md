@@ -24,10 +24,10 @@ The substrate-component catalog and the substrate-mix alias catalog share one HT
 ### Domain type
 
 ```scala
-final case class SubstrateMixAlias(id: UUID, name: NomenclatureName, notes: Option[NomenclatureInfo], substrate: Substrate)
+final case class SubstrateMixAlias(id: UUID, name: String, notes: Option[String], substrate: Substrate)
 ```
 
-`substrate` is the same `Substrate` type already used for `Plant.substrate` and a repot `Operation`'s substrate — an alias just persists that value under a name, independently of any plant or operation. `name` and `notes` reuse the existing `NomenclatureName`/`NomenclatureInfo` types.
+`substrate` is the same `Substrate` type already used for `Plant.substrate` and a repot `Operation`'s substrate — an alias just persists that value under a name, independently of any plant or operation.
 
 ### Database schema (Flyway migration)
 
