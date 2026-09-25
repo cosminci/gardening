@@ -33,6 +33,9 @@ export function runtimeImage(source: Dagger.Directory, info: ImageInfo): Dagger.
       .withEntrypoint([
         "/app/jre/bin/java",
         "--enable-native-access=ALL-UNNAMED",
+        // Scala 3's LazyVals runtime still uses sun.misc.Unsafe; silence the JDK 24+ warning rather
+        // than let it spam container logs on every start (see backend/build.sbt for the test-JVM twin).
+        "--sun-misc-unsafe-memory-access=allow",
         "-cp",
         "/app/lib/*",
         "gardening.app.Main",
