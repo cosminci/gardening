@@ -6,6 +6,7 @@ import gardening.domain.attention.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import ox.flow.Flow
+import ox.supervised
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, basicRequest}
 import sttp.model.{StatusCode, Uri}
@@ -62,8 +63,7 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
       override def current: AttentionProjection       = projection
       override def refreshAll: RefreshAttentionResult = fail("HTTP must not refresh attention")
 
-    val endpoints = AttentionApi.serverEndpoints(using attention)
-    val _         = AttentionApi.pushAttention(attention)
+    val endpoints = supervised(AttentionApi.serverEndpoints(using attention))
 
     assertEquals(endpoints.size, 2)
 
@@ -76,11 +76,30 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
       override def current: AttentionProjection       = if calls.getAndIncrement() < stableRepeats then initial else changed
       override def refreshAll: RefreshAttentionResult = fail("the push adapter must not trigger recomputation")
 
-    val stillConnected = Flow.tick(1.hour, "still connected")
-    val pushed         = AttentionApi.pushAttention(attention, pollInterval = 1.milli)(stillConnected).take(2).runToList()
+    val pushed = supervised:
+      val feed           = AttentionApi.AttentionFeed.startBroadcasting(attention, pollInterval = 1.milli)
+      val stillConnected = Flow.tick(1.hour, "still connected")
+      feed.subscribe()(stillConnected).take(2).runToList()
     val expectedPushed = List(initial, changed)
 
     assertEquals(pushed, expectedPushed)
+
+  test("should replay the last broadcast projection immediately to a newly connected browser"):
+    val projection = AttentionProjection(date, Vector.empty)
+    val attention  = new PlantAttentionMonitor:
+      override def current: AttentionProjection       = projection
+      override def refreshAll: RefreshAttentionResult = fail("the push adapter must not trigger recomputation")
+
+    val (firstConnectionPushed, secondConnectionPushed) = supervised:
+      val feed             = AttentionApi.AttentionFeed.startBroadcasting(attention, pollInterval = 1.milli)
+      val firstConnection  = Flow.tick(1.hour, "still connected")
+      val first            = feed.subscribe()(firstConnection).take(1).runToList()
+      val secondConnection = Flow.tick(1.hour, "still connected")
+      val second           = feed.subscribe()(secondConnection).take(1).runToList()
+      (first, second)
+
+    assertEquals(firstConnectionPushed, List(projection))
+    assertEquals(secondConnectionPushed, List(projection))
 
   private def buildServer(projection: AttentionProjection) =
     val attention = new PlantAttentionMonitor:

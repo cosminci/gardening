@@ -6,7 +6,9 @@ import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.Interval
+import ox.channels.Channel
 import ox.flow.Flow
+import ox.{Ox, discard, forkDiscard, sleep}
 import sttp.capabilities.WebSockets
 import sttp.shared.Identity
 import sttp.tapir.*
@@ -49,23 +51,46 @@ object AttentionApi:
   private[http] def httpServerEndpoint(using attention: PlantAttentionMonitor): ServerEndpoint[Any, Identity] =
     getAttentionEndpoint.handleSuccess(_ => attention.current)
 
-  def serverEndpoints(using attention: PlantAttentionMonitor): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
+  /**
+   * Neither tapir's `webSocketBody` (strictly per-connection) nor Ox's `Channel`/`Source` (competing-consumer, not broadcast) provide a
+   * multi-subscriber topic, so this hand-rolls the minimal one needed: a single poll-and-detect loop fanning out to a registry of per-connection
+   * channels, instead of every connection polling and comparing on its own.
+   */
+  def serverEndpoints(using attention: PlantAttentionMonitor, ox: Ox): List[ServerEndpoint[OxStreams & WebSockets, Identity]] =
+    val feed = AttentionFeed.startBroadcasting(attention, feedPollInterval)
     // tapir-sttp-stub-server cannot run an OxStreams endpoint's logic, so this dispatch can't be seam-tested like the HTTP one;
-    // pushAttention itself is exercised directly in AttentionApiSeamIntegrationTest.
+    // AttentionFeed itself is exercised directly in AttentionApiSeamIntegrationTest.
     // $COVERAGE-OFF$
-    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => pushAttention(attention)))
+    List(httpServerEndpoint, attentionFeedEndpoint.handleSuccess(_ => feed.subscribe()))
     // $COVERAGE-ON$
 
-  private[http] def pushAttention(
-      attention: PlantAttentionMonitor,
-      pollInterval: FiniteDuration = feedPollInterval
-  ): OxStreams.Pipe[String, AttentionProjection] = incoming =>
-    val lastBroadcast = AtomicReference(Option.empty[Instant])
-    val updates       = Flow.tick(pollInterval).mapConcat { _ =>
-      val projection = attention.current
-      if lastBroadcast.getAndSet(Some(projection.measuredAt)).contains(projection.measuredAt) then Nil else List(projection)
-    }
-    updates.merge(incoming.drain(), propagateDoneRight = true)
+  final private[http] class AttentionFeed private (attention: PlantAttentionMonitor):
+    private val subscribers = AtomicReference(Set.empty[Channel[AttentionProjection]])
+    private val latest      = AtomicReference(Option.empty[AttentionProjection])
+
+    private[http] def subscribe(): OxStreams.Pipe[String, AttentionProjection] = incoming =>
+      val connection = Channel.unlimited[AttentionProjection]
+      subscribers.updateAndGet(_ + connection).discard
+      latest.get().foreach(connection.sendOrClosed(_).discard)
+      Flow
+        .fromSource(connection)
+        .merge(incoming.drain(), propagateDoneRight = true)
+        .onComplete(subscribers.updateAndGet(_ - connection).discard)
+
+    private def broadcastOnChange(pollInterval: FiniteDuration)(using Ox): Unit =
+      forkDiscard:
+        Iterator.continually {
+          sleep(pollInterval)
+          val projection         = attention.current
+          val previousMeasuredAt = latest.getAndSet(Some(projection)).map(_.measuredAt)
+          if !previousMeasuredAt.contains(projection.measuredAt) then subscribers.get().foreach(_.sendOrClosed(projection).discard)
+        }.foreach(identity)
+
+  private[http] object AttentionFeed:
+    private[http] def startBroadcasting(attention: PlantAttentionMonitor, pollInterval: FiniteDuration)(using Ox): AttentionFeed =
+      val feed = new AttentionFeed(attention)
+      feed.broadcastOnChange(pollInterval)
+      feed
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")
