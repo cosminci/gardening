@@ -227,6 +227,8 @@ when the checklist records why.
 - [ ] Structure every test as Arrange, Act, Assert: declare fixtures first; then references,
   build the trait under test, and execute the behavior; finally declare expected values and make
   assertions. Separate Arrange, Act, and Assert with mandatory blank lines.
+- [ ] Log once, at the owning domain service — never in an adapter or a pure function. Thread
+  `Logger` as a capability, not a global logger. Keep every line a single line.
 
 ## Phase 5 — Archive and living-doc PR
 
