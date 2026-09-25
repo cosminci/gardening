@@ -6,6 +6,7 @@ import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLab
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
+import { editPlantControlId } from "./PlantSheet";
 import "./plant-card.css";
 import "./plant-history.css";
 
@@ -26,6 +27,7 @@ type PlantCardProps = PlantCardBaseProps &
         readonly measuredAt: Journal.Instant;
         readonly onLog: () => void;
         readonly onArchive: () => void;
+        readonly onEditPlant: (plant: Journal.Plant) => void;
       }
     | {
         readonly kind: "cemetery";
@@ -197,18 +199,32 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <p class="plant-card__species">{plant().details.species}</p>
             </div>
             {props.kind !== "cemetery" && (
-              <button
-                id={`archive-plant-${plant().id}`}
-                class="archive-plant"
-                type="button"
-                aria-label={`Archive ${name()}`}
-                title={`Archive ${name()}`}
-                onClick={() => {
-                  props.onArchive();
-                }}
-              >
-                Archive
-              </button>
+              <div class="plant-card__actions">
+                <button
+                  id={editPlantControlId(plant().id)}
+                  class="edit-plant"
+                  type="button"
+                  aria-label={`Edit ${name()}`}
+                  title={`Edit ${name()}`}
+                  onClick={() => {
+                    props.onEditPlant(plant());
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  id={`archive-plant-${plant().id}`}
+                  class="archive-plant"
+                  type="button"
+                  aria-label={`Archive ${name()}`}
+                  title={`Archive ${name()}`}
+                  onClick={() => {
+                    props.onArchive();
+                  }}
+                >
+                  Archive
+                </button>
+              </div>
             )}
           </header>
           <dl class="plant-facts">

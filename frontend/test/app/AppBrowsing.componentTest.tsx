@@ -1050,6 +1050,111 @@ describe("browsing the journal", () => {
     expect(createPlant).not.toHaveBeenCalled();
   });
 
+  it("should edit an active plant's details without logging an operation and refocus the edit control", async () => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const editPlant = vi
+      .fn<(_id: PlantId, _details: NewPlantDetails) => Promise<Journal.EditPlantResult>>()
+      .mockResolvedValue({ kind: "edited" });
+    const journal = { ...base, editPlant };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    expect(within(dialog).getByRole("heading", { name: "Edit plant" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Species" })).toHaveValue("Ficus lyrata");
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Living room" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
+    expect(editPlant).toHaveBeenCalledOnce();
+    expect(editPlant.mock.calls[0]?.[0]).toEqual(JournalFixtures.ficus().id);
+    expect(editPlant.mock.calls[0]?.[1]).toMatchObject({ location: "Living room" });
+    expect(screen.getByRole("button", { name: "Edit Fern" })).toHaveFocus();
+  });
+
+  it.each([
+    [{ kind: "plantMissing" as const }, "This plant no longer exists."],
+    [{ kind: "plantArchived" as const }, "This plant is archived and can no longer be edited."],
+    [{ kind: "unknownComponent" as const }, "Choose known substrate components."],
+    [
+      { kind: "catalogReadFailed" as const, reason: new Error("private catalog") },
+      "The substrate catalog could not be read. Try again.",
+    ],
+    [
+      { kind: "editFailed" as const, reason: new Error("private write") },
+      "The plant could not be saved.",
+    ],
+    [new Error("private connection"), "The plant could not be saved."],
+  ])("should keep the plant sheet open when editing reports %o", async (outcome, message) => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const journal = {
+      ...base,
+      editPlant: () =>
+        outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome),
+    };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(message);
+  });
+
+  it("should cancel editing without a write and return focus to the edit control", async () => {
+    const base = JournalFixtures.buildJournal({
+      getAttentionResults: [unavailableFicusAttentionResult],
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+    const editPlant = vi.fn((id: PlantId, details: NewPlantDetails) => base.editPlant(id, details));
+    const journal = { ...base, editPlant };
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+      />
+    ));
+    await screen.findByRole("article", { name: "Fern" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse plant editor" }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "Edit Fern" })).toHaveFocus();
+    expect(editPlant).not.toHaveBeenCalled();
+  });
+
   it("should ignore an obsolete missing-attention history read after switching views", async () => {
     const added = JournalFixtures.monstera();
     let finishHistory: (result: GetOperationsResult) => void = () => undefined;

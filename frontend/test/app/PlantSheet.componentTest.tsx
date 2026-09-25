@@ -16,6 +16,7 @@ describe("PlantSheet", () => {
       .mockResolvedValue(undefined);
     const { unmount } = render(() => (
       <PlantSheet
+        target={{ kind: "add" }}
         components={[perlite]}
         saveError={undefined}
         completed={false}
@@ -77,6 +78,7 @@ describe("PlantSheet", () => {
     });
     render(() => (
       <PlantSheet
+        target={{ kind: "add" }}
         components={components()}
         saveError={undefined}
         completed={false}
@@ -133,6 +135,7 @@ describe("PlantSheet", () => {
     );
     render(() => (
       <PlantSheet
+        target={{ kind: "add" }}
         components={components()}
         saveError={undefined}
         completed={false}
@@ -218,6 +221,7 @@ describe("PlantSheet", () => {
         </header>
         {open() && (
           <PlantSheet
+            target={{ kind: "add" }}
             components={[perlite]}
             saveError={undefined}
             completed={false}
@@ -265,5 +269,99 @@ describe("PlantSheet", () => {
       expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
     });
     expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
+  });
+
+  it("should prefill and submit revised details for an active plant", () => {
+    const plant: Journal.Plant = {
+      id: Journal.plantId("p1"),
+      details: {
+        species: Journal.species("Ficus lyrata"),
+        maybeNickname: Journal.nickname("Fern"),
+        location: Journal.location("Balcony"),
+        substrate: Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+        status: "active",
+      },
+    };
+    const onSubmit = vi
+      .fn<(_details: Journal.NewPlantDetails) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    render(() => (
+      <PlantSheet
+        target={{ kind: "edit", plant }}
+        components={[perlite]}
+        saveError={undefined}
+        completed={false}
+        onSubmit={onSubmit}
+        onAddComponent={() => Promise.resolve({ kind: "addFailed", reason: new Error("offline") })}
+        onEditComponent={() =>
+          Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+        }
+        onCancel={() => undefined}
+      />
+    ));
+
+    const dialog = screen.getByRole("dialog", { name: "Plant editor" });
+    expect(within(dialog).getByRole("heading", { name: "Edit plant" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "Species" })).toHaveValue("Ficus lyrata");
+    expect(within(dialog).getByRole("textbox", { name: "Nickname (optional)" })).toHaveValue(
+      "Fern",
+    );
+    expect(within(dialog).getByRole("textbox", { name: "Location" })).toHaveValue("Balcony");
+    expect(within(dialog).getByRole("spinbutton", { name: "Component 1 share" })).toHaveValue(100);
+    fireEvent.input(within(dialog).getByRole("textbox", { name: "Location" }), {
+      target: { value: "Living room" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+
+    const expectedDetails: Journal.NewPlantDetails = {
+      species: Journal.species("Ficus lyrata"),
+      maybeNickname: Journal.nickname("Fern"),
+      location: Journal.location("Living room"),
+      substrate: Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+    };
+    expect(onSubmit).toHaveBeenCalledWith(expectedDetails);
+  });
+
+  it("should return focus to the plant's edit control after cancelling an edit", async () => {
+    const plant: Journal.Plant = {
+      id: Journal.plantId("p1"),
+      details: {
+        species: Journal.species("Ficus lyrata"),
+        maybeNickname: null,
+        location: Journal.location("Balcony"),
+        substrate: Journal.substrate([{ component: perlite.id, share: Journal.percentage(100) }]),
+        status: "active",
+      },
+    };
+    const [open, setOpen] = createSignal(true);
+    render(() => (
+      <>
+        <button id="edit-plant-p1">Edit Fern</button>
+        {open() && (
+          <PlantSheet
+            target={{ kind: "edit", plant }}
+            components={[perlite]}
+            saveError={undefined}
+            completed={false}
+            onSubmit={() => Promise.resolve()}
+            onAddComponent={() =>
+              Promise.resolve({ kind: "addFailed", reason: new Error("offline") })
+            }
+            onEditComponent={() =>
+              Promise.resolve({ kind: "editFailed", reason: new Error("offline") })
+            }
+            onCancel={() => {
+              setOpen(false);
+            }}
+          />
+        )}
+      </>
+    ));
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: "Edit Fern" })).toHaveFocus();
   });
 });

@@ -155,15 +155,25 @@
   gap: 0.3rem;
 }
 
+.plant-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.3rem;
+}
+
+.edit-plant,
 .archive-plant {
   flex: 0 0 auto;
   padding: 0.25rem 0.3rem;
   border: 1px solid var(--line);
   border-radius: 0.4rem;
   background: transparent;
-  color: var(--danger);
   font-size: 0.65rem;
   cursor: pointer;
+}
+
+.archive-plant {
+  color: var(--danger);
 }
 
 .archive-plant:hover {

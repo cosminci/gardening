@@ -36,10 +36,13 @@ object PlantApi:
   private val plantArchived             = ApiError("plant already archived")
   private val unsupportedPlantPatch     = "unsupported plant patch"
   private val unsupportedPatchMediaType = ApiError("unsupported patch media type")
+  private val plantEditFailed           = ApiError("plant could not be edited")
   private val plantPatchErrors          = oneOf[ApiError | String](
     oneOfVariantExactMatcher(StatusCode.BadRequest, stringBody)(unsupportedPlantPatch),
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
     oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(plantArchived),
+    oneOfVariantExactMatcher(StatusCode.UnprocessableEntity, jsonBody[ApiError])(unknownComponent),
+    oneOfVariantExactMatcher(StatusCode.ServiceUnavailable, jsonBody[ApiError])(catalogReadFailed),
     oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedPatchMediaType),
     oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
   )
@@ -88,11 +91,22 @@ object PlantApi:
         else
           patch match
             case Vector(PlantPatchOperation("replace", "/details/status", value)) if value.equals(Json.fromString("archived")) =>
-              journal.archivePlant(PlantId(plantId)) match
-                case ArchivePlantResult.Archived         => attention.refreshAll.pipe(_ => ().asRight)
-                case ArchivePlantResult.PlantMissing     => plantMissing.asLeft
-                case ArchivePlantResult.AlreadyArchived  => plantArchived.asLeft
-                case ArchivePlantResult.ArchiveFailed(_) => ApiError("plant could not be archived").asLeft
+              journal.editPlant(PlantId(plantId), _.copy(status = PlantStatus.Archived)) match
+                case EditPlantResult.Edited(_)     => attention.refreshAll.pipe(_ => ().asRight)
+                case EditPlantResult.PlantMissing  => plantMissing.asLeft
+                case EditPlantResult.PlantArchived => plantArchived.asLeft
+                case _                             => ApiError("plant could not be archived").asLeft
+            case Vector(PlantPatchOperation("replace", "/details", value)) =>
+              value.as[PlantCreation] match
+                case Left(_)     => unsupportedPlantPatch.asLeft
+                case Right(edit) =>
+                  journal.editPlant(PlantId(plantId), _.copy(edit.species, edit.maybeNickname, edit.location, edit.substrate)) match
+                    case EditPlantResult.Edited(_)            => ().asRight
+                    case EditPlantResult.PlantMissing         => plantMissing.asLeft
+                    case EditPlantResult.PlantArchived        => plantArchived.asLeft
+                    case EditPlantResult.UnknownComponent     => unknownComponent.asLeft
+                    case EditPlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
+                    case EditPlantResult.EditFailed(_)        => plantEditFailed.asLeft
             case _ => unsupportedPlantPatch.asLeft
     )
 

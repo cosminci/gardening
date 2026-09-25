@@ -106,23 +106,19 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should archive a plant and distinguish missing, already archived, and failed writes"):
-    val archivePath       = s"/plants/${plant.id.value}"
-    val archivePatch      = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
-    val archivedRefs      = Refs()
-    val missingRefs       = Refs()
-    val repeatRefs        = Refs()
-    val failedRefs        = Refs()
-    val refreshFailedRefs = Refs()
+    val archivePath  = s"/plants/${plant.id.value}"
+    val archivePatch = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
+    val refs         = Refs()
 
-    val archived = patch(archivePath, archivePatch, buildPlantApi(archivedRefs))
-    val missing  = patch(archivePath, archivePatch, buildPlantApi(missingRefs, archivePlantResult = ArchivePlantResult.PlantMissing))
-    val repeat   = patch(archivePath, archivePatch, buildPlantApi(repeatRefs, archivePlantResult = ArchivePlantResult.AlreadyArchived))
+    val archived = patch(archivePath, archivePatch, buildPlantApi(refs))
+    val missing  = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
+    val repeat   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
     val failed   =
-      patch(archivePath, archivePatch, buildPlantApi(failedRefs, archivePlantResult = ArchivePlantResult.ArchiveFailed(RuntimeException("secret"))))
+      patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
     val refreshedLate = patch(
       archivePath,
       archivePatch,
-      buildPlantApi(refreshFailedRefs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
+      buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
     )
 
     val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
@@ -133,11 +129,7 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(missing.code -> jsonBody(missing), expectedMissing)
     assertEquals(repeat.code  -> jsonBody(repeat), expectedRepeat)
     assertEquals(failed.code  -> jsonBody(failed), expectedFailed)
-    assertEquals(archivedRefs.refreshCalls.get(), 1)
-    assertEquals(refreshFailedRefs.refreshCalls.get(), 1)
-    assertEquals(missingRefs.refreshCalls.get(), 0)
-    assertEquals(repeatRefs.refreshCalls.get(), 0)
-    assertEquals(failedRefs.refreshCalls.get(), 0)
+    assertEquals(refs.refreshCalls.get(), 2)
 
   test("should reject unsupported plant patches without archiving or refreshing"):
     val refs   = Refs()
@@ -162,6 +154,49 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assert(malformed.body.merge.contains("Invalid value for: body"))
     assertEquals(refs.refreshCalls.get(), 0)
 
+  test("should edit an active plant's details and distinguish missing, not-active, and validation failures"):
+    val editPath  = s"/plants/${plant.id.value}"
+    val editPatch =
+      s"""[{"op":"replace","path":"/details",""" +
+        s""""value":{"species":"Monstera deliciosa","nickname":"Monty","location":"Living room",""" +
+        s""""substrate":[{"componentId":"${perliteId.value}","share":100}]}}]"""
+    val refs = Refs()
+
+    val edited   = patch(editPath, editPatch, buildPlantApi(refs))
+    val missing  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
+    val archived = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
+    val unknown  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.UnknownComponent))
+    val catalog  =
+      patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.CatalogReadFailed(RuntimeException("secret"))))
+    val failed = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
+
+    val expectedMissing  = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
+    val expectedArchived = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
+    val expectedUnknown  = StatusCode.UnprocessableEntity -> json("""{"message":"unknown substrate component"}""")
+    val expectedCatalog  = StatusCode.ServiceUnavailable  -> json("""{"message":"substrate catalog could not be read"}""")
+    val expectedFailed   = StatusCode.InternalServerError -> json("""{"message":"plant could not be edited"}""")
+    val expectedDetails  =
+      PlantDetails(Species("Monstera deliciosa"), Nickname("Monty").some, Location("Living room"), substrate, PlantStatus.Active)
+    assertEquals(edited.code, StatusCode.NoContent)
+    assertEquals(missing.code  -> jsonBody(missing), expectedMissing)
+    assertEquals(archived.code -> jsonBody(archived), expectedArchived)
+    assertEquals(unknown.code  -> jsonBody(unknown), expectedUnknown)
+    assertEquals(catalog.code  -> jsonBody(catalog), expectedCatalog)
+    assertEquals(failed.code   -> jsonBody(failed), expectedFailed)
+    assertEquals(refs.editedDetails.get(), Vector.fill(6)(plant.id -> expectedDetails))
+    assertEquals(refs.refreshCalls.get(), 0)
+
+  test("should reject a plant edit patch whose value cannot be read as plant details"):
+    val refs   = Refs()
+    val server = buildPlantApi(refs)
+    val path   = s"/plants/${plant.id.value}"
+
+    val response = patch(path, """[{"op":"replace","path":"/details","value":{"species":""}}]""", server)
+
+    assertEquals(response.code, StatusCode.BadRequest)
+    assertEquals(response.body.merge, "unsupported plant patch")
+    assertEquals(refs.editedDetails.get(), Vector.empty)
+
   test("should require the JSON Patch media type for plant updates"):
     val refs     = Refs()
     val response = basicRequest
@@ -177,7 +212,8 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
   private case class Refs(
       requestedStatuses: AtomicReference[Vector[PlantStatus]] = AtomicReference(Vector.empty),
       refreshCalls: AtomicInteger = AtomicInteger(0),
-      createdDetails: AtomicReference[Vector[PlantDetails]] = AtomicReference(Vector.empty)
+      createdDetails: AtomicReference[Vector[PlantDetails]] = AtomicReference(Vector.empty),
+      editedDetails: AtomicReference[Vector[(PlantId, PlantDetails)]] = AtomicReference(Vector.empty)
   )
 
   private def buildPlantApi(
@@ -185,7 +221,7 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       createPlantResult: CreatePlantResult = CreatePlantResult.Created(plant),
       plantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
-      archivePlantResult: ArchivePlantResult = ArchivePlantResult.Archived,
+      editPlantResult: EditPlantResult = EditPlantResult.Edited(plant),
       refreshResult: RefreshAttentionResult = RefreshAttentionResult.Refreshed(AttentionProjection(date, Vector.empty))
   ) =
     val journal = new PlantJournal:
@@ -195,8 +231,10 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         plantsResult
-      override def getArchivedCount: ArchivedCountResult                                         = archivedCountResult
-      override def archivePlant(id: PlantId): ArchivePlantResult                                 = archivePlantResult
+      override def getArchivedCount: ArchivedCountResult                                       = archivedCountResult
+      override def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult =
+        refs.editedDetails.updateAndGet(_ :+ (id -> edit(plant.details)))
+        editPlantResult
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         fail("plant HTTP must not read operations")
       override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
