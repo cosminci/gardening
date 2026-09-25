@@ -53,11 +53,7 @@ object SubstrateCatalog:
         case CatalogReadResult.ReadFailed(reason) => log.error("get substrate mixes", reason)
         case _                                    => ()
 
-    override def addSubstrateMix(
-        name: SubstrateMixName,
-        notes: Option[SubstrateMixNotes],
-        substrate: Substrate
-    ): AddSubstrateMixResult =
+    override def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
       store.getSubstrateMixes match
         case CatalogReadResult.ReadFailed(reason) => AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
         case CatalogReadResult.Read(mixes) if mixes.exists(sameComposition(_, substrate)) => AddSubstrateMixResult.DuplicateSubstrate

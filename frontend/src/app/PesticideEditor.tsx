@@ -141,10 +141,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
           />
         </label>
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
-        <Show
-          when={!archived()}
-          fallback={<p class="catalog-editor__archived-status">Archived</p>}
-        >
+        <Show when={!archived()} fallback={<p class="catalog-editor__archived-status">Archived</p>}>
           <footer class="catalog-editor__actions">
             <Show when={props.onArchive}>
               {(onArchive) => (

@@ -380,6 +380,9 @@ describe("OperationForm", () => {
         onEditSubstrateComponent={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onSubmit={() => Promise.resolve()}
         onCancel={() => undefined}
       />
