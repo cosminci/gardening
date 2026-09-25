@@ -2,6 +2,15 @@ package gardening.domain.pesticide
 
 import gardening.domain.*
 
+enum GetPesticideResult:
+  case Read(pesticide: Pesticide)
+  case RecordMissing
+  case ReadFailed(reason: Throwable)
+
+enum UpdatePesticideResult:
+  case Updated
+  case UpdateFailed(reason: Throwable)
+
 enum PesticideEditResult:
   case Edited(pesticide: Pesticide)
   case PesticideMissing

@@ -6,7 +6,7 @@ import * as Journal from "../../src/domain/Journal";
 const neem: Journal.Pesticide = {
   id: Journal.pesticideId("00000000-0000-4000-8001-000000000003"),
   data: {
-    name: Journal.nomenclatureName("Neem oil"),
+    name: Journal.pesticideName("Neem oil"),
     pesticideType: "insecticide",
     maybeInfo: null,
   },

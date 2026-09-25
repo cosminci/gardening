@@ -5,6 +5,6 @@ import gardening.domain.catalog.*
 
 trait PesticideStore:
   def getPesticides: CatalogReadResult[Pesticide]
+  def getPesticide(id: PesticideId): GetPesticideResult
   def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide]
-  def editPesticide(id: PesticideId, data: PesticideData): PesticideEditResult
-  def archivePesticide(id: PesticideId): PesticideArchiveResult
+  def updatePesticide(pesticide: Pesticide): UpdatePesticideResult

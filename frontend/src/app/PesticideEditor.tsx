@@ -40,9 +40,9 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
     }
     const trimmedInfo = info().trim();
     const data = {
-      name: Journal.nomenclatureName(trimmedName),
+      name: Journal.pesticideName(trimmedName),
       pesticideType: type(),
-      maybeInfo: trimmedInfo === "" ? null : Journal.nomenclatureInfo(trimmedInfo),
+      maybeInfo: trimmedInfo === "" ? null : Journal.pesticideInfo(trimmedInfo),
     };
     const result =
       props.pesticide === undefined

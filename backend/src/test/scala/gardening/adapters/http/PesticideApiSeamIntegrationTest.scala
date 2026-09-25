@@ -18,7 +18,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   private val pesticideId           = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-  private val pesticideData         = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, NomenclatureInfo("2g/L").some)
+  private val pesticideData         = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, PesticideInfo("2g/L").some)
   private val pesticide             = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)
   private val archivedPesticide     = pesticide.copy(status = PesticideStatus.Archived)
   private val pesticideDataJson     = """{"name":"Sulfur","type":"fungicide","info":"2g/L"}"""

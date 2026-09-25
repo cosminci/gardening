@@ -71,9 +71,9 @@ export const makeHttpPesticideClient = (
 const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
   id: Journal.pesticideId(value.id),
   data: {
-    name: Journal.nomenclatureName(value.data.name),
+    name: Journal.pesticideName(value.data.name),
     pesticideType: value.data.type,
-    maybeInfo: value.data.info === null ? null : Journal.nomenclatureInfo(value.data.info),
+    maybeInfo: value.data.info === null ? null : Journal.pesticideInfo(value.data.info),
   },
   status: value.status,
 });

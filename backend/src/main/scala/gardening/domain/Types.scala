@@ -61,12 +61,22 @@ object NomenclatureInfo:
   def apply(value: String): NomenclatureInfo           = value
   extension (info: NomenclatureInfo) def value: String = info
 
+opaque type PesticideName = String
+object PesticideName:
+  def apply(value: String): PesticideName           = value
+  extension (name: PesticideName) def value: String = name
+
+opaque type PesticideInfo = String
+object PesticideInfo:
+  def apply(value: String): PesticideInfo           = value
+  extension (info: PesticideInfo) def value: String = info
+
 enum PesticideType:
   case Fungicide, Insecticide, Treatment
 
 final case class SubstrateComponentData(name: NomenclatureName, maybeInfo: Option[NomenclatureInfo])
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData)
-final case class PesticideData(name: NomenclatureName, pesticideType: PesticideType, maybeInfo: Option[NomenclatureInfo])
+final case class PesticideData(name: PesticideName, pesticideType: PesticideType, maybeInfo: Option[PesticideInfo])
 
 enum PesticideStatus derives CanEqual:
   case Active, Archived

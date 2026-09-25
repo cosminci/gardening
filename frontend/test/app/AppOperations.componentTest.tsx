@@ -1004,7 +1004,7 @@ Vitest.describe("changing the journal", () => {
       {
         id: neemId,
         data: {
-          name: Journal.nomenclatureName("Neem oil"),
+          name: Journal.pesticideName("Neem oil"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
@@ -1013,7 +1013,7 @@ Vitest.describe("changing the journal", () => {
       {
         id: Journal.pesticideId("00000000-0000-4000-8001-000000000006"),
         data: {
-          name: Journal.nomenclatureName("Spinosad"),
+          name: Journal.pesticideName("Spinosad"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
@@ -1021,14 +1021,14 @@ Vitest.describe("changing the journal", () => {
       },
     ];
     const addedPesticide: Journal.PesticideData = {
-      name: Journal.nomenclatureName("Insecticidal soap"),
+      name: Journal.pesticideName("Insecticidal soap"),
       pesticideType: "insecticide",
       maybeInfo: null,
     };
     const editedPesticide: Journal.PesticideData = {
-      name: Journal.nomenclatureName("Neem concentrate"),
+      name: Journal.pesticideName("Neem concentrate"),
       pesticideType: "treatment",
-      maybeInfo: Journal.nomenclatureInfo("Dilute first"),
+      maybeInfo: Journal.pesticideInfo("Dilute first"),
     };
     const existingOperation = JournalFixtures.care({
       id: "o1",
@@ -1150,7 +1150,7 @@ Vitest.describe("changing the journal", () => {
       const soap = {
         id: soapId,
         data: {
-          name: Journal.nomenclatureName("Insecticidal soap"),
+          name: Journal.pesticideName("Insecticidal soap"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },
@@ -1166,7 +1166,7 @@ Vitest.describe("changing the journal", () => {
             {
               id: neemId,
               data: {
-                name: Journal.nomenclatureName("Neem oil"),
+                name: Journal.pesticideName("Neem oil"),
                 pesticideType: "insecticide",
                 maybeInfo: null,
               },
@@ -1180,7 +1180,7 @@ Vitest.describe("changing the journal", () => {
           entry: {
             id: neemId,
             data: {
-              name: Journal.nomenclatureName("Neem oil"),
+              name: Journal.pesticideName("Neem oil"),
               pesticideType: "insecticide",
               maybeInfo: null,
             },
@@ -1236,7 +1236,7 @@ Vitest.describe("changing the journal", () => {
     const neem = {
       id: neemId,
       data: {
-        name: Journal.nomenclatureName("Neem oil"),
+        name: Journal.pesticideName("Neem oil"),
         pesticideType: "insecticide" as const,
         maybeInfo: null,
       },
@@ -1299,7 +1299,7 @@ Vitest.describe("changing the journal", () => {
             {
               id: neemId,
               data: {
-                name: Journal.nomenclatureName("Neem oil"),
+                name: Journal.pesticideName("Neem oil"),
                 pesticideType: "insecticide",
                 maybeInfo: null,
               },
@@ -1548,7 +1548,7 @@ Vitest.describe("changing the journal", () => {
           {
             id: neemId,
             data: {
-              name: Journal.nomenclatureName("Neem oil"),
+              name: Journal.pesticideName("Neem oil"),
               pesticideType: "insecticide",
               maybeInfo: null,
             },

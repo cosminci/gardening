@@ -87,9 +87,9 @@ object PesticideApi:
     case name            => name
   })
 
-  private given Codec[NomenclatureName] = Codec.from(Decoder.decodeString.map(NomenclatureName.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[NomenclatureInfo] = Codec.from(Decoder.decodeString.map(NomenclatureInfo.apply), Encoder.encodeString.contramap(_.value))
-  private given Codec[PesticideId]      = Codec.from(
+  private given Codec[PesticideName] = Codec.from(Decoder.decodeString.map(PesticideName.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[PesticideInfo] = Codec.from(Decoder.decodeString.map(PesticideInfo.apply), Encoder.encodeString.contramap(_.value))
+  private given Codec[PesticideId]   = Codec.from(
     // Pesticide identifiers appear only in response bodies.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
@@ -107,9 +107,9 @@ object PesticideApi:
   private given Schema[PesticideType]   = Schema.derivedEnumeration[PesticideType].apply(encode = Some(value => lowerCamel(value.productPrefix)))
   private given Schema[PesticideStatus] = Schema.derivedEnumeration[PesticideStatus].apply(encode = Some(value => lowerCamel(value.productPrefix)))
   // $COVERAGE-ON$
-  private given Schema[NomenclatureName] = Schema.string
-  private given Schema[NomenclatureInfo] = Schema.string
-  private given Schema[PesticideData]    = Schema.derived[PesticideData].modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
+  private given Schema[PesticideName] = Schema.string
+  private given Schema[PesticideInfo] = Schema.string
+  private given Schema[PesticideData] = Schema.derived[PesticideData].modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
   private def lowerCamel(name: String) =
     name.substring(0, 1).toLowerCase + name.substring(1)

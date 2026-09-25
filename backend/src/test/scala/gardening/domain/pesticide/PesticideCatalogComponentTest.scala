@@ -11,10 +11,11 @@ import scala.util.chaining.scalaUtilChainingOps
 class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private val pesticideId   = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-  private val pesticideData = PesticideData(NomenclatureName("Sulfur"), PesticideType.Fungicide, NomenclatureInfo("2g/L").some)
+  private val pesticideData = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, PesticideInfo("2g/L").some)
   private val pesticide     = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)
+  private val archived      = pesticide.copy(status = PesticideStatus.Archived)
 
-  test("should assign identifiers and delegate pesticide reads, edits, and archiving"):
+  test("should assign identifiers, list pesticides, and reject an edit or archive of a missing one"):
     val refs    = Refs()
     val catalog = buildCatalog(refs)
 
@@ -28,68 +29,75 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(editResult, PesticideEditResult.PesticideMissing)
     assertEquals(archiveResult, PesticideArchiveResult.PesticideMissing)
     assertEquals(refs.added.get(), Vector(pesticide))
-    assertEquals(refs.edited.get(), Vector(pesticideId -> pesticideData))
-    assertEquals(refs.archived.get(), Vector(pesticideId))
+    assertEquals(refs.updated.get(), Vector.empty)
 
-  test("should return the edited pesticide"):
-    val editResult = buildCatalog(editResult = PesticideEditResult.Edited(pesticide)).editPesticide(pesticideId, pesticideData)
+  test("should edit an active pesticide's data and persist it unchanged from status"):
+    val refs       = Refs()
+    val editResult = buildCatalog(refs, getResult = GetPesticideResult.Read(pesticide)).editPesticide(pesticideId, pesticideData)
 
     assertEquals(editResult, PesticideEditResult.Edited(pesticide))
+    assertEquals(refs.updated.get(), Vector(pesticide))
 
-  test("should return the archived pesticide"):
-    val archiveResult = buildCatalog(archiveResult = PesticideArchiveResult.Archived(pesticide)).archivePesticide(pesticideId)
+  test("should archive an active pesticide"):
+    val refs          = Refs()
+    val archiveResult = buildCatalog(refs, getResult = GetPesticideResult.Read(pesticide)).archivePesticide(pesticideId)
 
-    assertEquals(archiveResult, PesticideArchiveResult.Archived(pesticide))
+    assertEquals(archiveResult, PesticideArchiveResult.Archived(archived))
+    assertEquals(refs.updated.get(), Vector(archived))
 
-  test("should reject editing an archived pesticide"):
-    val editResult = buildCatalog(editResult = PesticideEditResult.PesticideArchived).editPesticide(pesticideId, pesticideData)
-
-    assertEquals(editResult, PesticideEditResult.PesticideArchived)
-
-  test("should reject archiving an already-archived pesticide"):
-    val archiveResult = buildCatalog(archiveResult = PesticideArchiveResult.AlreadyArchived).archivePesticide(pesticideId)
-
-    assertEquals(archiveResult, PesticideArchiveResult.AlreadyArchived)
-
-  test("should preserve pesticide catalog failures"):
-    val failure = RuntimeException("storage unavailable")
-    val catalog = buildCatalog(
-      readResult = CatalogReadResult.ReadFailed(failure),
-      addResult = CatalogAddResult.AddFailed(failure),
-      editResult = PesticideEditResult.EditFailed(failure),
-      archiveResult = PesticideArchiveResult.ArchiveFailed(failure)
-    )
-
-    val readResult    = catalog.getPesticides
-    val addResult     = catalog.addPesticide(pesticideData)
+  test("should reject editing or re-archiving an already-archived pesticide without writing"):
+    val refs          = Refs()
+    val catalog       = buildCatalog(refs, getResult = GetPesticideResult.Read(archived))
     val editResult    = catalog.editPesticide(pesticideId, pesticideData)
     val archiveResult = catalog.archivePesticide(pesticideId)
 
-    assertEquals(readResult, CatalogReadResult.ReadFailed(failure))
-    assertEquals(addResult, CatalogAddResult.AddFailed(failure))
-    assertEquals(editResult, PesticideEditResult.EditFailed(failure))
-    assertEquals(archiveResult, PesticideArchiveResult.ArchiveFailed(failure))
+    assertEquals(editResult, PesticideEditResult.PesticideArchived)
+    assertEquals(archiveResult, PesticideArchiveResult.AlreadyArchived)
+    assertEquals(refs.updated.get(), Vector.empty)
+
+  test("should preserve pesticide catalog failures"):
+    val readFailure  = RuntimeException("storage unavailable")
+    val writeFailure = RuntimeException("write unavailable")
+    val catalog      = buildCatalog(
+      readResult = CatalogReadResult.ReadFailed(readFailure),
+      addResult = CatalogAddResult.AddFailed(readFailure),
+      getResult = GetPesticideResult.ReadFailed(readFailure)
+    )
+    val writeFailingCatalog =
+      buildCatalog(getResult = GetPesticideResult.Read(pesticide), updateResult = UpdatePesticideResult.UpdateFailed(writeFailure))
+
+    val readResult          = catalog.getPesticides
+    val addResult           = catalog.addPesticide(pesticideData)
+    val editResult          = catalog.editPesticide(pesticideId, pesticideData)
+    val archiveResult       = catalog.archivePesticide(pesticideId)
+    val writeFailingEdit    = writeFailingCatalog.editPesticide(pesticideId, pesticideData)
+    val writeFailingArchive = writeFailingCatalog.archivePesticide(pesticideId)
+
+    assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
+    assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
+    assertEquals(editResult, PesticideEditResult.EditFailed(readFailure))
+    assertEquals(archiveResult, PesticideArchiveResult.ArchiveFailed(readFailure))
+    assertEquals(writeFailingEdit, PesticideEditResult.EditFailed(writeFailure))
+    assertEquals(writeFailingArchive, PesticideArchiveResult.ArchiveFailed(writeFailure))
 
   private case class Refs(
       added: AtomicReference[Vector[Pesticide]] = AtomicReference(Vector.empty),
-      edited: AtomicReference[Vector[(PesticideId, PesticideData)]] = AtomicReference(Vector.empty),
-      archived: AtomicReference[Vector[PesticideId]] = AtomicReference(Vector.empty)
+      updated: AtomicReference[Vector[Pesticide]] = AtomicReference(Vector.empty)
   )
 
   private def buildCatalog(
       refs: Refs = Refs(),
       readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector(pesticide)),
       addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
-      editResult: PesticideEditResult = PesticideEditResult.PesticideMissing,
-      archiveResult: PesticideArchiveResult = PesticideArchiveResult.PesticideMissing,
+      getResult: GetPesticideResult = GetPesticideResult.RecordMissing,
+      updateResult: UpdatePesticideResult = UpdatePesticideResult.Updated,
       nextId: () => String = () => pesticideId.value.toString
   ) =
     val store = new PesticideStore:
       override def getPesticides: CatalogReadResult[Pesticide]                 = readResult
+      override def getPesticide(id: PesticideId): GetPesticideResult           = getResult
       override def addPesticide(value: Pesticide): CatalogAddResult[Pesticide] =
         refs.added.updateAndGet(_ :+ value).pipe(_ => addResult)
-      override def editPesticide(id: PesticideId, data: PesticideData): PesticideEditResult =
-        refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
-      override def archivePesticide(id: PesticideId): PesticideArchiveResult =
-        refs.archived.updateAndGet(_ :+ id).pipe(_ => archiveResult)
+      override def updatePesticide(value: Pesticide): UpdatePesticideResult =
+        refs.updated.updateAndGet(_ :+ value).pipe(_ => updateResult)
     PesticideCatalog.make(using store, () => nextId())

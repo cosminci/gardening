@@ -3,7 +3,7 @@ package gardening.domain.journal
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideArchiveResult, PesticideEditResult, PesticideStore}
+import gardening.domain.pesticide.{GetPesticideResult, PesticideStore, UpdatePesticideResult}
 import gardening.domain.substrate.SubstrateComponentStore
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
@@ -224,17 +224,11 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
 
   test("should validate catalog references before writing operations"):
     val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
+    val vertabData   = PesticideData(PesticideName("VERTAB"), PesticideType.Insecticide, PesticideInfo("0.8ml/L").some)
+    val neemOilData  = PesticideData(PesticideName("Neem oil"), PesticideType.Insecticide, none)
     val pesticides   = Vector(
-      Pesticide(
-        vertabId,
-        PesticideData(NomenclatureName("VERTAB"), PesticideType.Insecticide, NomenclatureInfo("0.8ml/L").some),
-        PesticideStatus.Active
-      ),
-      Pesticide(
-        neemOilId,
-        PesticideData(NomenclatureName("Neem oil"), PesticideType.Insecticide, none),
-        PesticideStatus.Active
-      )
+      Pesticide(vertabId, vertabData, status = PesticideStatus.Active),
+      Pesticide(neemOilId, neemOilData, status = PesticideStatus.Active)
     )
     assertEquals(
       buildJournal(pesticideReadResult = CatalogReadResult.Read(pesticides)).logOperation(plant.id, date, selectedCare),
@@ -249,10 +243,8 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
 
     val archivedPesticides    = pesticides.map(_.copy(status = PesticideStatus.Archived))
     val archivedPesticideRefs = Refs()
-    buildJournal(
-      archivedPesticideRefs,
-      pesticideReadResult = CatalogReadResult.Read(archivedPesticides)
-    ).logOperation(plant.id, date, selectedCare) match
+    val archivedRead          = CatalogReadResult.Read(archivedPesticides)
+    buildJournal(archivedPesticideRefs, pesticideReadResult = archivedRead).logOperation(plant.id, date, selectedCare) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(archivedPesticideRefs.recordedOperations.get(), Vector.empty)
@@ -806,10 +798,9 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
         fail("journal must not edit substrate components")
     val pesticideStore = new PesticideStore:
       override def getPesticides: CatalogReadResult[Pesticide]                     = pesticideReadResult
+      override def getPesticide(id: PesticideId): GetPesticideResult               = fail("journal must not read a single pesticide")
       override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
         fail("journal must not write pesticides")
-      override def editPesticide(id: PesticideId, data: PesticideData): PesticideEditResult =
-        fail("journal must not edit pesticides")
-      override def archivePesticide(id: PesticideId): PesticideArchiveResult =
-        fail("journal must not archive pesticides")
+      override def updatePesticide(pesticide: Pesticide): UpdatePesticideResult =
+        fail("journal must not update pesticides")
     PlantJournal.make(using store, substrateStore, pesticideStore, () => nextId())

@@ -21,16 +21,16 @@ const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
 const neem: Journal.Pesticide = {
   id: neemId,
   data: {
-    name: Journal.nomenclatureName("Neem oil"),
+    name: Journal.pesticideName("Neem oil"),
     pesticideType: "insecticide",
-    maybeInfo: Journal.nomenclatureInfo("Dilute before use.\nApply weekly."),
+    maybeInfo: Journal.pesticideInfo("Dilute before use.\nApply weekly."),
   },
   status: "active",
 };
 const soap: Journal.Pesticide = {
   id: soapId,
   data: {
-    name: Journal.nomenclatureName("Insecticidal soap"),
+    name: Journal.pesticideName("Insecticidal soap"),
     pesticideType: "insecticide",
     maybeInfo: null,
   },

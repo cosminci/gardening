@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
-import { instant, nomenclatureName, pesticideId } from "../../src/domain/Journal";
+import { instant, pesticideName, pesticideId } from "../../src/domain/Journal";
 import type { AttentionProjection, PesticideArchiveResult } from "../../src/domain/Journal";
 import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
 
@@ -20,7 +20,7 @@ const pesticides = [
   {
     id: neemId,
     data: {
-      name: nomenclatureName("Neem oil"),
+      name: pesticideName("Neem oil"),
       pesticideType: "insecticide" as const,
       maybeInfo: null,
     },

@@ -5,7 +5,7 @@ import {
   instant,
   milliseconds,
   nickname,
-  nomenclatureName,
+  pesticideName,
   pesticideId,
   plantId,
 } from "../../src/domain/Journal";
@@ -54,7 +54,7 @@ describe("browsing the journal", () => {
       {
         id: neemId,
         data: {
-          name: nomenclatureName("Neem oil"),
+          name: pesticideName("Neem oil"),
           pesticideType: "insecticide" as const,
           maybeInfo: null,
         },

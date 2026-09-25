@@ -1,5 +1,6 @@
 package gardening.domain.pesticide
 
+import cats.syntax.eq.*
 import gardening.domain.*
 import gardening.domain.catalog.*
 
@@ -33,13 +34,29 @@ object PesticideCatalog:
         case CatalogAddResult.AddFailed(reason) => log.error("add pesticide", reason)
 
     override def editPesticide(id: PesticideId, data: PesticideData): PesticideEditResult =
-      store.editPesticide(id, data).tap:
-        case PesticideEditResult.Edited(entry)                                            => log.info(s"pesticide edited id=${entry.id.value}")
-        case PesticideEditResult.EditFailed(reason)                                       => log.error("edit pesticide", reason)
-        case PesticideEditResult.PesticideMissing | PesticideEditResult.PesticideArchived => ()
+      store.getPesticide(id) match
+        case GetPesticideResult.RecordMissing      => PesticideEditResult.PesticideMissing
+        case GetPesticideResult.ReadFailed(reason) =>
+          PesticideEditResult.EditFailed(reason).tap(_ => log.error("edit pesticide", reason))
+        case GetPesticideResult.Read(pesticide) if pesticide.status === PesticideStatus.Archived => PesticideEditResult.PesticideArchived
+        case GetPesticideResult.Read(pesticide)                                                  => persistEdit(pesticide.copy(data = data))
+
+    private def persistEdit(edited: Pesticide): PesticideEditResult =
+      store.updatePesticide(edited) match
+        case UpdatePesticideResult.Updated => PesticideEditResult.Edited(edited).tap(_ => log.info(s"pesticide edited id=${edited.id.value}"))
+        case UpdatePesticideResult.UpdateFailed(reason) => PesticideEditResult.EditFailed(reason).tap(_ => log.error("edit pesticide", reason))
 
     override def archivePesticide(id: PesticideId): PesticideArchiveResult =
-      store.archivePesticide(id).tap:
-        case PesticideArchiveResult.Archived(entry)                                           => log.info(s"pesticide archived id=${entry.id.value}")
-        case PesticideArchiveResult.ArchiveFailed(reason)                                     => log.error("archive pesticide", reason)
-        case PesticideArchiveResult.PesticideMissing | PesticideArchiveResult.AlreadyArchived => ()
+      store.getPesticide(id) match
+        case GetPesticideResult.RecordMissing      => PesticideArchiveResult.PesticideMissing
+        case GetPesticideResult.ReadFailed(reason) =>
+          PesticideArchiveResult.ArchiveFailed(reason).tap(_ => log.error("archive pesticide", reason))
+        case GetPesticideResult.Read(pesticide) if pesticide.status === PesticideStatus.Archived => PesticideArchiveResult.AlreadyArchived
+        case GetPesticideResult.Read(pesticide) => persistArchive(pesticide.copy(status = PesticideStatus.Archived))
+
+    private def persistArchive(archived: Pesticide): PesticideArchiveResult =
+      store.updatePesticide(archived) match
+        case UpdatePesticideResult.Updated =>
+          PesticideArchiveResult.Archived(archived).tap(_ => log.info(s"pesticide archived id=${archived.id.value}"))
+        case UpdatePesticideResult.UpdateFailed(reason) =>
+          PesticideArchiveResult.ArchiveFailed(reason).tap(_ => log.error("archive pesticide", reason))

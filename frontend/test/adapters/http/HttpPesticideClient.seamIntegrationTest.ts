@@ -7,9 +7,9 @@ const pesticideId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
 const neem = {
   id: pesticideId,
   data: {
-    name: Journal.nomenclatureName("Neem oil"),
+    name: Journal.pesticideName("Neem oil"),
     pesticideType: "insecticide" as const,
-    maybeInfo: Journal.nomenclatureInfo("Dilute first"),
+    maybeInfo: Journal.pesticideInfo("Dilute first"),
   },
   status: "active" as const,
 };
@@ -64,7 +64,7 @@ describe("HttpPesticideClient", () => {
       ),
     );
     const editedData = {
-      name: Journal.nomenclatureName("Neem"),
+      name: Journal.pesticideName("Neem"),
       pesticideType: "treatment" as const,
       maybeInfo: null,
     };

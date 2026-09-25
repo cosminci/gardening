@@ -1,15 +1,15 @@
 import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { PesticideEditor } from "../../src/app/PesticideEditor";
-import { nomenclatureInfo, nomenclatureName, pesticideId } from "../../src/domain/Journal";
+import { pesticideInfo, pesticideName, pesticideId } from "../../src/domain/Journal";
 
 const neemId = pesticideId("00000000-0000-4000-8001-000000000003");
 const neem = {
   id: neemId,
   data: {
-    name: nomenclatureName("Neem oil"),
+    name: pesticideName("Neem oil"),
     pesticideType: "insecticide" as const,
-    maybeInfo: nomenclatureInfo("Dilute before use.\nApply weekly."),
+    maybeInfo: pesticideInfo("Dilute before use.\nApply weekly."),
   },
   status: "active" as const,
 };
@@ -63,9 +63,9 @@ Vitest.describe("PesticideEditor", () => {
       Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
     Vitest.expect(onAdd).toHaveBeenLastCalledWith({
-      name: nomenclatureName("Soap"),
+      name: pesticideName("Soap"),
       pesticideType: "insecticide",
-      maybeInfo: nomenclatureInfo("Dilute first.\nApply weekly."),
+      maybeInfo: pesticideInfo("Dilute first.\nApply weekly."),
     });
   });
 
@@ -115,9 +115,9 @@ Vitest.describe("PesticideEditor", () => {
         Vitest.expect(onClose).toHaveBeenCalledOnce();
       });
       Vitest.expect(onEdit).toHaveBeenLastCalledWith(neemId, {
-        name: nomenclatureName("Neem concentrate"),
+        name: pesticideName("Neem concentrate"),
         pesticideType: "treatment",
-        maybeInfo: nomenclatureInfo("Use weekly."),
+        maybeInfo: pesticideInfo("Use weekly."),
       });
     },
   );
