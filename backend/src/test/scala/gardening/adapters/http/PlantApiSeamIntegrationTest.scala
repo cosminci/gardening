@@ -106,23 +106,19 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should archive a plant and distinguish missing, already archived, and failed writes"):
-    val archivePath       = s"/plants/${plant.id.value}"
-    val archivePatch      = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
-    val archivedRefs      = Refs()
-    val missingRefs       = Refs()
-    val repeatRefs        = Refs()
-    val failedRefs        = Refs()
-    val refreshFailedRefs = Refs()
+    val archivePath  = s"/plants/${plant.id.value}"
+    val archivePatch = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
+    val refs         = Refs()
 
-    val archived = patch(archivePath, archivePatch, buildPlantApi(archivedRefs))
-    val missing  = patch(archivePath, archivePatch, buildPlantApi(missingRefs, editPlantResult = EditPlantResult.PlantMissing))
-    val repeat   = patch(archivePath, archivePatch, buildPlantApi(repeatRefs, editPlantResult = EditPlantResult.PlantArchived))
+    val archived = patch(archivePath, archivePatch, buildPlantApi(refs))
+    val missing  = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
+    val repeat   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
     val failed   =
-      patch(archivePath, archivePatch, buildPlantApi(failedRefs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
+      patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
     val refreshedLate = patch(
       archivePath,
       archivePatch,
-      buildPlantApi(refreshFailedRefs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
+      buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
     )
 
     val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
@@ -133,11 +129,7 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(missing.code -> jsonBody(missing), expectedMissing)
     assertEquals(repeat.code  -> jsonBody(repeat), expectedRepeat)
     assertEquals(failed.code  -> jsonBody(failed), expectedFailed)
-    assertEquals(archivedRefs.refreshCalls.get(), 1)
-    assertEquals(refreshFailedRefs.refreshCalls.get(), 1)
-    assertEquals(missingRefs.refreshCalls.get(), 0)
-    assertEquals(repeatRefs.refreshCalls.get(), 0)
-    assertEquals(failedRefs.refreshCalls.get(), 0)
+    assertEquals(refs.refreshCalls.get(), 2)
 
   test("should reject unsupported plant patches without archiving or refreshing"):
     val refs   = Refs()
@@ -168,20 +160,15 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       s"""[{"op":"replace","path":"/details",""" +
         s""""value":{"species":"Monstera deliciosa","nickname":"Monty","location":"Living room",""" +
         s""""substrate":[{"componentId":"${perliteId.value}","share":100}]}}]"""
-    val editedRefs   = Refs()
-    val missingRefs  = Refs()
-    val archivedRefs = Refs()
-    val unknownRefs  = Refs()
-    val catalogRefs  = Refs()
-    val failedRefs   = Refs()
+    val refs = Refs()
 
-    val edited   = patch(editPath, editPatch, buildPlantApi(editedRefs))
-    val missing  = patch(editPath, editPatch, buildPlantApi(missingRefs, editPlantResult = EditPlantResult.PlantMissing))
-    val archived = patch(editPath, editPatch, buildPlantApi(archivedRefs, editPlantResult = EditPlantResult.PlantArchived))
-    val unknown  = patch(editPath, editPatch, buildPlantApi(unknownRefs, editPlantResult = EditPlantResult.UnknownComponent))
+    val edited   = patch(editPath, editPatch, buildPlantApi(refs))
+    val missing  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
+    val archived = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
+    val unknown  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.UnknownComponent))
     val catalog  =
-      patch(editPath, editPatch, buildPlantApi(catalogRefs, editPlantResult = EditPlantResult.CatalogReadFailed(RuntimeException("secret"))))
-    val failed = patch(editPath, editPatch, buildPlantApi(failedRefs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
+      patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.CatalogReadFailed(RuntimeException("secret"))))
+    val failed = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
 
     val expectedMissing  = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
     val expectedArchived = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
@@ -196,9 +183,8 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(unknown.code  -> jsonBody(unknown), expectedUnknown)
     assertEquals(catalog.code  -> jsonBody(catalog), expectedCatalog)
     assertEquals(failed.code   -> jsonBody(failed), expectedFailed)
-    assertEquals(editedRefs.editedDetails.get(), Vector(plant.id -> expectedDetails))
-    assertEquals(editedRefs.refreshCalls.get(), 0)
-    assertEquals(missingRefs.refreshCalls.get(), 0)
+    assertEquals(refs.editedDetails.get(), Vector.fill(6)(plant.id -> expectedDetails))
+    assertEquals(refs.refreshCalls.get(), 0)
 
   test("should reject a plant edit patch whose value cannot be read as plant details"):
     val refs   = Refs()

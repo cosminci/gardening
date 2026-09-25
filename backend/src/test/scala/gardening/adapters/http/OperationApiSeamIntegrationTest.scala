@@ -205,7 +205,7 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
         fail("operation HTTP must not create plants")
       override def getPlants(status: PlantStatus): GetPlantsResult                               = fail("operation HTTP must not read plants")
       override def getArchivedCount: ArchivedCountResult                                         = fail("operation HTTP must not count plants")
-      override def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult   = fail("operation HTTP must not edit plants")
+      override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = fail("operation HTTP must not edit plants")
       override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
         getOperationsResult
