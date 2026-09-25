@@ -135,24 +135,33 @@ object PlantJournal:
                 case failure => failure
 
     override def deleteOperation(id: OperationId): DeleteOperationResult = operationMutex.exclusively:
+      val outcome =
+        for
+          operation <- readOperation(id)
+          _         <- rejectLatestRepot(operation)
+          deleted   <- deleteFromStore(operation.id)
+        yield deleted
+      outcome.merge
+
+    private def readOperation(id: OperationId): Either[DeleteOperationResult, Operation] =
       store.getOperation(id) match
-        case GetOperationResult.ReadFailed(reason) => DeleteOperationResult.DeleteFailed(reason)
-        case GetOperationResult.RecordMissing      => DeleteOperationResult.OperationMissing
-        case GetOperationResult.Read(operation)    => deleteIfPermitted(operation)
+        case GetOperationResult.Read(operation)    => operation.asRight
+        case GetOperationResult.RecordMissing      => DeleteOperationResult.OperationMissing.asLeft
+        case GetOperationResult.ReadFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
 
-    private def deleteIfPermitted(operation: Operation) =
+    private def rejectLatestRepot(operation: Operation): Either[DeleteOperationResult, Unit] =
       operation.details match
-        case _: OperationDetails.Care  => removeOperation(operation.id)
+        case _: OperationDetails.Care  => ().asRight
         case _: OperationDetails.Repot =>
-          isCurrentLatestRepot(operation) match
-            case Left(reason) => DeleteOperationResult.DeleteFailed(reason)
-            case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot
-            case Right(false) => removeOperation(operation.id)
+          readLatestOtherRepot(operation).map(isLatestRepot(operation, _)) match
+            case Right(false) => ().asRight
+            case Right(true)  => DeleteOperationResult.CannotDeleteLatestRepot.asLeft
+            case Left(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
 
-    private def removeOperation(id: OperationId) =
+    private def deleteFromStore(id: OperationId): Either[DeleteOperationResult, DeleteOperationResult] =
       store.removeOperation(id) match
-        case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted
-        case OperationCompensationResult.CompensationFailed(reason) => DeleteOperationResult.DeleteFailed(reason)
+        case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted.asRight
+        case OperationCompensationResult.CompensationFailed(reason) => DeleteOperationResult.DeleteFailed(reason).asLeft
 
     private enum PlantUpdateInterruption:
       case NotLatestRepot
@@ -198,9 +207,6 @@ object PlantJournal:
             updated          <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
           yield updated
 
-    private def isCurrentLatestRepot(operation: Operation): Either[Throwable, Boolean] =
-      readLatestOtherRepot(operation).map(isLatestRepot(operation, _))
-
     private def isLatestRepot(operation: Operation, maybeOther: Option[Operation]) =
       maybeOther.forall(other => isNewer(operation, other))
 
@@ -216,8 +222,7 @@ object PlantJournal:
                 val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
                 read(OperationWindow(nextOffset, window.size))
               case None => none[Operation].asRight
-          case GetOperationsResult.ReadFailed(reason) =>
-            reason.asLeft
+          case GetOperationsResult.ReadFailed(reason) => reason.asLeft
 
       read(OperationWindow(offset = 0, size = 10))
 
