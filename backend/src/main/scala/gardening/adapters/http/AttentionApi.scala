@@ -1,5 +1,7 @@
 package gardening.adapters.http
 
+import cats.Eq
+import cats.syntax.eq.*
 import gardening.domain.PlantId
 import gardening.domain.attention.*
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec}
@@ -66,12 +68,12 @@ object AttentionApi:
 
   final private[http] class AttentionFeed private (attention: PlantAttentionMonitor):
     private val subscribers = AtomicReference(Set.empty[Channel[AttentionProjection]])
-    private val latest      = AtomicReference(Option.empty[AttentionProjection])
+    private val latest      = AtomicReference(attention.current)
 
     private[http] def subscribe(): OxStreams.Pipe[String, AttentionProjection] = incoming =>
       val connection = Channel.unlimited[AttentionProjection]
       subscribers.updateAndGet(_ + connection).discard
-      latest.get().foreach(connection.sendOrClosed(_).discard)
+      connection.sendOrClosed(latest.get()).discard
       Flow
         .fromSource(connection)
         .merge(incoming.drain(), propagateDoneRight = true)
@@ -82,8 +84,8 @@ object AttentionApi:
         Iterator.continually {
           sleep(pollInterval)
           val projection         = attention.current
-          val previousMeasuredAt = latest.getAndSet(Some(projection)).map(_.measuredAt)
-          if !previousMeasuredAt.contains(projection.measuredAt) then subscribers.get().foreach(_.sendOrClosed(projection).discard)
+          val previousMeasuredAt = latest.getAndSet(projection).measuredAt
+          if previousMeasuredAt =!= projection.measuredAt then subscribers.get().foreach(_.sendOrClosed(projection).discard)
         }.foreach(identity)
 
   private[http] object AttentionFeed:
@@ -91,6 +93,8 @@ object AttentionApi:
       val feed = new AttentionFeed(attention)
       feed.broadcastOnChange(pollInterval)
       feed
+
+  private given Eq[Instant] = Eq.fromUniversalEquals
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")
