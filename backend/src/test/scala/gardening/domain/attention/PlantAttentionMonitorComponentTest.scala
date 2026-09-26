@@ -2,6 +2,7 @@ package gardening.domain.attention
 
 import cats.syntax.option.*
 import gardening.domain.*
+import gardening.domain.plants.*
 import io.github.iltotore.iron.autoRefine
 
 import language.experimental.captureChecking

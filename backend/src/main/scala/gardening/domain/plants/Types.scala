@@ -1,11 +1,43 @@
-package gardening.domain.journal
+package gardening.domain.plants
 
+import cats.Eq
 import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 import java.time.Instant
 import java.util.UUID
 import scodec.bits.ByteVector
+
+opaque type Species = String
+object Species:
+  def apply(value: String): Species              = value
+  extension (species: Species) def value: String = species
+
+opaque type Nickname = String
+object Nickname:
+  def apply(value: String): Nickname               = value
+  extension (nickname: Nickname) def value: String = nickname
+
+opaque type Location = String
+object Location:
+  def apply(value: String): Location               = value
+  extension (location: Location) def value: String = location
+
+enum PlantStatus derives CanEqual:
+  case Active, Archived
+
+object PlantStatus:
+  given Eq[PlantStatus] = Eq.fromUniversalEquals
+
+final case class Plant(id: PlantId, details: PlantDetails)
+
+final case class PlantDetails(
+    species: Species,
+    maybeNickname: Option[Nickname],
+    location: Location,
+    substrate: Substrate,
+    status: PlantStatus
+)
 
 opaque type PhotoId = UUID
 object PhotoId:
@@ -47,23 +79,6 @@ enum PhotoReadResult:
   case ContentMissing
   case ReadFailed(reason: Throwable)
 
-type OperationOffset   = Int :| GreaterEqual[0]
-type OperationPageSize = Int :| Interval.Closed[1, 10]
-final case class OperationWindow(offset: OperationOffset, size: OperationPageSize)
-final case class OperationPage(operations: Vector[Operation], hasNextPage: Boolean)
-
-sealed trait OperationDateRange
-
-object OperationDateRange:
-  case object Empty                                        extends OperationDateRange
-  final case class Recorded(first: Instant, last: Instant) extends OperationDateRange:
-    require(!last.isBefore(first), "last recorded operation cannot precede first")
-
-enum GetOperationDateRangeResult:
-  case Read(range: OperationDateRange)
-  case PlantMissing
-  case ReadFailed(reason: Throwable)
-
 enum GetPlantResult:
   case Read(plant: Plant)
   case RecordMissing
@@ -97,37 +112,6 @@ enum EditPlantResult:
   case UnknownComponent
   case CatalogReadFailed(reason: Throwable)
   case EditFailed(reason: Throwable)
-
-enum GetOperationResult:
-  case Read(operation: Operation)
-  case RecordMissing
-  case ReadFailed(reason: Throwable)
-
-enum GetOperationsResult:
-  case Read(page: OperationPage)
-  case ReadFailed(reason: Throwable)
-
-enum LogOperationResult:
-  case Logged(id: OperationId)
-  case PlantMissing
-  case PlantArchived
-  case LoggingFailed(reason: Throwable)
-
-enum EditOperationResult:
-  case Edited(operation: Operation)
-  case OperationMissing
-  case OperationTypeMismatch
-  case EditFailed(reason: Throwable)
-
-enum DeleteOperationResult:
-  case Deleted
-  case OperationMissing
-  case CannotDeleteLatestRepot
-  case DeleteFailed(reason: Throwable)
-
-enum OperationCompensationResult:
-  case Compensated
-  case CompensationFailed(reason: Throwable)
 
 enum UpdatePlantResult:
   case Updated

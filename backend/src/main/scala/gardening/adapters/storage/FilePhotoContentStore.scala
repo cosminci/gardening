@@ -1,6 +1,6 @@
 package gardening.adapters.storage
 
-import gardening.domain.journal.*
+import gardening.domain.plants.*
 import scodec.bits.ByteVector
 
 import java.io.IOException

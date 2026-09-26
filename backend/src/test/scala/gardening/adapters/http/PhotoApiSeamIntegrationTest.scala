@@ -1,8 +1,8 @@
 package gardening.adapters.http
 
 import gardening.domain.*
-import gardening.domain.journal.*
-import gardening.domain.journal.PhotoMediaType.*
+import gardening.domain.plants.*
+import gardening.domain.plants.PhotoMediaType.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import ox.supervised
@@ -89,7 +89,7 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
     val response = get(s"/plants/${plantId.value}/photos", server)
     assertEquals(response.code -> jsonBody(response), StatusCode.Ok -> json(pageJson))
 
-  test("should pass offset and pageSize to the journal"):
+  test("should pass offset and pageSize to plants"):
     val refs   = Refs()
     val server = buildPhotoApi(refs, getPhotosResult = GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)))
     val _      = get(s"/plants/${plantId.value}/photos?offset=5&pageSize=10", server)
@@ -157,32 +157,26 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       requestedWindows: AtomicReference[Vector[PhotoWindow]] = AtomicReference(Vector.empty)
   )
 
-  private def fakeJournal(
+  private def fakePlants(
       refs: Refs,
       addPhotoResult: AddPhotoResult,
       removePhotoResult: RemovePhotoResult,
       getPhotosResult: GetPhotosResult,
       getContentResult: PhotoReadResult
-  ): PlantJournal =
-    new PlantJournal:
+  ): Plants =
+    new Plants:
       override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
         fail("photo HTTP must not create plants")
-      override def getPlants(status: PlantStatus): GetPlantsResult                               = fail("photo HTTP must not read plants")
-      override def getArchivedCount: ArchivedCountResult                                         = fail("photo HTTP must not count plants")
-      override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = fail("photo HTTP must not edit plants")
-      override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult = fail("photo HTTP must not read operations")
-      override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult          = fail("photo HTTP must not read date ranges")
-      override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
-        fail("photo HTTP must not log operations")
-      override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult = fail("photo HTTP must not edit operations")
-      override def deleteOperation(id: OperationId): DeleteOperationResult                        = fail("photo HTTP must not delete operations")
-      override def addPhoto(pid: PlantId, content: PhotoContent): AddPhotoResult                  =
+      override def getPlants(status: PlantStatus): GetPlantsResult                                  = fail("photo HTTP must not read plants")
+      override def getArchivedCount: ArchivedCountResult                                            = fail("photo HTTP must not count plants")
+      override def editPlant(plant: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = fail("photo HTTP must not edit plants")
+      override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult                  =
         refs.addedContents.updateAndGet(_ :+ content).pipe(_ => addPhotoResult)
-      override def removePhoto(id: PhotoId): RemovePhotoResult =
-        refs.removedIds.updateAndGet(_ :+ id).pipe(_ => removePhotoResult)
-      override def getPhotos(pid: PlantId, window: PhotoWindow): GetPhotosResult =
+      override def removePhoto(photo: PhotoId): RemovePhotoResult =
+        refs.removedIds.updateAndGet(_ :+ photo).pipe(_ => removePhotoResult)
+      override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult =
         refs.requestedWindows.updateAndGet(_ :+ window).pipe(_ => getPhotosResult)
-      override def getPhotoContent(id: PhotoId): PhotoReadResult = getContentResult
+      override def getPhotoContent(photo: PhotoId): PhotoReadResult = getContentResult
 
   private def buildPhotoApi(
       refs: Refs = Refs(),
@@ -191,9 +185,9 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       getPhotosResult: GetPhotosResult = GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)),
       getContentResult: PhotoReadResult = PhotoReadResult.ContentMissing
   ) =
-    val journal = fakeJournal(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
+    val plants = fakePlants(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(using journal))
+      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(using plants))
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]
@@ -205,10 +199,10 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       getPhotosResult: GetPhotosResult = GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)),
       getContentResult: PhotoReadResult = PhotoReadResult.ContentMissing
   )(action: Int => A): A =
-    val journal = fakeJournal(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
+    val plants = fakePlants(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
     supervised:
       val binding =
-        NettySyncServer().host("127.0.0.1").port(0).addEndpoints(PhotoApi.serverEndpoints(using journal)).start()
+        NettySyncServer().host("127.0.0.1").port(0).addEndpoints(PhotoApi.serverEndpoints(using plants)).start()
       try action(binding.port)
       finally binding.stop()
 

@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.*
-import gardening.domain.journal.*
+import gardening.domain.plants.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import sttp.client3.testing.SttpBackendStub
@@ -224,39 +224,28 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       editPlantResult: EditPlantResult = EditPlantResult.Edited(plant),
       refreshResult: RefreshAttentionResult = RefreshAttentionResult.Refreshed(AttentionProjection(date, Vector.empty))
   ) =
-    val journal = new PlantJournal:
+    val plants = new Plants:
       override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
         refs.createdDetails.updateAndGet(_ :+ PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
         createPlantResult
       override def getPlants(status: PlantStatus): GetPlantsResult =
         refs.requestedStatuses.updateAndGet(_ :+ status)
         plantsResult
-      override def getArchivedCount: ArchivedCountResult                                       = archivedCountResult
-      override def editPlant(id: PlantId, edit: PlantDetails => PlantDetails): EditPlantResult =
-        refs.editedDetails.updateAndGet(_ :+ (id -> edit(plant.details)))
+      override def getArchivedCount: ArchivedCountResult                                         = archivedCountResult
+      override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult =
+        refs.editedDetails.updateAndGet(_ :+ (id -> revise(plant.details)))
         editPlantResult
-      override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
-        fail("plant HTTP must not read operations")
-      override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
-        fail("plant HTTP must not read operation dates")
-      override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
-        fail("plant HTTP must not log operations")
-      override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
-        fail("plant HTTP must not edit operations")
-      override def deleteOperation(id: OperationId): DeleteOperationResult =
-        fail("plant HTTP must not delete operations")
-      override def addPhoto(plantId: PlantId, content: gardening.domain.journal.PhotoContent): AddPhotoResult =
-        fail("plant HTTP must not add photos")
-      override def removePhoto(id: PhotoId): RemovePhotoResult                       = fail("plant HTTP must not remove photos")
-      override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult = fail("plant HTTP must not list photos")
-      override def getPhotoContent(id: PhotoId): PhotoReadResult                     = fail("plant HTTP must not read photo content")
+      override def addPhoto(id: PlantId, content: PhotoContent): AddPhotoResult = fail("plant HTTP must not add photos")
+      override def removePhoto(photo: PhotoId): RemovePhotoResult               = fail("plant HTTP must not remove photos")
+      override def getPhotos(id: PlantId, window: PhotoWindow): GetPhotosResult = fail("plant HTTP must not list photos")
+      override def getPhotoContent(photo: PhotoId): PhotoReadResult             = fail("plant HTTP must not read photo content")
     val attention = new PlantAttentionMonitor:
       override def current: AttentionProjection       = fail("plant HTTP must not read attention")
       override def refreshAll: RefreshAttentionResult =
         val _ = refs.refreshCalls.incrementAndGet()
         refreshResult
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(PlantApi.serverEndpoints(using journal, attention))
+      .whenServerEndpointsRunLogic(PlantApi.serverEndpoints(using plants, attention))
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]

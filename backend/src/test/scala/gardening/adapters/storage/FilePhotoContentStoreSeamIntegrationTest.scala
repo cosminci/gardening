@@ -1,7 +1,7 @@
 package gardening.adapters.storage
 
-import gardening.domain.journal.*
-import gardening.domain.journal.PhotoMediaType.*
+import gardening.domain.plants.*
+import gardening.domain.plants.PhotoMediaType.*
 import munit.FunSuite
 import scodec.bits.ByteVector
 

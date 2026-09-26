@@ -76,15 +76,15 @@ object PesticideApi:
 
   private given CirceConfiguration = CirceConfiguration.default
     .withTransformMemberNames {
-      case "maybeInfo"     => "info"
-      case "pesticideType" => "type"
-      case name            => name
+      case "maybeInfo" => "info"
+      case "kind"      => "type"
+      case name        => name
     }
     .withTransformConstructorNames(lowerCamel)
   private given TapirConfiguration = TapirConfiguration.default.copy(toEncodedName = {
-    case "maybeInfo"     => "info"
-    case "pesticideType" => "type"
-    case name            => name
+    case "maybeInfo" => "info"
+    case "kind"      => "type"
+    case name        => name
   })
 
   private given Codec[PesticideName] = Codec.from(Decoder.decodeString.map(PesticideName.apply), Encoder.encodeString.contramap(_.value))
