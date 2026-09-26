@@ -52,5 +52,5 @@ export function backendCheck(source: Dagger.Directory): Dagger.Container {
 export function backendStage(source: Dagger.Directory): Dagger.Directory {
   return backendSources(sbtBase(TARGET_PLATFORM as Dagger.Platform), source)
     .withExec(["sbt", "-batch", "-Dsbt.color=false", "stage"])
-    .directory("/work/target/universal/stage");
+    .directory("/work/target/out/jvm/scala-3.8.4/gardening-backend/universal/stage");
 }
