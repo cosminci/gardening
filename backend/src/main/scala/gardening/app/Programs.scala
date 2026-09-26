@@ -1,29 +1,50 @@
 package gardening.app
 
-import gardening.adapters.persistence.{SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateComponentStore}
+import gardening.adapters.persistence.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
+import gardening.adapters.prometheus.{PrometheusOperationsMetrics, PrometheusPlantAttentionMonitorMetrics, PrometheusPlantsMetrics}
+import gardening.adapters.storage.FilePhotoContentStore
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
-import gardening.domain.attention.PlantAttentionMonitor
-import gardening.domain.journal.PlantJournal
+import gardening.domain.{Logger, PlantUpdateLock}
+import gardening.domain.attention.{PlantAttentionMonitor, PlantAttentionMonitorMetricsApi}
+import gardening.domain.operations.{Operations, OperationsMetricsApi}
 import gardening.domain.pesticide.PesticideCatalog
-import gardening.domain.substrate.SubstrateComponentCatalog
+import gardening.domain.plants.{Plants, PlantsMetricsApi}
+import gardening.domain.substrate.SubstrateCatalog
+import io.prometheus.metrics.model.registry.PrometheusRegistry
+import ox.{Ox, discard, forkDiscard, sleep}
+
+import java.nio.file.Path
 
 final case class Programs(
-    plantJournal: PlantJournal,
+    plants: Plants,
+    operations: Operations,
     plantAttentionMonitor: PlantAttentionMonitor,
-    substrateComponentCatalog: SubstrateComponentCatalog,
+    substrateCatalog: SubstrateCatalog,
     pesticideCatalog: PesticideCatalog
 )
 
 object Programs:
 
-  def make(resources: AppResources): Either[Throwable, Programs] =
-    val store          = SqlitePlantStore.make(resources.transactor)
-    val substrateStore = SqliteSubstrateComponentStore.make(resources.transactor)
+  def make(resources: AppResources, photosDir: Path, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
+    val plantStore     = SqlitePlantStore.make(resources.transactor)
+    val operationStore = SqliteOperationStore.make(resources.transactor)
+    val contentStore   = FilePhotoContentStore.make(photosDir)
+    val substrateStore = SqliteSubstrateStore.make(resources.transactor)
     val pesticideStore = SqlitePesticideStore.make(resources.transactor)
-    PlantAttentionMonitor.make(using store, SystemClock).map: attention =>
+    val plantLock      = PlantUpdateLock.make
+
+    val (plantsMetrics, substrateComponentUsageTotal) = PrometheusPlantsMetrics.make(registry)
+    given PlantsMetricsApi                            = plantsMetrics
+    given OperationsMetricsApi                        = PrometheusOperationsMetrics.make(registry, substrateComponentUsageTotal)
+    given PlantAttentionMonitorMetricsApi             = PrometheusPlantAttentionMonitorMetrics.make(registry)
+
+    PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
+      forkDiscard:
+        Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
-        PlantJournal.make(using store, substrateStore, pesticideStore, UuidIdGenerator),
+        Plants.make(using plantStore, contentStore, substrateStore, UuidIdGenerator, SystemClock, plantLock),
+        Operations.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
-        SubstrateComponentCatalog.make(using substrateStore, UuidIdGenerator),
+        SubstrateCatalog.make(using substrateStore, UuidIdGenerator),
         PesticideCatalog.make(using pesticideStore, UuidIdGenerator)
       )

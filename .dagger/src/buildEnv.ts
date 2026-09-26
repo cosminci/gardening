@@ -3,6 +3,7 @@
 // emulation (amd64 on an arm64 host) because it is pulled rather than assembled.
 export const JDK_IMAGE = "sbtscala/scala-sbt:eclipse-temurin-25.0.4_7_1.13.0_3.8.4"; // builder only
 export const NODE_IMAGE = "node:24-slim"; // builder only
+export const PYTHON_IMAGE = "python:3.14-slim"; // local setup tests only
 /** Runtime base: distroless java-base carries the system libraries a JVM needs (glibc, zlib, …)
  * but no JRE, so the backend's bundled jlink runtime supplies Java. No shell, no package manager. */
 export const RUNTIME_IMAGE = "gcr.io/distroless/java-base-debian12";
@@ -25,5 +26,7 @@ export const WORKSPACE_IGNORE = [
   "**/dist",
   "**/.bsp",
   "**/.scala-build",
+  "**/__pycache__",
   ".dagger/sdk",
+  ".local",
 ];

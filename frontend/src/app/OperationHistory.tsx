@@ -5,10 +5,12 @@ import * as Labels from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
 
 export type OperationHistoryChange =
-  { readonly kind: "logged" } | { readonly kind: "edited"; readonly operation: Journal.Operation };
+  | { readonly kind: "logged" }
+  | { readonly kind: "deleted" }
+  | { readonly kind: "edited"; readonly operation: Journal.Operation };
 
 interface OperationHistoryProps {
-  readonly plantId: Journal.PlantId;
+  readonly plant: Journal.PlantId;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
@@ -70,7 +72,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
 
   createEffect(
     on(
-      () => props.plantId,
+      () => props.plant,
       () => {
         latestRequest += 1;
         requestedPage = 1;
@@ -87,7 +89,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
       () => props.operationChange,
       (change) => {
         if (!expanded() || change === undefined) return;
-        if (change.kind === "logged") void loadPage(pageNumber());
+        if (change.kind === "logged" || change.kind === "deleted") void loadPage(pageNumber());
         else
           setState((current) =>
             current.kind === "loaded"
@@ -115,7 +117,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   return (
     <section class="operation-history">
       <div
-        id={`operation-history-${props.plantId}`}
+        id={`operation-history-${props.plant}`}
         class="operation-history__disclosure"
         classList={{ "operation-history__disclosure--expanded": expanded() }}
         aria-label="Operation history"
@@ -157,6 +159,9 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                       <table>
                         <thead>
                           <tr>
+                            <th scope="col">
+                              <span class="visually-hidden">Edit</span>
+                            </th>
                             <th scope="col">Date</th>
                             <th scope="col">Type</th>
                             <th scope="col">Details</th>
@@ -169,18 +174,10 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                               <tr
                                 class={`operation-history__row operation--${operation.details.kind}`}
                               >
-                                <td>
-                                  <time dateTime={operation.date}>
-                                    {Labels.formatLocalDate(operation.date)}
-                                  </time>
-                                </td>
-                                <td>
-                                  <span class="operation__kind">
-                                    {Labels.operationKindLabel(operation.details)}
-                                  </span>
+                                <td class="operation-history__edit-cell">
                                   <button
                                     id={editOperationControlId(operation.id)}
-                                    class="operation__edit"
+                                    class="inline-icon-action inline-icon-action--edit"
                                     type="button"
                                     aria-label={Labels.operationEditLabel(
                                       operation,
@@ -190,9 +187,17 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                                     onClick={() => {
                                       props.onEdit(operation);
                                     }}
-                                  >
-                                    Edit
-                                  </button>
+                                  />
+                                </td>
+                                <td>
+                                  <time dateTime={operation.date}>
+                                    {Labels.formatLocalDate(operation.date)}
+                                  </time>
+                                </td>
+                                <td>
+                                  <span class="operation__kind">
+                                    {Labels.operationKindLabel(operation.details)}
+                                  </span>
                                 </td>
                                 <td>
                                   <For
@@ -258,7 +263,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
         type="button"
         aria-label={expanded() ? "Hide operation history" : "Show operation history"}
         aria-expanded={expanded()}
-        aria-controls={`operation-history-${props.plantId}`}
+        aria-controls={`operation-history-${props.plant}`}
         onClick={toggle}
       >
         <span aria-hidden="true">

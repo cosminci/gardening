@@ -11,8 +11,9 @@ function gitContainer(source: Directory): Container {
  */
 export async function changedPaths(source: Directory, base: string): Promise<string> {
   const ref = base === "" ? "origin/main" : base;
-  const script = `git diff --name-only "$(git merge-base ${ref} HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)" HEAD`;
-  return gitContainer(source).withExec(["sh", "-c", script]).stdout();
+  const script =
+    'git diff --name-only "$(git merge-base "$1" HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -1)" HEAD';
+  return gitContainer(source).withExec(["sh", "-c", script, "sh", ref]).stdout();
 }
 
 export async function gitDescribe(source: Directory): Promise<string> {
@@ -22,17 +23,5 @@ export async function gitDescribe(source: Directory): Promise<string> {
 }
 
 export async function headSha(source: Directory): Promise<string> {
-  return gitContainer(source).withExec(["git", "rev-parse", "--short", "HEAD"]).stdout();
-}
-
-export async function isClean(source: Directory): Promise<boolean> {
-  const status = await gitContainer(source).withExec(["git", "status", "--porcelain"]).stdout();
-  return status.trim() === "";
-}
-
-/** The tag HEAD sits exactly on, or an empty string when HEAD is not on a tag. */
-export async function headExactTag(source: Directory): Promise<string> {
-  return gitContainer(source)
-    .withExec(["sh", "-c", "git describe --exact-match --tags HEAD 2>/dev/null || true"])
-    .stdout();
+  return gitContainer(source).withExec(["git", "rev-parse", "HEAD"]).stdout();
 }

@@ -27,9 +27,9 @@ Gate: the classification is written down and the branch is named `feature/<slug>
 
 ## Phase 2 — Spec PR (reviewed and merged before implementation)
 
-Write `specs/changes/<slug>/proposal.md` from the change-spec template. Keep it at the altitude of behaviour, intent, and the domain contract: the observable behaviour, plus the domain types, ports, and service signatures that define the feature — that contract is design, and belongs in the spec. What stays out is implementation: adapter or library choices, file paths, module layout, private wiring, HTTP endpoint shapes (those live in `contracts.md` / `openapi.yaml`), and diff walkthroughs (see the Change Specs checklist in the standards).
+Write `specs/changes/<slug>/proposal.md` from the change-spec template. Keep it at the altitude of behaviour, intent, and the domain contract: the observable behaviour, plus the domain types, ports, and service signatures that define the feature — that contract is design, and belongs in the spec. What stays out is implementation: adapter or library choices, file paths, module layout, private wiring, HTTP endpoint shapes (those live in generated `contract/openapi.yaml`; `contracts.md` links to it), and diff walkthroughs (see the Change Specs checklist in the standards).
 
-- **Feature:** state current → new behaviour explicitly; acceptance criteria (each externally observable); invariants (pre-existing guarantees that must still hold — not the change's own rules); tradeoffs accepted; and **Doc Sync** — the exact living-doc sections the archive phase will update.
+- **Feature:** state current → new behaviour explicitly; acceptance criteria (each externally observable); invariants (pre-existing guarantees that must still hold — not the change's own rules); tradeoffs accepted; and **Doc Sync** — the specific durable knowledge each affected living doc will gain or change.
 - **Investigation:** record hypotheses and the evidence for or against each, narrowing to a proven root cause. The archived spec's "What & Why" must state the proven root cause and the rejected hypotheses that revealed an expectation-vs-reality gap.
 
 The proposal is submitted as its own **Spec PR**. That PR contains the proposal and any
@@ -51,16 +51,18 @@ Before drafting:
 Write each fact once:
 
 - **What & Why:** current behaviour → new behaviour; missing capability and intent.
-- **Domain / Design Notes:** changed domain contracts, ports, and boundaries.
+- **Domain / Design Notes:** changed domain contracts, ports, and boundaries — types, ADTs, traits, Flyway migrations, or DB schema when they carry the change; a short diagram or code snippet over prose when it states the fact more clearly.
 - **Acceptance Criteria:** the smallest externally observable proof set, including relevant failure and accessibility outcomes.
-- **Doc Sync:** only the living-document sections that must change.
+- **Doc Sync:** name the section and the exact new or revised fact, decision, or workflow it will contain. Compare against the current living doc before writing it: "update the domain model" or "add tests for creation" is not a delta. Omit a doc if the change adds nothing beyond what its code, generated contract, or existing docs already say.
 
 Keep the proposal proportional:
 
 - Start with required sections. Add an optional section only when it contributes new information.
 - Use short technical bullets. Avoid narrative paragraphs and introductory filler.
+- Reach for a small code snippet, schema fragment, or diagram instead of prose whenever it states the fact more directly than a sentence would — but only then; don't default to a diagram or a bullet list for something one line already covers.
 - Do not restate What & Why or Domain / Design Notes as acceptance criteria.
 - Group cohesive outcomes into one criterion; do not create a criterion per sentence or implementation branch.
+- A section holds only its own genuine content, not filler restating other sections: an "invariant" that is actually this change's own new rule, a "tradeoff" with no real downside, or an "out of scope" bullet that just restates what the acceptance criteria already exclude are not real entries for that section — cut them rather than fill the section for its own sake.
 - Compare the final proposal with the closest approved spec. If a small change approaches a foundational spec's size or criterion count, cut it.
 
 Gate: every sentence has one section that owns it; removing any sentence would lose information.
@@ -114,7 +116,9 @@ The change's own rules belong in Acceptance Criteria. -->
 
 ## Tradeoffs Accepted
 
-<!-- Optional. State what becomes worse or more constrained and why it is acceptable. -->
+<!-- Optional. State what becomes worse or more constrained and why it is acceptable.
+Litmus test: name the concrete downside and who bears it. A decision with no real
+cost is not a tradeoff — leave it out. -->
 
 ## Acceptance Criteria
 
@@ -125,14 +129,18 @@ rollback, loading, failure, boundary, and accessibility behavior where relevant.
 
 ## Doc Sync
 
-<!-- Required. Name each affected living document and the section or property to update.
-Omit only when no living document changes. -->
+<!-- Required when a living doc gains or changes durable knowledge. For each entry, name
+the doc, section, and the specific new/revised fact or decision; do not merely name a
+topic or repeat this guidance. Do not plan an endpoint/schema recap in contracts.md
+or a test/fixture inventory in testing.md. If none changes, say so in one sentence. -->
 
-- <doc> — <section or property that changes>
+- <doc> — <section>: <specific knowledge to add or revise>
 
 ## Out of Scope
 
-<!-- Optional. Maximum two bullets in functional/business language. Omit if unnecessary. -->
+<!-- Optional. Maximum two bullets in functional/business language. Omit if unnecessary.
+Only a bullet a reader would reasonably wonder about — not a restatement of what the
+acceptance criteria already exclude. -->
 ```
 
 ## Phase 3 — Tests projected from the spec
@@ -156,7 +164,7 @@ Make the tests pass. Zero warnings, 100% coverage, and green gates are not negot
 - Whole change: `dagger call verify` (affected). If you touched the tapir endpoints or `contract/`, regenerate the contract and confirm `dagger call contract-drift`.
 
 Gate: all of the above exit zero for the complete implementation. Do not weaken a gate to pass
-(see CLAUDE.md → What agents must not do).
+(see AGENTS.md → What agents must not do).
 
 ### Implementation authoring checklist
 
@@ -172,16 +180,37 @@ when the checklist records why.
   A small number of use cases should cover the dominant behavior; add exceptional cases only when
   they represent real user or domain behavior, and fold them into an existing use case when that
   makes the behavior clearer.
+- [ ] Every behavioral test suite must belong to a runtime trait or port (including a concrete
+  adapter tested at that seam). Never create a suite for a result ADT, helper, or one member
+  within a trait; test its relevant behavior through the owning trait's existing suite.
 - [ ] Review each affected suite as a whole against the module's supported behavior. Edit, extend,
   simplify, merge, or remove existing tests as the use cases evolve; add a test only when the
   behavior is not already represented. Do not append cases just to chase coverage.
 - [ ] Order tests, fields, methods, and other declarations from top to bottom and left to right by
   semantic importance and value.
-- [ ] Use this test-suite shape without exception: reusable, non-trivial mock data first; use-case
-  tests second; then `Ref` values and `buildX` helpers, where `X` is the tested trait.
-- [ ] In backend component and HTTP seam tests, configure and observe collaborators through `Refs`;
-  call `buildX(refs)` with no other arguments. Construct port substitutes inside that builder,
-  not in test use cases or separate stub classes.
+- [ ] Use this test-suite shape: reusable, non-trivial mock data first; use-case tests
+  second; then observable `Refs` (only when needed) and `buildX` helpers, where `X`
+  is the tested trait.
+- [ ] In backend component and HTTP seam tests, put only observable mutable effects and call
+  captures in `Refs` (for example, `AtomicReference` or `AtomicInteger` values that tests
+  assert). Pass fixed collaborator responses, failures, clocks, and other stub configuration
+  directly to `buildX(refs, ...)` as parameters with defaults for the ordinary case. Never
+  store or assert mock response values through `Refs`. Construct port substitutes inside
+  that builder, not in test use cases or separate stub classes. If a use case only checks
+  the returned result and does not observe collaborator effects, call `buildX()` without
+  creating `Refs`.
+- [ ] Never create more than one `Refs` instance in a single test. A test that wants to exercise
+  more than one independent scenario (for example, two distinct `buildX` collaborator setups) is
+  covering more than one use case; split it into one test per scenario, each with at most one
+  `Refs`, instead of naming the extra instances (`careRefs`, `repotRefs`, `tieRefs`, and so on).
+- [ ] Scope a stub or mock (a `given` capability substitute, fixed collaborator response, and so
+  on) as narrowly as possible. A mock needed by exactly one suite is declared in that suite, no
+  matter how large or complex it is — do not hoist it to a shared location on the assumption it
+  might be reused later. A mock needed by more than one suite depends on its size: a trivial
+  one-liner is cheaper to repeat per suite than to add a shared indirection for; a non-trivial
+  object (roughly four or more lines to define) is worth sharing, in `TestImplicits` for a
+  capability `given` or a shared `Mocks` object for domain data. There is no sharp cutoff — weigh
+  the object's complexity against how many suites actually need it, not how many might.
 - [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
   cannot leak beyond its boundary and a codec cannot express the format cleanly.
 - [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need
@@ -212,19 +241,32 @@ when the checklist records why.
 - [ ] Structure every test as Arrange, Act, Assert: declare fixtures first; then references,
   build the trait under test, and execute the behavior; finally declare expected values and make
   assertions. Separate Arrange, Act, and Assert with mandatory blank lines.
+- [ ] Log once, at the owning domain service — never in an adapter or a pure function. Thread
+  `Logger` as a capability, not a global logger. Keep every line a single line.
 
 ## Phase 5 — Archive and living-doc PR
 
 After all Implementation PRs are merged, submit a separate **Archive + Living Docs PR**.
 Apply the spec's Doc Sync to the living docs (`specs/*.md`, and `ci/specs/*.md` if the
-pipeline changed), so they describe the system as it now is. Structure every living doc against
-its template in `specs/templates/<name>.md`: add only the sections that template defines, keep
-each fact in one place (link instead of restating), and omit a section rather than pad it. Move
-the spec to `specs/changes/archive/YYYY-MM-DD-<slug>/` in this PR.
+pipeline changed). Write only durable information that helps a reader understand the core
+domain, use cases, workflows, boundary semantics, test strategy, or operating constraints
+without reconstructing those decisions from code. `design.md` diagrams the overall
+architecture, core domain, use cases, and workflows with brief notes, not implementation
+detail or every operation and edge case.
+`contracts.md` enumerates all contract surfaces, using a single reference to generated
+OpenAPI for the entire HTTP surface instead of reproducing endpoints, fields, status
+codes, or errors defined there. `testing.md` explains component-specific
+testing strategy and why particular boundaries must be real or substituted; it does not
+enumerate tests, fixtures, data values, or covered cases. Put general test conventions in
+`CONTRIBUTING.md`. Structure each living doc against `specs/templates/<name>.md`, link to
+the canonical source instead of restating it, and omit sections or Doc Sync entries with
+no distinct value. Prune obsolete or duplicated content rather than appending to it.
+Move the spec to `specs/changes/archive/YYYY-MM-DD-<slug>/` in this PR.
 
 The Archive + Living Docs PR links the merged Spec PR and all Implementation PRs. It contains no
 new product behavior; it closes the documentation and archival work only.
 
-Gate: every Doc Sync entry is applied; each touched living doc conforms to its template (no
-out-of-template sections, no duplicated facts); the spec is archived; the Archive + Living Docs
-PR is reviewed and merged; and the checklist is satisfied.
+Gate: every Doc Sync entry's specific knowledge delta is applied; each touched living doc
+conforms to its template and adds information not readily inferred from code, OpenAPI, or
+another doc; the spec is archived; the Archive + Living Docs PR is reviewed and merged;
+and the checklist is satisfied.

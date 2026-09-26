@@ -10,12 +10,25 @@ export interface SubstratePartInput {
   readonly share: number;
 }
 
+export const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
+  if (parts.length === 0) return "Add at least one substrate component.";
+  if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
+    return "Each substrate share must be a whole number from 1 to 100%.";
+  if (new Set(parts.map((part) => part.component)).size !== parts.length)
+    return "Each substrate component can only be used once.";
+  if (parts.reduce((total, part) => total + part.share, 0) > 100)
+    return "Substrate shares cannot total more than 100%.";
+  return undefined;
+};
+
 interface SubstrateFieldsProps {
   readonly parts: readonly SubstratePartInput[];
   readonly components: readonly SubstrateComponent[];
   readonly onChange: (parts: SubstratePartInput[]) => void;
   readonly onAddComponent: () => void;
   readonly onEditComponent: (component: SubstrateComponent, returnFocusId: string) => void;
+  readonly onSaveMix: () => void;
+  readonly onLoadMix: () => void;
 }
 
 export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
@@ -26,9 +39,9 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
   };
 
   const availableComponent = () =>
-    props.components.find(
-      (component) => !props.parts.some((part) => part.component === component.id),
-    );
+    props.components
+      .filter((component) => component.status === "active")
+      .find((component) => !props.parts.some((part) => part.component === component.id));
   const selectedComponent = (id: SubstrateComponentId) =>
     props.components.find((component) => component.id === id);
 
@@ -48,7 +61,12 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
                   });
                 }}
               >
-                <For each={props.components}>
+                <For
+                  each={props.components.filter(
+                    (component) =>
+                      component.status === "active" || component.id === part().component,
+                  )}
+                >
                   {(component) => (
                     <option value={component.id}>
                       {substrateComponentLabel(component.id, props.components)}
@@ -120,11 +138,59 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           disabled={availableComponent() === undefined}
           onClick={() => {
             const component = availableComponent();
+            // The button is `disabled` when availableComponent() === undefined, so this guard's
+            // false side is unreachable at runtime (domain invariant, not a testable DOM path).
+            /* v8 ignore next */
             if (component !== undefined)
               props.onChange([...props.parts, { component: component.id, share: 1 }]);
           }}
         >
           Extend mix
+        </button>
+        <button
+          id={Controls.saveSubstrateMixControlId}
+          class="inline-icon-action inline-icon-action--save-mix"
+          type="button"
+          aria-label="Save mix"
+          disabled={validateSubstrate(props.parts) !== undefined}
+          onClick={() => {
+            props.onSaveMix();
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+        </button>
+        <button
+          id={Controls.loadSubstrateMixControlId}
+          class="inline-icon-action inline-icon-action--load-mix"
+          type="button"
+          aria-label="Load saved mix"
+          onClick={() => {
+            props.onLoadMix();
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
         </button>
         <button
           id={Controls.addSubstrateComponentControlId}

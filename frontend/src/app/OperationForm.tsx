@@ -2,10 +2,15 @@ import { Show, createSignal, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
 import { CareFields } from "./CareFields";
-import { SubstrateFields } from "./SubstrateFields";
+import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
 import "./form-fields.css";
 import "./operation-form.css";
+
+export interface DeleteAction {
+  readonly controlId: string;
+  readonly onClick: () => void;
+}
 
 interface OperationFormProps {
   readonly initial: Journal.OperationDetails | undefined;
@@ -17,10 +22,14 @@ interface OperationFormProps {
     component: Journal.SubstrateComponent,
     returnFocusId: string,
   ) => void;
+  readonly onSaveSubstrateMix: (substrate: Journal.Substrate) => void;
+  readonly onLoadSubstrateMix: () => void;
+  readonly onRegisterSubstrateLoader: (load: (substrate: Journal.Substrate) => void) => void;
   readonly onAddPesticide: () => void;
   readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
   readonly inactive?: boolean;
   readonly onCancel: () => void;
+  readonly onDelete?: DeleteAction | undefined;
 }
 
 export const OperationForm: Component<OperationFormProps> = (props) => {
@@ -45,6 +54,11 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
         : [{ component: initialSubstrateComponent.id, share: 100 }],
   );
   const [notes, setNotes] = createSignal(props.initial?.maybeNote ?? "");
+  untrack(() => {
+    props.onRegisterSubstrateLoader((substrate) => {
+      setParts(substrate.map((part) => ({ component: part.component, share: part.share })));
+    });
+  });
   const [operationDate, setOperationDate] = createSignal(formatLocalMinute(new Date()));
   const [dateError, setDateError] = createSignal(false);
   const [validationError, setValidationError] = createSignal<string>();
@@ -171,6 +185,17 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
               onChange={setParts}
               onAddComponent={props.onAddSubstrateComponent}
               onEditComponent={props.onEditSubstrateComponent}
+              onSaveMix={() => {
+                props.onSaveSubstrateMix(
+                  Journal.substrate(
+                    parts().map((part) => ({
+                      component: part.component,
+                      share: Journal.percentage(part.share),
+                    })),
+                  ),
+                );
+              }}
+              onLoadMix={props.onLoadSubstrateMix}
             />
           }
         >
@@ -201,6 +226,21 @@ export const OperationForm: Component<OperationFormProps> = (props) => {
         </label>
         <Show when={validationError()}>{(error) => <p role="alert">{error()}</p>}</Show>
         <footer class="operation-form__actions">
+          <Show when={props.onDelete}>
+            {(onDelete) => (
+              <button
+                id={onDelete().controlId}
+                class="operation-form__delete"
+                type="button"
+                disabled={submitting()}
+                onClick={() => {
+                  onDelete().onClick();
+                }}
+              >
+                Delete
+              </button>
+            )}
+          </Show>
           <button class="primary-action" type="submit" disabled={submitting()}>
             {submitting() ? "Saving…" : "Save operation"}
           </button>
@@ -224,15 +264,4 @@ const parseLocalMinute = (value: string): Journal.Instant | undefined => {
   const date = new Date(value);
   if (formatLocalMinute(date) !== value) return undefined;
   return Journal.instant(date.toISOString());
-};
-
-const validateSubstrate = (parts: readonly SubstratePartInput[]) => {
-  if (parts.length === 0) return "Add at least one substrate component.";
-  if (parts.some((part) => !Number.isInteger(part.share) || part.share < 1 || part.share > 100))
-    return "Each substrate share must be a whole number from 1 to 100%.";
-  if (new Set(parts.map((part) => part.component)).size !== parts.length)
-    return "Each substrate component can only be used once.";
-  if (parts.reduce((total, part) => total + part.share, 0) > 100)
-    return "Substrate shares cannot total more than 100%.";
-  return undefined;
 };

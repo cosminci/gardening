@@ -1,5 +1,6 @@
 package gardening.domain.attention
 
+import cats.Eq
 import gardening.domain.PlantId
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.collection.MaxLength
@@ -45,6 +46,19 @@ object WateringAttention:
 
 final case class PlantAttention(plantId: PlantId, watering: WateringAttention)
 final case class AttentionProjection(measuredAt: Instant, plants: Vector[PlantAttention])
+
+enum AttentionLevel derives CanEqual:
+  case Unavailable, Current, Overdue, RedAlert
+
+object AttentionLevel:
+  given Eq[AttentionLevel] = Eq.fromUniversalEquals
+
+extension (watering: WateringAttention)
+  def level: AttentionLevel = watering match
+    case _: WateringAttention.Unavailable => AttentionLevel.Unavailable
+    case _: WateringAttention.Current     => AttentionLevel.Current
+    case _: WateringAttention.Overdue     => AttentionLevel.Overdue
+    case _: WateringAttention.RedAlert    => AttentionLevel.RedAlert
 
 enum RefreshAttentionResult:
   case Refreshed(projection: AttentionProjection)

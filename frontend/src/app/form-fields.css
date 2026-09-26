@@ -121,9 +121,21 @@ select:disabled {
 }
 
 .inline-icon-action--edit::before {
-  content: "\1f527";
-  font-size: 0.72rem;
+  content: "\270e";
+  font-size: 0.85rem;
   line-height: 1;
+}
+
+.inline-icon-action--save-mix svg,
+.inline-icon-action--load-mix svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.inline-icon-action--save-mix:disabled,
+.inline-icon-action--load-mix:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .choice input {

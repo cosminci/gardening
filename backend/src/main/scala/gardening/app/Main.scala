@@ -1,16 +1,19 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{AttentionApi, HealthApi, JournalApi, PesticideApi, StaticSite, SubstrateComponentApi}
+import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PhotoApi, PlantApi, StaticSite, SubstrateApi}
 import gardening.adapters.persistence.SqliteLocation
-import gardening.domain.attention.PlantAttentionMonitor
+import gardening.domain.Logger
+import io.prometheus.metrics.instrumentation.jvm.JvmMetrics
+import io.prometheus.metrics.model.registry.PrometheusRegistry
 import org.flywaydb.core.Flyway
-import ox.{EitherMode, forkError, sleep, supervisedError}
-import ox.either.*
-import sttp.tapir.server.netty.sync.NettySyncServer
+import org.slf4j.LoggerFactory
+import ox.{EitherMode, supervisedError}
+import sttp.shared.Identity
+import sttp.tapir.server.metrics.prometheus.PrometheusMetrics
+import sttp.tapir.server.netty.sync.{NettySyncServer, NettySyncServerOptions}
 
-import scala.concurrent.duration.*
-import scala.util.chaining.*
+import java.nio.file.Paths
 import scala.util.Using
 
 object Main:
@@ -21,28 +24,39 @@ object Main:
     val port      = sys.env.get("GARDENING_PORT").flatMap(_.toIntOption).getOrElse(8080)
     val host      = sys.env.getOrElse("GARDENING_HOST", "0.0.0.0")
     val dbPath    = sys.env.getOrElse("GARDENING_DB_PATH", "gardening.db")
+    val photosDir = Paths.get(sys.env.getOrElse("GARDENING_PHOTOS_DIR", "photos"))
 
-    Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
-      val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-      Programs.make(resources).flatMap: programs =>
-        val endpoints =
-          List(HealthApi.serverEndpoint(version)) ++
-            JournalApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
-            AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
-            SubstrateComponentApi.serverEndpoints(using programs.substrateComponentCatalog) ++
-            PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
-            StaticSite.endpoint(staticDir)
-        run(programs.plantAttentionMonitor):
-          val _ = NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait()
-      .orThrow
+    given log: Logger = new Logger:
+      private val underlying           = LoggerFactory.getLogger("gardening")
+      def info(message: String): Unit  = underlying.info(message)
+      def error(message: String): Unit = underlying.error(message)
 
-  private def run(attention: PlantAttentionMonitor)(http: => Unit) =
-    supervisedError(EitherMode[Throwable]()):
-      val _ = forkError(pollPlantAttention(attention))
-      http.pipe(_ => ().asRight)
+    val registry = new PrometheusRegistry
+    JvmMetrics.builder().register(registry)
+    val prometheusMetrics = PrometheusMetrics.default[Identity](namespace = "gardening", registry = registry)
+    val serverOptions     = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(prometheusMetrics.metricsInterceptor()).options
 
-  private def pollPlantAttention(attention: PlantAttentionMonitor) =
-    Iterator.continually {
-      sleep(5.minutes)
-      val _ = attention.refreshAll
-    }.foreach(identity).pipe(_ => ().asRight)
+    val outcome = Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
+      supervisedError(EitherMode[Throwable]()):
+        val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
+        Programs.make(resources, photosDir, registry).flatMap: programs =>
+          val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics)
+          log.info(s"gardening backend ready host=$host port=$port version=$version")
+          NettySyncServer(serverOptions).host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
+    outcome.left.foreach(log.error("startup", _))
+    if outcome.isLeft then sys.exit(1)
+
+  private def aggregateEndpoints(
+      programs: Programs,
+      version: String,
+      staticDir: String,
+      prometheusMetrics: PrometheusMetrics[Identity]
+  ) =
+    List(HealthApi.serverEndpoint(version), prometheusMetrics.metricsEndpoint) ++
+      PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
+      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
+      OperationApi.serverEndpoints(using programs.operations) ++
+      SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
+      PhotoApi.serverEndpoints(using programs.plants) ++
+      PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
+      StaticSite.endpoint(staticDir)

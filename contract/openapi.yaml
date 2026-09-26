@@ -46,6 +46,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Create an active plant
+      operationId: postPlants
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantCreation'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plant'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '422':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /plants/archived/count:
     get:
       summary: Count archived plants
@@ -63,19 +103,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /plants/{plantId}/archive:
-    post:
-      summary: Permanently archive an active plant
-      operationId: postPlantsPlantidArchive
+  /plants/{plantId}:
+    patch:
+      summary: Patch a plant
+      operationId: patchPlantsPlantid
       parameters:
       - name: plantId
         in: path
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlantPatchOperation'
+        required: true
       responses:
         '204':
           description: ''
+        '400':
+          description: ''
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: ''
           content:
@@ -88,7 +142,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '415':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
           description: ''
           content:
             application/json:
@@ -105,16 +177,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttentionProjection'
-  /plants/{plantId}/operations:
+  /operations:
     get:
       summary: List a bounded page of plant operations
-      operationId: getPlantsPlantidOperations
+      operationId: getOperations
       parameters:
       - name: plantId
-        in: path
+        in: query
         required: true
         schema:
           type: string
+          minLength: 1
       - name: offset
         in: query
         required: false
@@ -140,8 +213,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/OperationPage'
         '400':
-          description: 'Invalid value for: query parameter offset, Invalid value for:
-            query parameter pageSize'
+          description: 'Invalid value for: query parameter plantId, Invalid value
+            for: query parameter offset, Invalid value for: query parameter pageSize'
           content:
             text/plain:
               schema:
@@ -154,13 +227,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       summary: Log a plant operation
-      operationId: postPlantsPlantidOperations
-      parameters:
-      - name: plantId
-        in: path
-        required: true
-        schema:
-          type: string
+      operationId: postOperations
       requestBody:
         content:
           application/json:
@@ -198,16 +265,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /plants/{plantId}/operation-date-range:
+  /operations/date-range:
     get:
       summary: Read the first and last recorded operation dates
-      operationId: getPlantsPlantidOperation-date-range
+      operationId: getOperationsDate-range
       parameters:
       - name: plantId
-        in: path
+        in: query
         required: true
         schema:
           type: string
+          minLength: 1
       responses:
         '200':
           description: ''
@@ -215,6 +283,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationDateRange'
+        '400':
+          description: 'Invalid value for: query parameter plantId'
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: ''
           content:
@@ -256,6 +330,36 @@ paths:
             text/plain:
               schema:
                 type: string
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      summary: Delete a plant operation
+      operationId: deleteOperationsOperationid
+      parameters:
+      - name: operationId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
         '404':
           description: ''
           content:
@@ -356,16 +460,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '500':
           description: ''
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /substrate/components:
+  /pesticides/{pesticideId}/archive:
+    post:
+      summary: Archive a pesticide
+      operationId: postPesticidesPesticideidArchive
+      parameters:
+      - name: pesticideId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pesticide'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/components:
     get:
       summary: List substrate components
-      operationId: getSubstrateComponents
+      operationId: getSubstratesComponents
       responses:
         '200':
           description: ''
@@ -383,7 +534,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
     post:
       summary: Add a substrate component
-      operationId: postSubstrateComponents
+      operationId: postSubstratesComponents
       requestBody:
         content:
           application/json:
@@ -409,10 +560,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /substrate/components/{componentId}:
+  /substrates/components/{componentId}:
     put:
       summary: Edit a substrate component
-      operationId: putSubstrateComponentsComponentid
+      operationId: putSubstratesComponentsComponentid
       parameters:
       - name: componentId
         in: path
@@ -444,6 +595,290 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/components/{componentId}/archive:
+    post:
+      summary: Archive a substrate component
+      operationId: postSubstratesComponentsComponentidArchive
+      parameters:
+      - name: componentId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateComponent'
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/mixes:
+    get:
+      summary: List substrate mixes
+      operationId: getSubstratesMixes
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubstrateMix'
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Save a substrate mix
+      operationId: postSubstratesMixes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubstrateMixData'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubstrateMix'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '409':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /substrates/mixes/{mixId}:
+    delete:
+      summary: Delete a substrate mix
+      operationId: deleteSubstratesMixesMixid
+      parameters:
+      - name: mixId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
+        '400':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /plants/{plantId}/photos:
+    get:
+      summary: List a bounded page of plant photos
+      operationId: getPlantsPlantidPhotos
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: offset
+        in: query
+        required: false
+        schema:
+          default: 0
+          type: integer
+          format: int32
+          minimum: 0
+      - name: pageSize
+        in: query
+        required: false
+        schema:
+          default: 12
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 24
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoPageResponse'
+        '400':
+          description: 'Invalid value for: query parameter offset, Invalid value for:
+            query parameter pageSize'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      summary: Upload a photo for a plant
+      operationId: postPlantsPlantidPhotos
+      parameters:
+      - name: plantId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PhotoUploadPart'
+        required: true
+      responses:
+        '201':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddedPhoto'
+        '400':
+          description: 'Invalid value for: body'
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /photos/{photoId}:
+    delete:
+      summary: Remove a photo
+      operationId: deletePhotosPhotoid
+      parameters:
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: ''
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /photos/{photoId}/content:
+    get:
+      summary: Retrieve the raw photo content
+      operationId: getPhotosPhotoidContent
+      parameters:
+      - name: photoId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: ''
+          headers:
+            Content-Type:
+              required: true
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '500':
           description: ''
           content:
@@ -461,6 +896,18 @@ components:
       - pesticide
       - pruned
       - watered
+    AddedPhoto:
+      title: AddedPhoto
+      type: object
+      required:
+      - id
+      - capturedAt
+      properties:
+        id:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
     ApiError:
       title: ApiError
       type: object
@@ -546,9 +993,13 @@ components:
       title: LogOperationRequest
       type: object
       required:
+      - plantId
       - date
       - details
       properties:
+        plantId:
+          type: string
+          minLength: 1
         date:
           type: string
           format: date-time
@@ -628,12 +1079,15 @@ components:
       required:
       - id
       - data
+      - status
       properties:
         id:
           type: string
           format: uuid
         data:
           $ref: '#/components/schemas/PesticideData'
+        status:
+          $ref: '#/components/schemas/PesticideStatus'
     PesticideData:
       title: PesticideData
       type: object
@@ -650,6 +1104,12 @@ components:
           type:
           - string
           - 'null'
+    PesticideStatus:
+      title: PesticideStatus
+      type: string
+      enum:
+      - active
+      - archived
     PesticideType:
       title: PesticideType
       type: string
@@ -657,6 +1117,40 @@ components:
       - fungicide
       - insecticide
       - treatment
+    PhotoItem:
+      title: PhotoItem
+      type: object
+      required:
+      - id
+      - capturedAt
+      properties:
+        id:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+    PhotoPageResponse:
+      title: PhotoPageResponse
+      type: object
+      required:
+      - photos
+      - hasNextPage
+      properties:
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotoItem'
+        hasNextPage:
+          type: boolean
+    PhotoUploadPart:
+      title: PhotoUploadPart
+      type: object
+      required:
+      - file
+      properties:
+        file:
+          type: string
+          format: binary
     Plant:
       title: Plant
       type: object
@@ -679,6 +1173,28 @@ components:
           type: string
         watering:
           $ref: '#/components/schemas/WateringAttention'
+    PlantCreation:
+      title: PlantCreation
+      type: object
+      required:
+      - species
+      - nickname
+      - location
+      - substrate
+      properties:
+        species:
+          type: string
+        nickname:
+          type:
+          - string
+          - 'null'
+        location:
+          type: string
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
     PlantDetails:
       title: PlantDetails
       type: object
@@ -704,6 +1220,19 @@ components:
             $ref: '#/components/schemas/SubstratePart'
         status:
           $ref: '#/components/schemas/PlantStatus'
+    PlantPatchOperation:
+      title: PlantPatchOperation
+      type: object
+      required:
+      - op
+      - path
+      - value
+      properties:
+        op:
+          type: string
+        path:
+          type: string
+        value: {}
     PlantStatus:
       title: PlantStatus
       type: string
@@ -753,12 +1282,15 @@ components:
       required:
       - id
       - data
+      - status
       properties:
         id:
           type: string
           format: uuid
         data:
           $ref: '#/components/schemas/SubstrateComponentData'
+        status:
+          $ref: '#/components/schemas/SubstrateComponentStatus'
     SubstrateComponentData:
       title: SubstrateComponentData
       type: object
@@ -772,6 +1304,54 @@ components:
           type:
           - string
           - 'null'
+    SubstrateComponentStatus:
+      title: SubstrateComponentStatus
+      type: string
+      enum:
+      - active
+      - archived
+    SubstrateMix:
+      title: SubstrateMix
+      type: object
+      required:
+      - id
+      - name
+      - notes
+      - substrate
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        notes:
+          type:
+          - string
+          - 'null'
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
+    SubstrateMixData:
+      title: SubstrateMixData
+      type: object
+      required:
+      - name
+      - notes
+      - substrate
+      properties:
+        name:
+          type: string
+        notes:
+          type:
+          - string
+          - 'null'
+        substrate:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubstratePart'
     SubstratePart:
       title: SubstratePart
       type: object

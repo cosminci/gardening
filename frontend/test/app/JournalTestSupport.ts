@@ -1,18 +1,35 @@
 import * as Journal from "../../src/domain/Journal";
+import type { OperationClient } from "../../src/domain/Operation";
 import type { PesticideClient } from "../../src/domain/PesticideCatalog";
-import type { PlantAttentionClient } from "../../src/domain/PlantAttention";
-import type { SubstrateComponentClient } from "../../src/domain/SubstrateComponentCatalog";
+import type { PlantClient } from "../../src/domain/Plant";
+import type {
+  FeedConnectionState,
+  FeedEvent,
+  PlantAttentionFeed,
+} from "../../src/domain/PlantAttention";
+import type { PlantPhotoClient } from "../../src/domain/PlantPhoto";
+import type { SubstrateClient } from "../../src/domain/SubstrateCatalog";
+
+export const noopPhotoClient: PlantPhotoClient = {
+  getPhotos: () => Promise.resolve({ kind: "readFailed", reason: new Error("noop") }),
+  addPhoto: () => Promise.resolve({ kind: "addFailed", reason: new Error("noop") }),
+  removePhoto: () => Promise.resolve({ kind: "removeFailed", reason: new Error("noop") }),
+};
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
 const substrateComponents: readonly Journal.SubstrateComponent[] = [
-  { id: perliteId, data: { name: Journal.nomenclatureName("Perlite"), maybeInfo: null } },
-  { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
+  {
+    id: perliteId,
+    data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
+    status: "active",
+  },
+  {
+    id: pineBarkId,
+    data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+    status: "active",
+  },
 ];
-const emptyAttentionResult: Journal.GetAttentionResult = {
-  kind: "read",
-  projection: { measuredAt: Journal.instant("2026-01-01T00:00:00Z"), plants: [] },
-};
 
 export const ficus = (): Journal.Plant => ({
   id: Journal.plantId("p1"),
@@ -52,7 +69,7 @@ export const care = ({
   pesticides?: ReadonlySet<Journal.PesticideId>;
 }): Journal.Operation => ({
   id: Journal.operationId(id),
-  plantId: Journal.plantId("p1"),
+  plant: Journal.plantId("p1"),
   date: Journal.instant(date),
   details: {
     kind: "care",
@@ -65,7 +82,7 @@ export const care = ({
 
 export const repot = (id: string, date: string): Journal.Operation => ({
   id: Journal.operationId(id),
-  plantId: Journal.plantId("p1"),
+  plant: Journal.plantId("p1"),
   date: Journal.instant(date),
   details: {
     kind: "repot",
@@ -83,73 +100,128 @@ export const operationsPage = (
 });
 
 export const buildJournal = ({
-  getAttentionResults,
+  attentionProjection,
   getPlantsResults,
   getOperationsByPlantId = {},
   logOperationResult = { kind: "loggingFailed", reason: new Error("unexpected write") },
   editOperationResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  deleteOperationResult = { kind: "deleteFailed", reason: new Error("unexpected write") },
   getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
   componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  componentArchiveResult = { kind: "archiveFailed", reason: new Error("unexpected write") },
+  getSubstrateMixesResult = { kind: "read", entries: [] },
+  mixAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
+  mixDeleteResult = { kind: "deleteFailed", reason: new Error("unexpected write") },
   getPesticidesResult = { kind: "read", entries: [] },
   pesticideAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   pesticideEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  pesticideArchiveResult = { kind: "archiveFailed", reason: new Error("unexpected write") },
   logged = [],
   edited = [],
+  deleted = [],
   addedComponents = [],
   editedComponents = [],
+  archivedComponents = [],
+  addedMixes = [],
+  deletedMixes = [],
   addedPesticides = [],
   editedPesticides = [],
+  archivedPesticides = [],
   operationWindows = [],
 }: {
-  getAttentionResults?: readonly [Journal.GetAttentionResult, ...Journal.GetAttentionResult[]];
+  attentionProjection?: Journal.AttentionProjection;
   getPlantsResults?: readonly [Journal.GetPlantsResult, ...Journal.GetPlantsResult[]];
   getOperationsByPlantId?: Readonly<
     Record<string, readonly [Journal.GetOperationsResult, ...Journal.GetOperationsResult[]]>
   >;
   logOperationResult?: Journal.LogOperationResult;
   editOperationResult?: Journal.EditOperationResult;
+  deleteOperationResult?: Journal.DeleteOperationResult;
   getSubstrateComponentsResult?: Journal.CatalogReadResult<Journal.SubstrateComponent>;
   componentAddResult?: Journal.CatalogAddResult<Journal.SubstrateComponent>;
-  componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
+  componentEditResult?: Journal.SubstrateComponentEditResult;
+  componentArchiveResult?: Journal.SubstrateComponentArchiveResult;
+  getSubstrateMixesResult?: Journal.CatalogReadResult<Journal.SubstrateMix>;
+  mixAddResult?: Journal.AddSubstrateMixResult;
+  mixDeleteResult?: Journal.CatalogDeleteResult;
   getPesticidesResult?: Journal.CatalogReadResult<Journal.Pesticide>;
   pesticideAddResult?: Journal.CatalogAddResult<Journal.Pesticide>;
-  pesticideEditResult?: Journal.CatalogEditResult<Journal.Pesticide>;
+  pesticideEditResult?: Journal.PesticideEditResult;
+  pesticideArchiveResult?: Journal.PesticideArchiveResult;
   logged?: { plantId: string; date: Journal.Instant; details: Journal.OperationDetails }[];
   edited?: { operationId: string; details: Journal.OperationDetails }[];
+  deleted?: Journal.OperationId[];
   addedComponents?: Journal.SubstrateComponentData[];
   editedComponents?: {
     id: Journal.SubstrateComponentId;
     data: Journal.SubstrateComponentData;
   }[];
+  archivedComponents?: Journal.SubstrateComponentId[];
+  addedMixes?: {
+    name: Journal.SubstrateMixName;
+    maybeNotes: Journal.SubstrateMixNotes | null;
+    substrate: Journal.Substrate;
+  }[];
+  deletedMixes?: Journal.SubstrateMixId[];
   addedPesticides?: Journal.PesticideData[];
   editedPesticides?: { id: Journal.PesticideId; data: Journal.PesticideData }[];
+  archivedPesticides?: Journal.PesticideId[];
   operationWindows?: { plantId: Journal.PlantId; window: Journal.OperationWindow }[];
-} = {}): Journal.JournalClient &
-  PlantAttentionClient &
-  SubstrateComponentClient &
-  PesticideClient => {
-  const attentionResponses = getAttentionResults ?? ([emptyAttentionResult] as const);
-  let attentionReads = 0;
+} = {}): PlantClient &
+  OperationClient &
+  PlantAttentionFeed &
+  SubstrateClient &
+  PesticideClient & {
+    pushAttention(projection: Journal.AttentionProjection): void;
+    setAttentionConnection(state: FeedConnectionState): void;
+  } => {
   let plantReads = 0;
-  const plants = [ficus(), monstera()].filter(
+  const defaultPlants = [ficus(), monstera()].filter(
     (plant) =>
-      attentionResponses[0].kind === "read" &&
-      attentionResponses[0].projection.plants.some((sample) => sample.plantId === plant.id),
+      attentionProjection === undefined ||
+      attentionProjection.plants.some((sample) => sample.plant === plant.id),
   );
-  const plantResponses = getPlantsResults ?? ([{ kind: "read", plants }] as const);
+  const plantResponses = getPlantsResults ?? ([{ kind: "read", plants: defaultPlants }] as const);
   const operationReads = new Map<string, number>();
+  const listeners: ((event: FeedEvent) => void)[] = [];
+
+  const subscribe = (listener: (event: FeedEvent) => void) => {
+    listeners.push(listener);
+    listener({ kind: "connectionState", state: "connected" });
+    if (attentionProjection !== undefined) {
+      listener({ kind: "projection", projection: attentionProjection });
+    }
+    return () => {
+      const idx = listeners.indexOf(listener);
+      if (idx >= 0) listeners.splice(idx, 1);
+    };
+  };
+
+  const pushAttention = (projection: Journal.AttentionProjection) => {
+    for (const listener of [...listeners]) {
+      listener({ kind: "projection", projection });
+    }
+  };
+
+  const setAttentionConnection = (state: FeedConnectionState) => {
+    for (const listener of [...listeners]) {
+      listener({ kind: "connectionState", state });
+    }
+  };
 
   return {
+    subscribe,
+    pushAttention,
+    setAttentionConnection,
     getPlants: () => Promise.resolve(queuedResult(plantResponses, plantReads++)),
+    createPlant: () =>
+      Promise.resolve({ kind: "createFailed", reason: new Error("unexpected write") }),
     getArchivedCount: () => Promise.resolve({ kind: "read", count: 0 }),
     getOperationDates: () => Promise.resolve({ kind: "read", dates: { kind: "empty" } }),
     archivePlant: () =>
       Promise.resolve({ kind: "archiveFailed", reason: new Error("unexpected write") }),
-    getAttention: () => {
-      const read = attentionReads++;
-      return Promise.resolve(queuedResult(attentionResponses, read));
-    },
+    editPlant: () => Promise.resolve({ kind: "editFailed", reason: new Error("unexpected write") }),
     getOperations: (id, window) => {
       operationWindows.push({ plantId: id, window });
       const results = getOperationsByPlantId[id];
@@ -168,6 +240,10 @@ export const buildJournal = ({
       edited.push({ operationId: id, details });
       return Promise.resolve(editOperationResult);
     },
+    deleteOperation: (id) => {
+      deleted.push(id);
+      return Promise.resolve(deleteOperationResult);
+    },
     getSubstrateComponents: () => Promise.resolve(getSubstrateComponentsResult),
     addSubstrateComponent: (data) => {
       addedComponents.push(data);
@@ -177,6 +253,19 @@ export const buildJournal = ({
       editedComponents.push({ id, data });
       return Promise.resolve(componentEditResult);
     },
+    archiveSubstrateComponent: (id) => {
+      archivedComponents.push(id);
+      return Promise.resolve(componentArchiveResult);
+    },
+    getSubstrateMixes: () => Promise.resolve(getSubstrateMixesResult),
+    addSubstrateMix: (name, maybeNotes, substrate) => {
+      addedMixes.push({ name, maybeNotes, substrate });
+      return Promise.resolve(mixAddResult);
+    },
+    deleteSubstrateMix: (id) => {
+      deletedMixes.push(id);
+      return Promise.resolve(mixDeleteResult);
+    },
     getPesticides: () => Promise.resolve(getPesticidesResult),
     addPesticide: (data) => {
       addedPesticides.push(data);
@@ -185,6 +274,10 @@ export const buildJournal = ({
     editPesticide: (id, data) => {
       editedPesticides.push({ id, data });
       return Promise.resolve(pesticideEditResult);
+    },
+    archivePesticide: (id) => {
+      archivedPesticides.push(id);
+      return Promise.resolve(pesticideArchiveResult);
     },
   };
 };

@@ -10,32 +10,38 @@ const substrateComponents: readonly Journal.SubstrateComponent[] = [
   {
     id: perliteId,
     data: {
-      name: Journal.nomenclatureName("Perlite"),
-      maybeInfo: Journal.nomenclatureInfo("Improves drainage.\nUse up to 30%."),
+      name: Journal.substrateComponentName("Perlite"),
+      maybeInfo: Journal.substrateComponentInfo("Improves drainage.\nUse up to 30%."),
     },
+    status: "active",
   },
-  { id: pineBarkId, data: { name: Journal.nomenclatureName("Pine bark"), maybeInfo: null } },
+  {
+    id: pineBarkId,
+    data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+    status: "active",
+  },
 ];
 const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
 const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
-const pesticides: readonly Journal.Pesticide[] = [
-  {
-    id: neemId,
-    data: {
-      name: Journal.nomenclatureName("Neem oil"),
-      pesticideType: "insecticide",
-      maybeInfo: Journal.nomenclatureInfo("Dilute before use.\nApply weekly."),
-    },
+const neem: Journal.Pesticide = {
+  id: neemId,
+  data: {
+    name: Journal.pesticideName("Neem oil"),
+    type: "insecticide",
+    maybeInfo: Journal.pesticideInfo("Dilute before use.\nApply weekly."),
   },
-  {
-    id: soapId,
-    data: {
-      name: Journal.nomenclatureName("Insecticidal soap"),
-      pesticideType: "insecticide",
-      maybeInfo: null,
-    },
+  status: "active",
+};
+const soap: Journal.Pesticide = {
+  id: soapId,
+  data: {
+    name: Journal.pesticideName("Insecticidal soap"),
+    type: "insecticide",
+    maybeInfo: null,
   },
-];
+  status: "active",
+};
+const pesticides: readonly Journal.Pesticide[] = [neem, soap];
 
 afterEach(() => {
   vi.useRealTimers();
@@ -54,6 +60,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(_, date) => {
@@ -89,6 +98,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(_, date) => {
@@ -125,6 +137,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -168,6 +183,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(details) => {
@@ -241,6 +259,35 @@ describe("OperationForm", () => {
     ]);
   });
 
+  it("should not extend the substrate mix when every component is already chosen", () => {
+    const changes: unknown[] = [];
+    Testing.render(() => (
+      <OperationForm
+        initial={repot("o1", "2026-01-01T00:00:00Z").details}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    const extend = Testing.screen.getByRole("button", { name: "Extend mix" });
+    Testing.fireEvent.click(extend);
+    expect(Testing.screen.getByRole("combobox", { name: "Component 2" })).toBeInTheDocument();
+    expect(extend).toBeDisabled();
+
+    Testing.fireEvent.click(extend);
+    expect(Testing.screen.queryByRole("combobox", { name: "Component 3" })).toBeNull();
+    expect(changes).toEqual([]);
+  });
+
   it("should reveal pesticide choices last and clear them when deselected", async () => {
     const submitted: Journal.OperationDetails[] = [];
     let addRequests = 0;
@@ -252,6 +299,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => {
           addRequests += 1;
         }}
@@ -315,6 +365,39 @@ describe("OperationForm", () => {
     });
   });
 
+  it("should exclude an archived pesticide from new selection but keep an already-selected one visible", () => {
+    const archivedPesticides: readonly Journal.Pesticide[] = [
+      { ...neem, status: "archived" },
+      soap,
+    ];
+    Testing.render(() => (
+      <OperationForm
+        initial={{
+          kind: "care",
+          actions: new Set(["pesticide"]),
+          pesticides: new Set([neemId]),
+          moisture: "noReading",
+          maybeNote: null,
+        }}
+        substrateComponents={substrateComponents}
+        pesticides={archivedPesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    expect(Testing.screen.getByRole("checkbox", { name: "Neem oil" })).toBeChecked();
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
+    expect(Testing.screen.queryByRole("checkbox", { name: "Neem oil" })).not.toBeInTheDocument();
+  });
+
   it("should treat a persisted None action as no selected action", async () => {
     const submitted: Journal.OperationDetails[] = [];
     Testing.render(() => (
@@ -330,6 +413,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={(details) => {
@@ -357,6 +443,9 @@ describe("OperationForm", () => {
           addRequests += 1;
         }}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => Promise.resolve()}
@@ -388,6 +477,9 @@ describe("OperationForm", () => {
         pesticides={pesticides}
         onAddSubstrateComponent={() => undefined}
         onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
         onAddPesticide={() => undefined}
         onEditPesticide={() => undefined}
         onSubmit={() => {
@@ -408,5 +500,65 @@ describe("OperationForm", () => {
     await Testing.waitFor(() => {
       expect(Testing.screen.getByRole("button", { name: "Save operation" })).toBeEnabled();
     });
+  });
+
+  it("should offer no delete action for a new, unsaved operation", () => {
+    Testing.render(() => (
+      <OperationForm
+        initial={undefined}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+      />
+    ));
+
+    expect(Testing.screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("should show a delete action next to save for an existing operation", () => {
+    let deletions = 0;
+    Testing.render(() => (
+      <OperationForm
+        initial={care({ id: "o1", date: "2026-01-01T00:00:00Z", moisture: "wet" }).details}
+        substrateComponents={substrateComponents}
+        pesticides={pesticides}
+        onAddSubstrateComponent={() => undefined}
+        onEditSubstrateComponent={() => undefined}
+        onSaveSubstrateMix={() => undefined}
+        onLoadSubstrateMix={() => undefined}
+        onRegisterSubstrateLoader={() => undefined}
+        onAddPesticide={() => undefined}
+        onEditPesticide={() => undefined}
+        onSubmit={() => Promise.resolve()}
+        onCancel={() => undefined}
+        onDelete={{
+          controlId: "delete-operation-o1",
+          onClick: () => {
+            deletions += 1;
+          },
+        }}
+      />
+    ));
+
+    const deleteButton = Testing.screen.getByRole("button", { name: "Delete" });
+    expect(deleteButton).toHaveAttribute("type", "button");
+    expect(deleteButton).toHaveAttribute("id", "delete-operation-o1");
+    expect(
+      deleteButton.compareDocumentPosition(
+        Testing.screen.getByRole("button", { name: "Save operation" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    Testing.fireEvent.click(deleteButton);
+
+    expect(deletions).toBe(1);
   });
 });

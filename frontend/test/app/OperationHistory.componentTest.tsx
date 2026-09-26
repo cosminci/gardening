@@ -34,7 +34,7 @@ Vitest.describe("operation history", () => {
     });
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -50,7 +50,7 @@ Vitest.describe("operation history", () => {
     Testing.fireEvent.click(show);
 
     const table = await Testing.screen.findByRole("table");
-    Vitest.expect(Testing.within(table).getAllByRole("columnheader")).toHaveLength(4);
+    Vitest.expect(Testing.within(table).getAllByRole("columnheader")).toHaveLength(5);
     Vitest.expect(Testing.within(table).getAllByText("03.03.2026")).toHaveLength(2);
     const firstDate = Testing.within(table).getAllByText("03.03.2026")[0];
     Vitest.expect(firstDate).toHaveAttribute("datetime", "2026-03-03T00:00:00Z");
@@ -123,7 +123,7 @@ Vitest.describe("operation history", () => {
       .mockResolvedValueOnce(operationsPage());
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -156,7 +156,7 @@ Vitest.describe("operation history", () => {
       const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
       Testing.render(() => (
         <OperationHistory
-          plantId={recent.plantId}
+          plant={recent.plant}
           substrateComponents={[]}
           pesticides={[]}
           getOperations={() => pending}
@@ -199,7 +199,7 @@ Vitest.describe("operation history", () => {
     const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -219,11 +219,11 @@ Vitest.describe("operation history", () => {
   });
 
   Vitest.it("should reset history when its index slot changes plant", async () => {
-    const [plantId, setPlantId] = createSignal(Journal.plantId("p1"));
+    const [plant, setPlant] = createSignal(Journal.plantId("p1"));
     const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older)));
     Testing.render(() => (
       <OperationHistory
-        plantId={plantId()}
+        plant={plant()}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -235,12 +235,35 @@ Vitest.describe("operation history", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
     Vitest.expect(await Testing.screen.findByText("Long note")).toBeInTheDocument();
 
-    setPlantId(Journal.plantId("p2"));
+    setPlant(Journal.plantId("p2"));
 
     Vitest.expect(Testing.screen.queryByRole("table")).not.toBeInTheDocument();
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
     await Testing.screen.findByRole("table");
     Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
+  });
+
+  Vitest.it("should reload the current page after a deletion", async () => {
+    const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
+    const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
+    Testing.render(() => (
+      <OperationHistory
+        plant={recent.plant}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={operationChange()}
+        onEdit={() => undefined}
+      />
+    ));
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByRole("table");
+
+    setOperationChange({ kind: "deleted" });
+    await Testing.waitFor(() => {
+      Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
+    });
   });
 
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {
@@ -256,7 +279,7 @@ Vitest.describe("operation history", () => {
       .mockResolvedValueOnce(operationsPage([secondPage]));
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}

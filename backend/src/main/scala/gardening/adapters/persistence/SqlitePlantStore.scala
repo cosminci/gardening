@@ -5,26 +5,33 @@ import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
 import gardening.domain.attention.*
-import gardening.domain.journal.*
-import gardening.domain.journal.EditOperationResult.*
-import gardening.domain.journal.LogOperationResult.*
-import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
+import gardening.domain.plants.*
 import io.circe.parser.decode
 import io.circe.syntax.*
-import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.Interval
 import java.time.Instant
 import java.time.format.DateTimeFormatterBuilder
+import java.util.UUID
 import scala.util.Try
-import scala.util.chaining.scalaUtilChainingOps
+
+import Codecs.given
 
 object SqlitePlantStore:
 
-  private val operationDateFormatter = DateTimeFormatterBuilder().appendInstant(9).toFormatter
+  private val timestampFormatter = DateTimeFormatterBuilder().appendInstant(9).toFormatter
 
-  def make(transactor: Transactor): PlantJournalStore & PlantAttentionStore = LiveSqlitePlantStore(transactor)
+  def make(transactor: Transactor): PlantStore & PlantAttentionStore = LiveSqlitePlantStore(transactor)
 
-  private class LiveSqlitePlantStore(transactor: Transactor) extends PlantJournalStore, PlantAttentionStore:
+  private class LiveSqlitePlantStore(transactor: Transactor) extends PlantStore, PlantAttentionStore:
+
+    override def addPlant(plant: Plant): AddPlantResult =
+      try
+        val details = plant.details
+        transact(transactor):
+          sql"""insert into plant (id, species, nickname, location, substrate, status)
+               values (${plant.id.value}, ${details.species.value}, ${details.maybeNickname.map(_.value)},
+                       ${details.location.value}, ${details.substrate.asJson.noSpaces}, ${details.status.toString})""".update.run()
+        AddPlantResult.Added
+      catch case error: SqlException => AddPlantResult.AddFailed(error)
 
     override def getPlants(status: PlantStatus): GetPlantsResult =
       try
@@ -48,23 +55,14 @@ object SqlitePlantStore:
           // $COVERAGE-ON$
       catch case error: SqlException => ArchivedCountResult.ReadFailed(error)
 
-    override def archivePlant(id: PlantId): ArchivePlantResult =
+    override def getPlant(plant: PlantId): GetPlantResult =
       try
-        transact(transactor):
-          sql"update plant set status = 'Archived' where id = ${id.value} and status = 'Active'".update.run() match
-            case 1 => ArchivePlantResult.Archived
-            case _ =>
-              sql"select status from plant where id = ${id.value}".query[String].run().headOption match
-                case Some(_) => ArchivePlantResult.AlreadyArchived
-                case None    => ArchivePlantResult.PlantMissing
-      catch case error: SqlException => ArchivePlantResult.ArchiveFailed(error)
-
-    override def getPlant(id: PlantId): GetPlantResult =
-      try
-        connect(transactor)(selectPlant(id.value).query[PlantRow].run().headOption) match
+        connect(transactor)(selectPlant(plant.value).query[PlantRow].run().headOption) match
           case None      => GetPlantResult.RecordMissing
           case Some(row) => GetPlantResult.Read(trust(toPlant(row)))
-      catch case error: SqlException => GetPlantResult.ReadFailed(error)
+      catch
+        case error: SqlException       => GetPlantResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetPlantResult.ReadFailed(error)
 
     override def updatePlant(plant: Plant): UpdatePlantResult =
       try
@@ -90,32 +88,6 @@ object SqlitePlantStore:
       yield
         val details = PlantDetails(Species(row.species), row.nickname.map(Nickname.apply), Location(row.location), substrate, status)
         Plant(PlantId(row.id), details)
-
-    override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
-      try
-        val rows       = connect(transactor)(selectOperationsForPlant(plantId.value, window).query[OperationRow].run())
-        val operations = trust(rows.traverse(toOperation))
-        GetOperationsResult.Read(OperationPage(operations.take(window.size), operations.size > window.size))
-      catch case error: SqlException => GetOperationsResult.ReadFailed(error)
-
-    override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
-      try
-        val rows = connect(transactor):
-          sql"""select operation.date from plant
-                left join operation on operation.plant_id = plant.id
-                where plant.id = ${plantId.value}""".query[OperationDateRow].run()
-        rows.headOption match
-          case None    => GetOperationDateRangeResult.PlantMissing
-          case Some(_) =>
-            val dates = rows.flatMap(_.date).traverse(parseOperationDate).map: parsed =>
-              parsed.headOption match
-                case None        => OperationDateRange.Empty
-                case Some(first) =>
-                  val earliest = parsed.foldLeft(first)((previous, current) => if current.isBefore(previous) then current else previous)
-                  val latest   = parsed.foldLeft(first)((previous, current) => if current.isAfter(previous) then current else previous)
-                  OperationDateRange.Recorded(earliest, latest)
-            dates.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
-      catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     override def getAttentionSamples(size: WateringSampleSize): GetAttentionSamplesResult =
       try
@@ -152,7 +124,7 @@ object SqlitePlantStore:
     private def toAttentionSample(row: AttentionSampleRow) =
       val storedDates = decodeWateringDates(row.wateringDates)
       for
-        wateringDates   <- storedDates.traverse(parseOperationDate)
+        wateringDates   <- storedDates.traverse(parseTimestamp)
         wateringHistory <- WateringHistory
           .from(wateringDates)
           .leftMap:
@@ -166,76 +138,62 @@ object SqlitePlantStore:
     private def decodeWateringDates(value: String) =
       trust(decode[Vector[String]](value))
 
-    private def selectOperationsForPlant(plantId: String, window: OperationWindow) =
-      val readSize: Int = window.size + 1
-      val offset: Int   = window.offset
-      sql"""select id, plant_id, date, kind, payload
-            from operation
-            where plant_id = $plantId
-            order by date desc, id desc
-            limit $readSize offset $offset"""
-
-    override def getOperation(id: OperationId): GetOperationResult =
-      try
-        connect(transactor)(selectOperation(id.value).query[OperationRow].run().headOption) match
-          case None      => GetOperationResult.RecordMissing
-          case Some(row) => GetOperationResult.Read(trust(toOperation(row)))
-      catch case error: SqlException => GetOperationResult.ReadFailed(error)
-
-    private def selectOperation(id: String) =
-      sql"select id, plant_id, date, kind, payload from operation where id = $id"
-
-    private def toOperation(row: OperationRow) =
-      for
-        date    <- parseOperationDate(row.date)
-        details <- decodeOperationDetails(row.kind, row.payload)
-      yield Operation(OperationId(row.id), PlantId(row.plantId), date, details)
-
-    private def parseOperationDate(value: String) =
+    private def parseTimestamp(value: String) =
       Try(Instant.parse(value)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: $value"))
 
-    override def addOperation(operation: Operation): LogOperationResult =
+    override def addPhoto(photo: PlantPhoto): AddPhotoResult =
       try
         transact(transactor):
-          insertOperationRow(operation).update.run() match
-            case 1 => Logged(operation.id)
+          sql"""insert into plant_photo (id, plant_id, captured_at)
+               select ${photo.id.value.toString}, ${photo.plantId.value}, ${timestampFormatter.format(photo.capturedAt)}
+               where exists (select 1 from plant where id = ${photo.plantId.value})""".update.run() match
+            case 1 => AddPhotoResult.Added(photo)
             case _ =>
-              sql"select status from plant where id = ${operation.plantId.value}".query[String].run().headOption match
-                case Some(_) => LogOperationResult.PlantArchived
-                case None    => LogOperationResult.PlantMissing
-      catch case e: SqlException => LoggingFailed(e)
+              sql"select id from plant where id = ${photo.plantId.value}".query[String].run().headOption match
+                case None => AddPhotoResult.PlantMissing
+                // A row for this plant_id exists but insert failed: treated as AddFailed below.
+                // $COVERAGE-OFF$
+                case Some(_) => AddPhotoResult.AddFailed(RuntimeException(s"photo insert returned 0 rows for plant: ${photo.plantId.value}"))
+                // $COVERAGE-ON$
+      catch case error: SqlException => AddPhotoResult.AddFailed(error)
 
-    private def insertOperationRow(operation: Operation) =
-      val (operationKind, payload) = encodeOperationDetails(operation.details)
-      val storedDate               = operationDateFormatter.format(operation.date)
-      sql"""insert into operation (id, plant_id, date, kind, payload)
-           select ${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload
-           where exists (select 1 from plant where id = ${operation.plantId.value} and status = 'Active')"""
-
-    override def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult =
+    override def removePhoto(photo: PhotoId): RemovePhotoResult =
       try
         transact(transactor):
-          val queryResult = updateOperationRow(id.value, details)
-            .query[OperationRow]
+          sql"delete from plant_photo where id = ${photo.value.toString} returning id, plant_id, captured_at"
+            .query[PlantPhotoRow]
             .run()
-            .headOption
-          queryResult.fold[EditOperationResult](OperationMissing): row =>
-            Edited(trust(toOperation(row)))
-      catch case e: SqlException => EditFailed(e)
+            .headOption match
+            case None      => RemovePhotoResult.PhotoMissing
+            case Some(row) => RemovePhotoResult.Removed(trust(toPhoto(row)))
+      catch
+        case error: SqlException       => RemovePhotoResult.RemoveFailed(error)
+        case error: DatabaseCorruption => RemovePhotoResult.RemoveFailed(error)
 
-    override def removeOperation(id: OperationId): OperationCompensationResult =
-      try transact(transactor)(sql"delete from operation where id = ${id.value}".update.run()).pipe(_ => OperationCompensationResult.Compensated)
-      catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
-
-    override def restoreOperation(operation: Operation): OperationCompensationResult =
+    override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult =
       try
-        val (operationKind, payload) = encodeOperationDetails(operation.details)
-        transact(transactor)(
-          sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()
-        ) match
-          case 1 => OperationCompensationResult.Compensated
-          case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
-      catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
+        val readSize: Int = window.size + 1
+        val offset: Int   = window.offset
+        val rows          = connect(transactor):
+          sql"""select id, plant_id, captured_at from plant_photo
+                where plant_id = ${plant.value}
+                order by captured_at desc, id desc
+                limit $readSize offset $offset""".query[PlantPhotoRow].run()
+        val photos = trust(rows.traverse(toPhoto))
+        GetPhotosResult.Read(PhotoPage(photos.take(window.size), photos.size > window.size))
+      catch
+        case error: SqlException       => GetPhotosResult.ReadFailed(error)
+        case error: DatabaseCorruption => GetPhotosResult.ReadFailed(error)
+
+    private def toPhoto(row: PlantPhotoRow): Either[Throwable, PlantPhoto] =
+      for
+        capturedAt <- Try(Instant.parse(row.capturedAt)).toEither.left.map(_ =>
+          RuntimeException(s"invalid stored photo capturedAt: ${row.capturedAt}")
+        )
+        id <- Try(UUID.fromString(row.id)).toEither.left.map(_ =>
+          RuntimeException(s"invalid stored photo id: ${row.id}")
+        )
+      yield PlantPhoto(PhotoId(id), PlantId(row.plantId), capturedAt)
 
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
     private def trust[A](decoded: Either[Throwable, A]) =
@@ -250,104 +208,16 @@ object SqlitePlantStore:
                location = ${details.location.value},
                substrate = ${details.substrate.asJson.noSpaces},
                status = ${details.status.toString}
-           where id = ${plant.id.value} and status = ${details.status.toString}"""
-
-    private def updateOperationRow(operationId: String, details: OperationDetails) =
-      val (operationKind, payload) = encodeOperationDetails(details)
-      sql"update operation set kind = $operationKind, payload = $payload where id = $operationId returning id, plant_id, date, kind, payload"
-
-    private def encodeOperationDetails(details: OperationDetails) =
-      details match
-        case care: OperationDetails.Care   => "Care"  -> care.asJson.noSpaces
-        case repot: OperationDetails.Repot => "Repot" -> repot.asJson.noSpaces
-
-    private def decodeOperationDetails(kind: String, payload: String) =
-      kind match
-        case "Care"  => decode[OperationDetails.Care](payload).leftMap(invalidOperationPayload)
-        case "Repot" => decode[OperationDetails.Repot](payload).leftMap(invalidOperationPayload)
-        // The schema check rejects operation kinds other than Care and Repot.
-        // $COVERAGE-OFF$
-        case _ => invalidOperationPayload(DecodingFailure("unknown operation kind", ops = Nil)).asLeft
-        // $COVERAGE-ON$
-
-    private def invalidOperationPayload(reason: io.circe.Error) =
-      RuntimeException(s"invalid stored operation payload: ${reason.getMessage}", reason)
+           where id = ${plant.id.value} and (status = ${details.status.toString} or (status = 'Active' and ${details.status.toString} = 'Archived'))"""
 
     private def invalidSubstrate(reason: io.circe.Error) =
       RuntimeException(s"invalid stored substrate: ${reason.getMessage}", reason)
 
-    private given Codec[Note] = Codec.from(
-      Decoder.decodeString.map(Note.apply),
-      Encoder.encodeString.contramap(_.value)
-    )
-
-    private given Codec[SubstrateComponentId] = Codec.from(
-      Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid component id: $value")),
-      Encoder.encodeString.contramap(_.value.toString)
-    )
-
-    private given Codec[PesticideId] = Codec.from(
-      Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
-      Encoder.encodeString.contramap(_.value.toString)
-    )
-
-    private given Codec[Percentage] = Codec.from(
-      Decoder.decodeInt.emap(value =>
-        value
-          .refineOption[Interval.Closed[1, 100]]
-          .toRight(s"invalid share: $value")
-      ),
-      Encoder.encodeInt.contramap(value => value: Int)
-    )
-
-    private given Codec[ActionType] = Codec.from(
-      Decoder.decodeString.emap(value => ActionType.values.find(_.toString.equals(value)).toRight(s"invalid action: $value")),
-      Encoder.encodeString.contramap(_.toString)
-    )
-
-    private given Codec[MoistureLevel] = Codec.from(
-      Decoder.decodeString.emap(value => MoistureLevel.values.find(_.toString.equals(value)).toRight(s"invalid moisture: $value")),
-      Encoder.encodeString.contramap(_.toString)
-    )
-
-    private given Decoder[SubstratePart] =
-      Decoder.forProduct2("component", "share")(SubstratePart.apply)
-
-    private given Encoder[SubstratePart] =
-      Encoder.forProduct2("component", "share")(part => (part.componentId, part.share))
-
-    private given Decoder[Substrate] =
-      Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).leftMap(_.toString))
-
-    private given Encoder[Substrate] =
-      Encoder.encodeList[SubstratePart].contramap(_.parts)
-
-    private given Decoder[OperationDetails.Care] =
-      Decoder.forProduct4("actions", "pesticides", "moisture", "note"):
-        (actions: List[ActionType], pesticides: List[PesticideId], moisture: MoistureLevel, note: Option[Note]) =>
-          OperationDetails.Care(actions.toSet, pesticides.toSet, moisture, note)
-
-    private given Encoder[OperationDetails.Care] =
-      Encoder.forProduct4("actions", "pesticides", "moisture", "note"): care =>
-        (
-          care.actions.toList.sortBy(_.toString),
-          care.pesticides.toList.sortBy(_.value.toString),
-          care.moisture,
-          care.maybeNote
-        )
-
-    private given Decoder[OperationDetails.Repot] =
-      Decoder.forProduct2("substrate", "note")(OperationDetails.Repot.apply)
-
-    private given Encoder[OperationDetails.Repot] =
-      Encoder.forProduct2("substrate", "note")(repot => (repot.substrate, repot.maybeNote))
-
   private case class PlantRow(id: String, species: String, nickname: Option[String], location: String, substrate: String, status: String)
       derives DbCodec
 
-  private case class OperationRow(id: String, plantId: String, date: String, kind: String, payload: String) derives DbCodec
-  private case class OperationDateRow(date: Option[String]) derives DbCodec
   private case class AttentionSampleRow(
       id: String,
       wateringDates: String
   ) derives DbCodec
+  private case class PlantPhotoRow(id: String, plantId: String, capturedAt: String) derives DbCodec

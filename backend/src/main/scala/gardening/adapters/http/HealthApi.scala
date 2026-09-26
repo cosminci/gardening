@@ -12,10 +12,7 @@ final case class HealthResponse(status: String, version: String) derives Codec.A
 object HealthApi:
 
   val endpoint: PublicEndpoint[Unit, Unit, HealthResponse, Any] =
-    sttp.tapir.endpoint.get
-      .in("health")
-      .out(jsonBody[HealthResponse])
-      .summary("Liveness probe")
+    sttp.tapir.endpoint.get.in("health").out(jsonBody[HealthResponse]).summary("Liveness probe")
 
   def serverEndpoint(version: String): ServerEndpoint.Full[Unit, Unit, Unit, Unit, HealthResponse, Any, Identity] =
     endpoint.handleSuccess(_ => HealthResponse(status = "ok", version))

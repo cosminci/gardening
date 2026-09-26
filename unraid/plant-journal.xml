@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>plant-journal</Name>
+  <Repository>ghcr.io/cosminci/plant-journal:REPLACE_WITH_PUBLISHED_VERSION</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell/>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/cosminci/gardening/issues</Support>
+  <Project>https://github.com/cosminci/gardening</Project>
+  <Overview>Private household plant journal. Log in to GHCR and set watch-only labels in the saved Unraid template before installation.</Overview>
+  <Category>Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/cosminci/gardening/main/unraid/plant-journal.xml</TemplateURL>
+  <ExtraParams>--restart=unless-stopped --log-opt max-size=10m --log-opt max-file=5</ExtraParams>
+  <PostArgs/>
+  <Config Name="Journal data" Target="/data" Default="/mnt/user/appdata/plant-journal" Mode="rw" Description="Persistent SQLite journal; include this directory in periodic Unraid appdata backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/plant-journal</Config>
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp" Description="LAN and tailnet access; do not forward this port on the public router." Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+</Container>

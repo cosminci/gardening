@@ -3,7 +3,9 @@ import solid from "vite-plugin-solid";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  plugins: [solid()],
+  // Disable solid's HMR wrapper under test: it is dev-server-only and its refresh scaffolding
+  // adds phantom branches to coverage that no test can (or should) exercise.
+  plugins: [solid({ hot: false })],
   resolve: {
     alias: {
       "@contract": fileURLToPath(new URL("../contract/generated/api.ts", import.meta.url)),

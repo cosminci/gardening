@@ -2,20 +2,14 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 >
-> Living-doc template. Cross-cutting conventions — test categories, file naming, mocking strategy, coverage gates — live in CONTRIBUTING.md; do NOT repeat them here. This file holds only what is specific to testing THIS component.
+> Living-doc template. Cross-cutting conventions and gates live in CONTRIBUTING.md. Record only component-specific strategy that explains how to gain confidence and why. Never catalog tests, covered branches, fixtures, or data setup.
 
-## Service-specific strategy
+## Strategy
 
-<!-- What is unique about testing this component and why, tracing back to the design.md behaviours
-under test. If nothing is unique yet, omit the file entirely. -->
+<!-- Which risks need proof at which boundary, and why a unit test alone is insufficient. Omit
+this file if no component-specific strategy adds value beyond CONTRIBUTING.md. -->
 
-## Fixtures & data setup
+## Validation beyond isolated tests
 
-<!-- Component-specific fixtures and data (e.g. in-memory SQLite for persistence seam tests; the
-Romanian→English import fixtures once that feature lands), enough that a new test needs no
-reverse-engineering. -->
-
-## Integration boundaries
-
-<!-- Which dependencies are real vs stubbed in each test category, and why (e.g. real SQLite in seam
-tests; capability ports stubbed in component tests). -->
+<!-- System-level or manual validation needed for risks automated component tests cannot prove,
+with the reason. Omit if none. Do not duplicate verification commands from README.md. -->

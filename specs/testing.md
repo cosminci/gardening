@@ -2,23 +2,14 @@
 
 > Standard: Agentic Engineering Standards v1.2.0
 
-Cross-cutting test conventions and gates live in [CONTRIBUTING.md](../CONTRIBUTING.md).
+## Strategy
 
-## Service-specific strategy
+- Prove repot ordering and failed-write compensation through the journal boundary; prove persisted ordering separately with real SQLite. Together these establish the orchestration and storage semantics without tying service tests to database mechanics.
+- Exercise stored-data corruption, status-filtered reads, and pagination with real SQLite. Substituting storage cannot establish whether decoding and query boundaries isolate malformed rows or preserve ordering.
+- Exercise resource-specific HTTP translation through the actual endpoint interpretation, and browser reconciliation with independently changing journal and attention responses. Neither the domain service nor the generated schema alone proves that failures and stale projections cannot look like successful current data.
 
-- Backend component tests exercise complete ports and traits through injected capabilities, including caller-supplied operation dates, immutable edit dates, bounded operation reads, identity-only attention and refresh behavior, catalog identifier assignment, latest versus historical repot synchronization, compensation, accumulated failures, and serialized mutations. They also check the permanent archive transition, archived logging rejection, preserved edits, and valid count/range values.
-- Persistence seam-integration tests exercise the store against real SQLite with the current baseline, including status-filtered reads that isolate corrupt archived details from the garden, count-only archived reads, archive transitions, and chronological date ranges across mixed-precision timestamps. They also cover bounded per-Plant watering dates, page boundaries, next-page lookahead, equal and sub-second timestamp ordering, catalog references, and deliberately malformed rows, including malformed recorded dates.
-- HTTP seam-integration tests run the Tapir endpoints through its stub interpreter and assert required absolute logging dates, status-filtered reads and invalid statuses, archived counts, archive outcomes, date-range reads, archived logging conflicts, identity-only attention projections, operation-window defaults and limits, catalog and journal wire representations, and result-specific failures.
-- Frontend seam-integration tests exercise attention, catalog, and journal HTTP translation through controlled fetch responses, including malformed attention values and archived count/date failures. Component tests inject the journal client and cover local-minute entry and validation, recent and historical date display, fresh plant and attention identity matching after writes, attention ordering and accessible warnings, history disclosure and pagination, loading and retry, focus, editing, inline nomenclature editors, and side-sheet transitions. They also cover lazy cemetery loading, counts, recorded care dates, permanent archive confirmation and cancellation, the absence of logging on archived cards, and errors on stale or failed archive requests.
-- Reduced-motion behavior is declarative CSS; component tests do not execute media queries, so its media rule is verified through stylesheet review.
-- There is no separate system-integration tier. Static-file serving alone uses a loopback Netty server because the server boundary is the behavior under test.
+## Validation beyond isolated tests
 
-## Fixtures & data setup
+Reduced-motion presentation depends on a browser media query rather than application logic; inspect the rendered behavior under that preference.
 
-Persistence tests create uniquely named shared in-memory SQLite databases and apply the current Flyway baseline before constructing the store. Stable catalog UUIDs and typed nomenclature data keep catalog references explicit. Tests seed active and archived plants and valid operations through focused helpers, and insert malformed values through SQL when verifying corruption attribution or that active reads do not decode archived rows. Mixed-precision and malformed-middle operation dates probe the recorded care range.
-
-Frontend tests keep domain values and short sequences explicit in the owning use case, with deterministic local dates and identifiers. Suite-local client builders own queued outcomes and captured calls without hiding domain setup behind configurable fixture factories.
-
-## Integration boundaries
-
-Domain tests replace persistence, attention time, and identifier capabilities. Persistence tests keep SQLite, the baseline migration, foreign keys, JSON selection, indexes, and seeded catalogs real. Backend HTTP tests replace the domain services but keep Tapir codecs and endpoint interpretation real. Frontend component tests replace the journal client while keeping attention presentation, editor, and operation-form composition real; HTTP-adapter tests keep plant and attention decoding and failure mapping real.
+Lazy-loaded photo pagination and file upload depend on real browser interaction (native file picker, incremental page requests); validate them in e2e, not isolated tests alone.

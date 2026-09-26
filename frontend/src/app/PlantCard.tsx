@@ -6,6 +6,9 @@ import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLab
 import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
+import { editPlantControlId } from "./PlantSheet";
+
+export const plantPhotosControlId = (id: Journal.PlantId) => `plant-photos-${String(id)}`;
 import "./plant-card.css";
 import "./plant-history.css";
 
@@ -16,16 +19,19 @@ interface PlantCardBaseProps {
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
   readonly operationChange: OperationHistoryChange | undefined;
   readonly onEdit: (operation: Journal.Operation) => void;
+  readonly onViewPhotos: (plant: Journal.Plant) => void;
 }
 
 type PlantCardProps = PlantCardBaseProps &
   (
     | {
         readonly kind?: "garden";
-        readonly attention: Journal.PlantAttention;
-        readonly measuredAt: Journal.Instant;
+        readonly plant: Journal.Plant;
+        readonly watering?: Journal.WateringAttention | undefined;
+        readonly measuredAt?: Journal.Instant | undefined;
         readonly onLog: () => void;
         readonly onArchive: () => void;
+        readonly onEditPlant: (plant: Journal.Plant) => void;
       }
     | {
         readonly kind: "cemetery";
@@ -100,7 +106,7 @@ const wateringPresentation = (
     case "unavailable":
       return {
         label: "Watering cadence unavailable",
-        symbol: "?",
+        symbol: "",
         delta: "",
         details: (
           <p class="watering-attention__unavailable-details">Insufficient watering operations.</p>
@@ -109,21 +115,21 @@ const wateringPresentation = (
     case "current":
       return {
         label: "Watering current",
-        symbol: "✓",
+        symbol: "",
         delta: `in ${formatDuration(watering.averageInterval - watering.elapsed)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "overdue":
       return {
         label: "Watering overdue",
-        symbol: "!",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "redAlert":
       return {
         label: "Watering red alert",
-        symbol: "×",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
@@ -134,10 +140,10 @@ const WateringStatus: Component<{
   watering: Journal.WateringAttention;
   measuredAt: Journal.Instant;
   plantName: string;
-  plantId: Journal.PlantId;
+  plant: Journal.PlantId;
 }> = (props) => {
   const presentation = () => wateringPresentation(props.watering, props.measuredAt);
-  const detailsId = () => `watering-attention-${props.plantId}`;
+  const detailsId = () => `watering-attention-${props.plant}`;
 
   return (
     <aside class={`watering-attention watering-attention--${props.watering.kind}`}>
@@ -155,8 +161,7 @@ const WateringStatus: Component<{
 };
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
-  const plant = () => (props.kind === "cemetery" ? props.plant : props.attention.plant);
-  const name = () => plantDisplayName(plant());
+  const name = () => plantDisplayName(props.plant);
   const recentOperations = () => [...props.operationPage.operations].reverse();
 
   return (
@@ -181,39 +186,79 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <span class="recorded-life__dates">Dates unknown</span>
             )}
           </aside>
-        ) : (
+        ) : props.watering !== undefined && props.measuredAt !== undefined ? (
           <WateringStatus
-            watering={props.attention.watering}
+            watering={props.watering}
             measuredAt={props.measuredAt}
             plantName={name()}
-            plantId={plant().id}
+            plant={props.plant.id}
           />
+        ) : (
+          <aside class="attention-pending" aria-label={`Attention pending for ${name()}`}>
+            <span class="attention-pending__icon" aria-hidden="true" />
+          </aside>
         )}
         <div class="plant-summary">
           <header class="plant-card__header">
             <div>
-              <p class="eyebrow">{plant().details.location}</p>
+              <p class="eyebrow">{props.plant.details.location}</p>
               <h2>{name()}</h2>
-              <p class="plant-card__species">{plant().details.species}</p>
+              <p class="plant-card__species">{props.plant.details.species}</p>
             </div>
-            {props.kind !== "cemetery" && (
+            <div class="plant-card__actions">
               <button
-                id={`archive-plant-${plant().id}`}
-                class="archive-plant"
+                id={plantPhotosControlId(props.plant.id)}
+                class="inline-icon-action inline-icon-action--photos"
                 type="button"
-                aria-label={`Archive ${name()}`}
-                title={`Archive ${name()}`}
+                aria-label={`Photos for ${name()}`}
+                title={`Photos for ${name()}`}
                 onClick={() => {
-                  props.onArchive();
+                  props.onViewPhotos(props.plant);
                 }}
               >
-                Archive
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
               </button>
-            )}
+              {props.kind !== "cemetery" && (
+                <>
+                  <button
+                    id={editPlantControlId(props.plant.id)}
+                    class="inline-icon-action inline-icon-action--edit"
+                    type="button"
+                    aria-label={`Edit ${name()}`}
+                    title={`Edit ${name()}`}
+                    onClick={() => {
+                      props.onEditPlant(props.plant);
+                    }}
+                  />
+                  <button
+                    id={`archive-plant-${props.plant.id}`}
+                    class="inline-icon-action inline-icon-action--archive"
+                    type="button"
+                    aria-label={`Archive ${name()}`}
+                    title={`Archive ${name()}`}
+                    onClick={() => {
+                      props.onArchive();
+                    }}
+                  />
+                </>
+              )}
+            </div>
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>
-            <dd>{formatSubstrate(plant().details.substrate, props.substrateComponents)}</dd>
+            <dd>{formatSubstrate(props.plant.details.substrate, props.substrateComponents)}</dd>
           </dl>
         </div>
         <Show
@@ -242,7 +287,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         </Show>
         {props.kind !== "cemetery" && (
           <button
-            id={logOperationControlId(plant().id)}
+            id={logOperationControlId(props.plant.id)}
             class="add-operation"
             type="button"
             aria-label={`Log operation for ${name()}`}
@@ -257,7 +302,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
       </div>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory
-          plantId={plant().id}
+          plant={props.plant.id}
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           getOperations={props.getOperations}

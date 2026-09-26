@@ -1,8 +1,10 @@
 import { render } from "solid-js/web";
-import { makeHttpJournalClient } from "./adapters/http/HttpJournalClient";
+import { makeHttpOperationClient } from "./adapters/http/HttpOperationClient";
 import { makeHttpPesticideClient } from "./adapters/http/HttpPesticideClient";
-import { makeHttpPlantAttentionClient } from "./adapters/http/HttpPlantAttentionClient";
-import { makeHttpSubstrateComponentClient } from "./adapters/http/HttpSubstrateComponentClient";
+import { makeHttpPlantClient } from "./adapters/http/HttpPlantClient";
+import { makeHttpPlantPhotoClient } from "./adapters/http/HttpPlantPhotoClient";
+import { makeHttpSubstrateClient } from "./adapters/http/HttpSubstrateClient";
+import { makeWsPlantAttentionFeed } from "./adapters/ws/WsPlantAttentionFeed";
 import { App } from "./app/App";
 import "./app/controls.css";
 
@@ -11,10 +13,12 @@ if (root !== null) {
   render(
     () => (
       <App
-        journal={makeHttpJournalClient()}
-        attention={makeHttpPlantAttentionClient()}
-        substrates={makeHttpSubstrateComponentClient()}
+        plants={makeHttpPlantClient()}
+        operations={makeHttpOperationClient()}
+        attention={makeWsPlantAttentionFeed((url) => new WebSocket(url))}
+        substrates={makeHttpSubstrateClient()}
         pesticideCatalog={makeHttpPesticideClient()}
+        photos={makeHttpPlantPhotoClient()}
       />
     ),
     root,

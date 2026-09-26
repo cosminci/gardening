@@ -12,6 +12,33 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 **Exposure.** Runs on the home NAS, reachable over LAN and Tailscale only, with no application authentication; no secrets are committed.
 
+### Local development
+
+Prerequisites: Python 3, mise-managed Java 25, sbt, Node and npm; free localhost ports 8080 and 5173. Install frontend dependencies once:
+
+```sh
+mise install
+cd frontend && npm ci && cd ..
+```
+
+Start both services with a persistent, NAS-independent journal in ignored `.local/`:
+
+```sh
+mise exec -- python3 scripts/local.py
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies API requests to the local backend; Ctrl-C stops both. Override occupied ports with `GARDENING_PORT` and `GARDENING_DEV_PORT`.
+
+To seed or refresh from the NAS, configure SSH authentication locally; the NAS needs `sqlite3`. From the repository root:
+
+```sh
+GARDENING_NAS_SSH=tower.lan \
+GARDENING_NAS_DB_PATH=/mnt/user/appdata/plant-journal/gardening.db \
+mise exec -- python3 scripts/local.py --refresh
+```
+
+An existing local journal requires typing `replace` to discard local edits (`--yes` confirms non-interactively). On failure, check SSH access, the source path and NAS `sqlite3`; retry or start without `--refresh` to keep the previous journal. See [runtime dependencies](specs/operational.md#runtime-dependencies) for snapshot semantics.
+
 | Task | Command |
 | --- | --- |
 | Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
@@ -68,6 +95,13 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 - Never destructure a product merely to inspect one or two members. Match the relevant member directly and access other values by name so adding a field does not break unrelated patterns.
 - Prefer optics for focused updates through nested immutable domain values rather than nested `copy` calls.
 
+## Logging
+
+- Only the five domain services (`Plants`, `Operations`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`) log; adapters (persistence, HTTP) never do, since HTTP already discards the cause when it maps a failure to a status code and persistence is swappable machinery below the logged contract.
+- `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
+- Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
+- Every line is a single line — never a raw stack trace.
+
 ## Development workflow — SDD
 
 Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.agents/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:
@@ -99,10 +133,10 @@ documentation; it introduces no new product behavior.
 
 ## Testing conventions
 
-- **Backend** uses MUnit; name suites `<Component>ComponentTest`. A component is a complete port, trait, adapter, or domain abstraction—not an arbitrary method. Test behaviour through that boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port.
+- **Backend** uses MUnit; name suites `<Component>ComponentTest`. Every suite owns a real runtime trait or port (or a concrete adapter at that seam), never a result ADT, helper, or isolated method. Test behaviour through the owning boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port.
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)` (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real seam), and `*.systemIntegrationTest.ts(x)` (the running system).
 - Every test name starts with `should ` and states one domain outcome in the vocabulary exposed by the tested boundary. Do not name an implementation threshold, transition between independent calls, private traversal, or coverage branch when the use case is the resulting behavior.
-- A backend component or HTTP seam suite owns one `Refs` value and one `buildX(refs)` function. `Refs` holds collaborator outcomes with failure-safe defaults and captures calls. The builder creates every collaborator substitute and returns only the component under test; tests configure and observe through `Refs`, never instantiate separate stub classes or pass other arguments to the builder.
+- A backend component or HTTP seam suite uses `Refs` only for mutable observations of collaborator calls and effects. Pass fixed stub responses, failures, clocks, and other collaborator configuration directly to `buildX(refs, ...)`, with defaults for the ordinary case; call `buildX()` without `Refs` when only the returned result is asserted. The builder creates every collaborator substitute and returns only the component under test; tests assert the observed effects in `Refs`, never mock responses stored there.
 - Keep domain setup in the test that uses it. Construct domain values and short sequences explicitly with semantic local names; do not hide case-class construction, expected results, or a one-line `tabulate`/collection expression behind fixture helpers. Prefer local duplication when the values represent independent use cases.
 - Compare complete values at the tested boundary. Build a semantically named expected value immediately above a one-line assertion instead of extracting fields or wrapping assertions in helpers.
 - Name complex inputs before a call so builder invocations and assertions stay on one line. A test should read top-to-bottom as setup, one boundary action, and the complete outcome without scrolling to decode helpers.

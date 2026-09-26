@@ -8,17 +8,14 @@ Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 
-const unavailableFicusAttentionResult: Journal.GetAttentionResult = {
-  kind: "read",
-  projection: {
-    measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
-    plants: [
-      {
-        plantId: JournalFixtures.ficus().id,
-        watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
-      },
-    ],
-  },
+const unavailableFicusAttention: Journal.AttentionProjection = {
+  measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+  plants: [
+    {
+      plant: JournalFixtures.ficus().id,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    },
+  ],
 };
 
 Vitest.describe("changing the journal", () => {
@@ -30,7 +27,7 @@ Vitest.describe("changing the journal", () => {
       let countReads = 0;
       const archivePlant = Vitest.vi.fn(() => Promise.resolve({ kind: "archived" as const }));
       const base = JournalFixtures.buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getPlantsResults: [
           { kind: "read", plants: [activePlant] },
           { kind: "read", plants: [] },
@@ -48,10 +45,12 @@ Vitest.describe("changing the journal", () => {
       };
       Testing.render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
@@ -59,7 +58,7 @@ Vitest.describe("changing the journal", () => {
       Testing.fireEvent.click(archiveControl);
       const warning = Testing.screen.getByRole("alertdialog");
       Testing.fireEvent.click(
-        Testing.within(warning).getByRole("button", { name: "Archive permanently" }),
+        Testing.within(warning).getByRole("button", { name: "Move to cemetery" }),
       );
       const garden = await Testing.screen.findByRole("button", { name: /Garden.*0 plants/ });
       await Testing.waitFor(() => {
@@ -83,13 +82,20 @@ Vitest.describe("changing the journal", () => {
     const archivePlant = Vitest.vi.fn(() => Promise.resolve({ kind: "archived" as const }));
     const journal = {
       ...JournalFixtures.buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       }),
       archivePlant,
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
     archiveControl.focus();
@@ -106,33 +112,285 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
   });
 
+  Vitest.it(
+    "should delete a care operation, close the editor, and refresh its history",
+    async () => {
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const deleted: Journal.OperationId[] = [];
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([])],
+        },
+        deleteOperationResult: { kind: "deleted" },
+        deleted,
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+      );
+
+      await Testing.waitForElementToBeRemoved(() => Testing.screen.queryByText("3rd of March"));
+
+      Vitest.expect(deleted).toEqual([Journal.operationId("o1")]);
+      Vitest.expect(Testing.screen.queryByRole("dialog", { name: "Operation editor" })).toBeNull();
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    },
+  );
+
+  Vitest.it("should cancel deleting an operation and restore focus without writing", async () => {
+    const existing = JournalFixtures.repot("o1", "2026-03-03T00:00:00Z");
+    const deleteOperation = Vitest.vi.fn(() => Promise.resolve({ kind: "deleted" as const }));
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+      }),
+      deleteOperation,
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByText("3rd of March");
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", {
+        name: "Edit recent repot operation 1 from 3rd of March",
+      }),
+    );
+    const deleteControl = Testing.screen.getByRole("button", { name: "Delete" });
+    deleteControl.focus();
+    Testing.fireEvent.click(deleteControl);
+    const warning = Testing.screen.getByRole("alertdialog");
+    const warningText = warning.textContent;
+    Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
+
+    Vitest.expect(warningText).toContain("cannot be undone");
+    Vitest.expect(deleteOperation).not.toHaveBeenCalled();
+    await Testing.waitFor(() => {
+      Vitest.expect(deleteControl).toHaveFocus();
+    });
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  Vitest.it(
+    "should dismiss only the delete confirmation, not the operation editor, on Escape",
+    async () => {
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const deleteOperation = Vitest.vi.fn(() => Promise.resolve({ kind: "deleted" as const }));
+      const journal = {
+        ...JournalFixtures.buildJournal({
+          attentionProjection: unavailableFicusAttention,
+          getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+        }),
+        deleteOperation,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      Testing.fireEvent.keyDown(window, { key: "Escape" });
+
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(deleteOperation).not.toHaveBeenCalled();
+    },
+  );
+
+  Vitest.it("should delete an operation while viewing the cemetery", async () => {
+    const archivedPlant = {
+      ...JournalFixtures.ficus(),
+      details: { ...JournalFixtures.ficus().details, status: "archived" as const },
+    };
+    const existing = JournalFixtures.care({
+      id: "o1",
+      date: "2026-03-03T00:00:00Z",
+      moisture: "wet",
+    });
+    const deleted: Journal.OperationId[] = [];
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        getPlantsResults: [
+          { kind: "read", plants: [] },
+          { kind: "read", plants: [archivedPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage([existing]), JournalFixtures.operationsPage([])],
+        },
+        deleteOperationResult: { kind: "deleted" },
+        deleted,
+      }),
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
+      getOperationDates: () =>
+        Promise.resolve({
+          kind: "read" as const,
+          dates: { kind: "recorded" as const, first: existing.date, last: existing.date },
+        }),
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    Testing.fireEvent.click(
+      await Testing.screen.findByRole("button", { name: /Cemetery.*1 plant/ }),
+    );
+    const card = await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(
+      Testing.within(card).getByRole("button", { name: /Edit recent care operation/ }),
+    );
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+    const warning = Testing.screen.getByRole("alertdialog");
+    Testing.fireEvent.click(
+      Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+    );
+
+    await Testing.waitFor(() => {
+      Vitest.expect(deleted).toEqual([Journal.operationId("o1")]);
+    });
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.within(Testing.screen.getByRole("article", { name: "Fern" })).queryByText(
+          "3rd of March",
+        ),
+      ).toBeNull();
+    });
+  });
+
+  Vitest.it(
+    "should ignore a stale post-delete refresh failure after leaving the garden",
+    async () => {
+      let rejectGarden: (reason: Error) => void = () => undefined;
+      const pendingGarden = new Promise<Journal.GetPlantsResult>((_resolve, reject) => {
+        rejectGarden = reject;
+      });
+      const existing = JournalFixtures.care({
+        id: "o1",
+        date: "2026-03-03T00:00:00Z",
+        moisture: "wet",
+      });
+      const base = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existing])] },
+        deleteOperationResult: { kind: "deleted" },
+      });
+      let gardenReads = 0;
+      const journal = {
+        ...base,
+        getPlants: (status?: Journal.PlantStatus) =>
+          status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [] })
+            : gardenReads++ === 0
+              ? base.getPlants()
+              : pendingGarden,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+      );
+      await Testing.waitFor(() => {
+        Vitest.expect(gardenReads).toBe(2);
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      await Testing.screen.findByRole("region", { name: "Cemetery" });
+      rejectGarden(new Error("stale refresh"));
+      await pendingGarden.catch(() => undefined);
+      await Promise.resolve();
+
+      Vitest.expect(Testing.screen.getByRole("region", { name: "Cemetery" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
   Vitest.it("should keep another plant usable as archived attention catches up", async () => {
     const ficusPlant = JournalFixtures.ficus();
     const monsteraPlant = JournalFixtures.monstera();
-    const attention = {
-      kind: "read" as const,
-      projection: {
-        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
-        plants: [ficusPlant, monsteraPlant].map((plant) => ({
-          plantId: plant.id,
-          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
-        })),
-      },
+    const bothPlantsAttention: Journal.AttentionProjection = {
+      measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+      plants: [ficusPlant, monsteraPlant].map((plant) => ({
+        plant: plant.id,
+        watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+      })),
     };
     const base = JournalFixtures.buildJournal({
-      getAttentionResults: [
-        attention,
-        attention,
-        {
-          ...attention,
-          projection: {
-            ...attention.projection,
-            plants: attention.projection.plants.filter(
-              (sample) => sample.plantId === monsteraPlant.id,
-            ),
-          },
-        },
-      ],
+      attentionProjection: bothPlantsAttention,
       getPlantsResults: [
         { kind: "read", plants: [ficusPlant, monsteraPlant] },
         { kind: "read", plants: [monsteraPlant] },
@@ -142,26 +400,28 @@ Vitest.describe("changing the journal", () => {
         p2: [JournalFixtures.operationsPage()],
       },
     });
-    let attentionReads = 0;
     const journal = {
       ...base,
-      getAttention: () => {
-        attentionReads += 1;
-        return base.getAttention();
-      },
       getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 1 }),
       archivePlant: () => Promise.resolve({ kind: "archived" as const }),
       logOperation: () =>
         Promise.resolve({ kind: "logged" as const, id: Journal.operationId("recorded") }),
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
     archiveControl.focus();
 
     Testing.fireEvent.click(archiveControl);
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
     const garden = await Testing.screen.findByRole("button", { name: /Garden.*1 plant/ });
     await Testing.waitFor(() => {
       Vitest.expect(garden).toHaveFocus();
@@ -175,16 +435,84 @@ Vitest.describe("changing the journal", () => {
       Testing.screen.getByRole("button", { name: "Log operation for Monstera deliciosa" }),
     );
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-    await Testing.waitFor(() => {
-      Vitest.expect(attentionReads).toBe(3);
+    const remainingCard = await Testing.screen.findByRole("article", {
+      name: "Monstera deliciosa",
     });
-    const remainingCard = Testing.screen.getByRole("article", { name: "Monstera deliciosa" });
 
     Vitest.expect(gardenFocused).toBe(true);
     Vitest.expect(remainingFocused).toBe(false);
     Vitest.expect(remainingCard).toBeInTheDocument();
     Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
   });
+
+  Vitest.it(
+    "should forget a recently archived plant once the feed stops including it",
+    async () => {
+      const ficusPlant = JournalFixtures.ficus();
+      const monsteraPlant = JournalFixtures.monstera();
+      const bothPlantsAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+        plants: [ficusPlant, monsteraPlant].map((plant) => ({
+          plant: plant.id,
+          watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
+        })),
+      };
+      const monsteraOnlyAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
+        plants: [
+          {
+            plant: monsteraPlant.id,
+            watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+          },
+        ],
+      };
+      const base = JournalFixtures.buildJournal({
+        attentionProjection: bothPlantsAttention,
+        getPlantsResults: [
+          { kind: "read", plants: [ficusPlant, monsteraPlant] },
+          { kind: "read", plants: [monsteraPlant] },
+        ],
+        getOperationsByPlantId: {
+          p1: [JournalFixtures.operationsPage()],
+          p2: [JournalFixtures.operationsPage()],
+        },
+      });
+      const journal = {
+        ...base,
+        archivePlant: () => Promise.resolve({ kind: "archived" as const }),
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      Testing.fireEvent.click(await Testing.screen.findByRole("button", { name: "Archive Fern" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
+      await Testing.screen.findByRole("button", { name: /Garden.*1 plant/ });
+
+      journal.pushAttention(bothPlantsAttention);
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("article", { name: "Monstera deliciosa" }),
+        ).toBeInTheDocument();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+
+      journal.pushAttention(monsteraOnlyAttention);
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("article", { name: "Monstera deliciosa" }),
+        ).toBeInTheDocument();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
 
   Vitest.it("should keep the archive warning open when the plant cannot be archived", async () => {
     const cases = [
@@ -201,7 +529,7 @@ Vitest.describe("changing the journal", () => {
     ];
     for (const { outcome, message } of cases) {
       const base = JournalFixtures.buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       });
       const journal = {
@@ -211,16 +539,18 @@ Vitest.describe("changing the journal", () => {
       };
       const view = Testing.render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("button", { name: "Archive Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
 
       const alert = await Testing.screen.findByRole("alert");
 
@@ -236,7 +566,7 @@ Vitest.describe("changing the journal", () => {
     "should show a failed journal read after a successful archive cannot be refreshed",
     async () => {
       const base = JournalFixtures.buildJournal({
-        getAttentionResults: [unavailableFicusAttentionResult],
+        attentionProjection: unavailableFicusAttention,
         getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
       });
       let plantReads = 0;
@@ -248,16 +578,18 @@ Vitest.describe("changing the journal", () => {
       };
       Testing.render(() => (
         <App
-          journal={journal}
+          plants={journal}
+          operations={journal}
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
 
       const alert = await Testing.screen.findByRole("alert");
 
@@ -307,7 +639,14 @@ Vitest.describe("changing the journal", () => {
         }),
     };
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     Testing.fireEvent.click(
       await Testing.screen.findByRole("button", { name: /Cemetery.*1 plant/ }),
@@ -338,7 +677,7 @@ Vitest.describe("changing the journal", () => {
     const logged: { plantId: string; date: Journal.Instant; details: Journal.OperationDetails }[] =
       [];
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage(),
@@ -356,7 +695,14 @@ Vitest.describe("changing the journal", () => {
       logged,
     });
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -411,7 +757,7 @@ Vitest.describe("changing the journal", () => {
       details: { ...currentPlant.details, substrate: updated.details.substrate },
     };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getPlantsResults: [
         { kind: "read", plants: [currentPlant] },
         { kind: "read", plants: [freshPlant] },
@@ -424,7 +770,14 @@ Vitest.describe("changing the journal", () => {
     });
 
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     await Testing.screen.findByText("3rd of March");
 
@@ -477,7 +830,7 @@ Vitest.describe("changing the journal", () => {
         { kind: "read", plants: [currentPlant] },
         { kind: "read", plants: [freshPlant] },
       ],
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage(),
@@ -488,7 +841,14 @@ Vitest.describe("changing the journal", () => {
     });
 
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     const card = await Testing.screen.findByRole("article", { name: "Fern" });
     Vitest.expect(Testing.within(card).getByText("Perlite 100%")).toBeInTheDocument();
@@ -511,7 +871,7 @@ Vitest.describe("changing the journal", () => {
         { kind: "read", plants: [currentPlant] },
         { kind: "read", plants: [currentPlant] },
       ],
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: {
         p1: [
           JournalFixtures.operationsPage(),
@@ -521,7 +881,14 @@ Vitest.describe("changing the journal", () => {
       logOperationResult: { kind: "logged", id: Journal.operationId("old") },
     });
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -541,11 +908,18 @@ Vitest.describe("changing the journal", () => {
 
   Vitest.it("should close the operation editor with Escape", async () => {
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
     });
     const { container } = Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     const current = Testing.within(container);
     await current.findByRole("article", { name: "Fern" });
@@ -579,18 +953,34 @@ Vitest.describe("changing the journal", () => {
       id: ReturnType<typeof Journal.substrateComponentId>;
       data: Journal.SubstrateComponentData;
     }[] = [];
-    const addedComponent = { name: Journal.nomenclatureName("Pumice"), maybeInfo: null };
-    const editedComponent = { name: Journal.nomenclatureName("Fine perlite"), maybeInfo: null };
+    const addedComponent = { name: Journal.substrateComponentName("Pumice"), maybeInfo: null };
+    const editedComponent = {
+      name: Journal.substrateComponentName("Fine perlite"),
+      maybeInfo: null,
+    };
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      componentAddResult: { kind: "added", entry: { id: pumiceId, data: addedComponent } },
-      componentEditResult: { kind: "edited", entry: { id: perliteId, data: editedComponent } },
+      componentAddResult: {
+        kind: "added",
+        entry: { id: pumiceId, data: addedComponent, status: "active" },
+      },
+      componentEditResult: {
+        kind: "edited",
+        entry: { id: perliteId, data: editedComponent, status: "active" },
+      },
       addedComponents,
       editedComponents,
     });
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -629,6 +1019,197 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(editedComponents).toEqual([{ id: perliteId, data: editedComponent }]);
   });
 
+  Vitest.it("should save, load, and delete a substrate mix from the repot form", async () => {
+    const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
+    const existingMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000011");
+    const existingMix: Journal.SubstrateMix = {
+      id: existingMixId,
+      name: Journal.substrateMixName("Bark mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: pineBarkId, share: Journal.percentage(100) }]),
+    };
+    const savedMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000012");
+    const savedMix: Journal.SubstrateMix = {
+      id: savedMixId,
+      name: Journal.substrateMixName("Perlite mix"),
+      maybeNotes: null,
+      substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+    };
+    const addedMixes: {
+      name: Journal.SubstrateMixName;
+      maybeNotes: Journal.SubstrateMixNotes | null;
+      substrate: Journal.Substrate;
+    }[] = [];
+    const deletedMixes: Journal.SubstrateMixId[] = [];
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      getSubstrateMixesResult: { kind: "read", entries: [existingMix] },
+      mixAddResult: { kind: "added", entry: savedMix },
+      mixDeleteResult: { kind: "deleted" },
+      addedMixes,
+      deletedMixes,
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+      target: { value: "repot" },
+    });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save mix" }));
+    const saveSheet = Testing.screen.getByRole("dialog", { name: "Save substrate mix" });
+    Testing.fireEvent.input(Testing.within(saveSheet).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Perlite mix" },
+    });
+    Testing.fireEvent.click(Testing.within(saveSheet).getByRole("button", { name: "Save" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Save substrate mix" }),
+      ).toBeNull();
+    });
+    Vitest.expect(addedMixes).toEqual([
+      {
+        name: Journal.substrateMixName("Perlite mix"),
+        maybeNotes: null,
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+      },
+    ]);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+    const loadSheet = Testing.screen.getByRole("dialog", { name: "Load substrate mix" });
+    Vitest.expect(Testing.within(loadSheet).getByText("Bark mix")).toBeInTheDocument();
+    Vitest.expect(Testing.within(loadSheet).getByText("Perlite mix")).toBeInTheDocument();
+    const [barkMixLoad] = Testing.within(loadSheet).getAllByRole("button", { name: "Load" });
+    if (barkMixLoad === undefined) throw new Error("expected a Load button for Bark mix");
+    Testing.fireEvent.click(barkMixLoad);
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Load substrate mix" }),
+      ).toBeNull();
+    });
+    Vitest.expect(Testing.screen.getByRole("combobox", { name: "Component 1" })).toHaveValue(
+      pineBarkId,
+    );
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Perlite mix" }));
+    const cancelWarning = Testing.screen.getByRole("alertdialog", { name: "Delete Perlite mix" });
+    Testing.fireEvent.click(Testing.within(cancelWarning).getByRole("button", { name: "Cancel" }));
+    await Testing.waitFor(() => {
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    });
+    Vitest.expect(deletedMixes).toEqual([]);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Perlite mix" }));
+    const confirmWarning = Testing.screen.getByRole("alertdialog", { name: "Delete Perlite mix" });
+    Testing.fireEvent.click(
+      Testing.within(confirmWarning).getByRole("button", { name: "Delete permanently" }),
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+    });
+    Vitest.expect(deletedMixes).toEqual([savedMixId]);
+    Vitest.expect(Testing.screen.queryByText("Perlite mix")).not.toBeInTheDocument();
+    Vitest.expect(Testing.screen.getByText("Bark mix")).toBeInTheDocument();
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", { name: "Collapse load mix editor" }),
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(
+        Testing.screen.queryByRole("dialog", { name: "Load substrate mix" }),
+      ).toBeNull();
+    });
+  });
+
+  Vitest.it(
+    "should keep a duplicate substrate mix out of the catalog and surface delete failures",
+    async () => {
+      const existingMixId = Journal.substrateMixId("00000000-0000-4000-8000-000000000013");
+      const existingMix: Journal.SubstrateMix = {
+        id: existingMixId,
+        name: Journal.substrateMixName("Existing mix"),
+        maybeNotes: null,
+        substrate: Journal.substrate([{ component: perliteId, share: Journal.percentage(100) }]),
+      };
+      const journal = {
+        ...JournalFixtures.buildJournal({
+          attentionProjection: unavailableFicusAttention,
+          getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+          getSubstrateMixesResult: { kind: "read", entries: [existingMix] },
+          mixAddResult: { kind: "duplicateSubstrate" },
+        }),
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save mix" }));
+      const saveSheet = Testing.screen.getByRole("dialog", { name: "Save substrate mix" });
+      Testing.fireEvent.input(Testing.within(saveSheet).getByRole("textbox", { name: "Name" }), {
+        target: { value: "Existing mix" },
+      });
+      Testing.fireEvent.click(Testing.within(saveSheet).getByRole("button", { name: "Save" }));
+      Vitest.expect(await Testing.within(saveSheet).findByRole("alert")).toHaveTextContent(
+        "A mix with these exact components and shares is already saved.",
+      );
+
+      Testing.fireEvent.click(
+        Testing.within(saveSheet).getByRole("button", { name: "Collapse save mix editor" }),
+      );
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.queryByRole("dialog", { name: "Save substrate mix" }),
+        ).toBeNull();
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Load saved mix" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete Existing mix" }));
+      const failedWarning = Testing.screen.getByRole("alertdialog", {
+        name: "Delete Existing mix",
+      });
+      Testing.fireEvent.click(
+        Testing.within(failedWarning).getByRole("button", { name: "Delete permanently" }),
+      );
+      Vitest.expect(await Testing.within(failedWarning).findByRole("alert")).toHaveTextContent(
+        "The mix could not be deleted.",
+      );
+
+      journal.deleteSubstrateMix = () => Promise.reject(new Error("offline"));
+      Testing.fireEvent.click(
+        Testing.within(failedWarning).getByRole("button", { name: "Delete permanently" }),
+      );
+      Vitest.expect(await Testing.within(failedWarning).findByRole("alert")).toHaveTextContent(
+        "The mix could not be deleted.",
+      );
+    },
+  );
+
   Vitest.it("should add and edit pesticides from the care form", async () => {
     const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
@@ -641,29 +1222,31 @@ Vitest.describe("changing the journal", () => {
       {
         id: neemId,
         data: {
-          name: Journal.nomenclatureName("Neem oil"),
-          pesticideType: "insecticide" as const,
+          name: Journal.pesticideName("Neem oil"),
+          type: "insecticide" as const,
           maybeInfo: null,
         },
+        status: "active" as const,
       },
       {
         id: Journal.pesticideId("00000000-0000-4000-8001-000000000006"),
         data: {
-          name: Journal.nomenclatureName("Spinosad"),
-          pesticideType: "insecticide" as const,
+          name: Journal.pesticideName("Spinosad"),
+          type: "insecticide" as const,
           maybeInfo: null,
         },
+        status: "active" as const,
       },
     ];
     const addedPesticide: Journal.PesticideData = {
-      name: Journal.nomenclatureName("Insecticidal soap"),
-      pesticideType: "insecticide",
+      name: Journal.pesticideName("Insecticidal soap"),
+      type: "insecticide",
       maybeInfo: null,
     };
     const editedPesticide: Journal.PesticideData = {
-      name: Journal.nomenclatureName("Neem concentrate"),
-      pesticideType: "treatment",
-      maybeInfo: Journal.nomenclatureInfo("Dilute first"),
+      name: Journal.pesticideName("Neem concentrate"),
+      type: "treatment",
+      maybeInfo: Journal.pesticideInfo("Dilute first"),
     };
     const existingOperation = JournalFixtures.care({
       id: "o1",
@@ -673,16 +1256,29 @@ Vitest.describe("changing the journal", () => {
       pesticides: new Set([neemId]),
     });
     const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [unavailableFicusAttentionResult],
+      attentionProjection: unavailableFicusAttention,
       getOperationsByPlantId: { p1: [JournalFixtures.operationsPage([existingOperation])] },
       getPesticidesResult: { kind: "read", entries: pesticides },
-      pesticideAddResult: { kind: "added", entry: { id: soapId, data: addedPesticide } },
-      pesticideEditResult: { kind: "edited", entry: { id: neemId, data: editedPesticide } },
+      pesticideAddResult: {
+        kind: "added",
+        entry: { id: soapId, data: addedPesticide, status: "active" },
+      },
+      pesticideEditResult: {
+        kind: "edited",
+        entry: { id: neemId, data: editedPesticide, status: "active" },
+      },
       addedPesticides,
       editedPesticides,
     });
     Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
 
@@ -765,91 +1361,454 @@ Vitest.describe("changing the journal", () => {
     });
   });
 
-  Vitest.it("should reorder plant cards when logging an operation changes attention", async () => {
-    const ficusPlant = JournalFixtures.ficus();
-    const monsteraPlant = JournalFixtures.monstera();
-    const ficusUrgentAttention: Journal.AttentionSample = {
-      plantId: ficusPlant.id,
-      watering: {
-        kind: "redAlert",
-        sampleCount: 5,
-        averageInterval: Journal.milliseconds("86400000"),
-        elapsed: Journal.milliseconds("176400000"),
-      },
-    };
-    const monsteraCurrentAttention: Journal.AttentionSample = {
-      plantId: monsteraPlant.id,
-      watering: {
-        kind: "current",
-        sampleCount: 5,
-        averageInterval: Journal.milliseconds("86400000"),
-        elapsed: Journal.milliseconds("43200000"),
-      },
-    };
-    const initialAttentionResult: Journal.GetAttentionResult = {
-      kind: "read",
-      projection: {
-        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
-        plants: [ficusUrgentAttention, monsteraCurrentAttention],
-      },
-    };
-    const ficusCurrentAttention: Journal.AttentionSample = {
-      plantId: ficusPlant.id,
-      watering: {
-        kind: "current",
-        sampleCount: 5,
-        averageInterval: Journal.milliseconds("86400000"),
-        elapsed: Journal.milliseconds("43200000"),
-      },
-    };
-    const monsteraUrgentAttention: Journal.AttentionSample = {
-      plantId: monsteraPlant.id,
-      watering: {
-        kind: "redAlert",
-        sampleCount: 5,
-        averageInterval: Journal.milliseconds("86400000"),
-        elapsed: Journal.milliseconds("176400000"),
-      },
-    };
-    const reorderedAttentionResult: Journal.GetAttentionResult = {
-      kind: "read",
-      projection: {
-        measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
-        plants: [monsteraUrgentAttention, ficusCurrentAttention],
-      },
-    };
-    const journal = JournalFixtures.buildJournal({
-      getAttentionResults: [initialAttentionResult, reorderedAttentionResult],
-      getOperationsByPlantId: {
-        p1: [
-          JournalFixtures.operationsPage(),
-          JournalFixtures.operationsPage([
-            JournalFixtures.care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" }),
-          ]),
-        ],
-        p2: [JournalFixtures.operationsPage(), JournalFixtures.operationsPage()],
-      },
-      logOperationResult: { kind: "logged", id: Journal.operationId("new") },
-    });
-    Testing.render(() => (
-      <App journal={journal} attention={journal} substrates={journal} pesticideCatalog={journal} />
-    ));
+  Vitest.it(
+    "should archive an active pesticide, close its editor, and stop listing it for new selection",
+    async () => {
+      const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+      const soapId = Journal.pesticideId("00000000-0000-4000-8001-000000000004");
+      const soap = {
+        id: soapId,
+        data: {
+          name: Journal.pesticideName("Insecticidal soap"),
+          type: "insecticide" as const,
+          maybeInfo: null,
+        },
+        status: "active" as const,
+      };
+      const archivedPesticides: Journal.PesticideId[] = [];
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: {
+          kind: "read",
+          entries: [
+            {
+              id: neemId,
+              data: {
+                name: Journal.pesticideName("Neem oil"),
+                type: "insecticide",
+                maybeInfo: null,
+              },
+              status: "active",
+            },
+            soap,
+          ],
+        },
+        pesticideArchiveResult: {
+          kind: "archived",
+          entry: {
+            id: neemId,
+            data: {
+              name: Journal.pesticideName("Neem oil"),
+              type: "insecticide",
+              maybeInfo: null,
+            },
+            status: "archived",
+          },
+        },
+        archivedPesticides,
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
 
-    const initialArticles = await Testing.screen.findAllByRole("article");
-    Vitest.expect(initialArticles.map((article) => article.getAttribute("aria-label"))).toEqual([
-      "Fern",
-      "Monstera deliciosa",
-    ]);
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      const operation = Testing.screen.getByRole("dialog", { name: "Operation editor" });
+      Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Archive permanently" }),
+      );
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+        ).toBeNull();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(
+        Testing.screen.queryByRole("checkbox", { name: "Neem oil" }),
+      ).not.toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.getByRole("checkbox", { name: "Insecticidal soap" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.getByRole("dialog", { name: "Operation editor" })).toBe(
+        operation,
+      );
+      Vitest.expect(archivedPesticides).toEqual([neemId]);
+    },
+  );
+
+  Vitest.it("should cancel archiving a pesticide and restore focus without writing", async () => {
+    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const neem = {
+      id: neemId,
+      data: {
+        name: Journal.pesticideName("Neem oil"),
+        type: "insecticide" as const,
+        maybeInfo: null,
+      },
+      status: "active" as const,
+    };
+    const archivePesticide = Vitest.vi.fn(() =>
+      Promise.resolve({
+        kind: "archived" as const,
+        entry: { ...neem, status: "archived" as const },
+      }),
+    );
+    const journal = {
+      ...JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: { kind: "read", entries: [neem] },
+      }),
+      archivePesticide,
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+    const archiveControl = Testing.screen.getByRole("button", { name: "Archive" });
+    archiveControl.focus();
+    Testing.fireEvent.click(archiveControl);
+    const warning = Testing.screen.getByRole("alertdialog");
+    Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
 
+    Vitest.expect(archivePesticide).not.toHaveBeenCalled();
     await Testing.waitFor(() => {
-      const updatedArticles = Testing.screen.getAllByRole("article");
-      Vitest.expect(updatedArticles.map((article) => article.getAttribute("aria-label"))).toEqual([
-        "Monstera deliciosa",
-        "Fern",
-      ]);
+      Vitest.expect(archiveControl).toHaveFocus();
     });
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  Vitest.it(
+    "should dismiss only the archive confirmation, not the pesticide editor, on Escape",
+    async () => {
+      const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        getPesticidesResult: {
+          kind: "read",
+          entries: [
+            {
+              id: neemId,
+              data: {
+                name: Journal.pesticideName("Neem oil"),
+                type: "insecticide",
+                maybeInfo: null,
+              },
+              status: "active",
+            },
+          ],
+        },
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      Vitest.expect(Testing.screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      Testing.fireEvent.keyDown(window, { key: "Escape" });
+
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  Vitest.it(
+    "should reorder plant cards when a pushed attention projection changes urgency",
+    async () => {
+      const ficusPlant = JournalFixtures.ficus();
+      const monsteraPlant = JournalFixtures.monstera();
+      const ficusUrgentAttention: Journal.AttentionSample = {
+        plant: ficusPlant.id,
+        watering: {
+          kind: "redAlert",
+          sampleCount: 5,
+          averageInterval: Journal.milliseconds("86400000"),
+          elapsed: Journal.milliseconds("176400000"),
+        },
+      };
+      const monsteraCurrentAttention: Journal.AttentionSample = {
+        plant: monsteraPlant.id,
+        watering: {
+          kind: "current",
+          sampleCount: 5,
+          averageInterval: Journal.milliseconds("86400000"),
+          elapsed: Journal.milliseconds("43200000"),
+        },
+      };
+      const initialAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
+        plants: [ficusUrgentAttention, monsteraCurrentAttention],
+      };
+      const ficusCurrentAttention: Journal.AttentionSample = {
+        plant: ficusPlant.id,
+        watering: {
+          kind: "current",
+          sampleCount: 5,
+          averageInterval: Journal.milliseconds("86400000"),
+          elapsed: Journal.milliseconds("43200000"),
+        },
+      };
+      const monsteraUrgentAttention: Journal.AttentionSample = {
+        plant: monsteraPlant.id,
+        watering: {
+          kind: "redAlert",
+          sampleCount: 5,
+          averageInterval: Journal.milliseconds("86400000"),
+          elapsed: Journal.milliseconds("176400000"),
+        },
+      };
+      const reorderedAttention: Journal.AttentionProjection = {
+        measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
+        plants: [monsteraUrgentAttention, ficusCurrentAttention],
+      };
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: initialAttention,
+        getOperationsByPlantId: {
+          p1: [
+            JournalFixtures.operationsPage(),
+            JournalFixtures.operationsPage([
+              JournalFixtures.care({ id: "new", date: "2026-05-05T00:00:00Z", moisture: "wet" }),
+            ]),
+          ],
+          p2: [JournalFixtures.operationsPage(), JournalFixtures.operationsPage()],
+        },
+        logOperationResult: { kind: "logged", id: Journal.operationId("new") },
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+
+      const initialArticles = await Testing.screen.findAllByRole("article");
+      Vitest.expect(initialArticles.map((article) => article.getAttribute("aria-label"))).toEqual([
+        "Fern",
+        "Monstera deliciosa",
+      ]);
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+
+      journal.pushAttention(reorderedAttention);
+
+      await Testing.waitFor(() => {
+        const updatedArticles = Testing.screen.getAllByRole("article");
+        Vitest.expect(updatedArticles.map((article) => article.getAttribute("aria-label"))).toEqual(
+          ["Monstera deliciosa", "Fern"],
+        );
+      });
+    },
+  );
+
+  Vitest.it("should keep the substrate editor open when adding a component fails", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      componentAddResult: { kind: "addFailed", reason: new Error("offline") },
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+      target: { value: "repot" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new component" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Pumice" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+
+    Vitest.expect(
+      await Testing.screen.findByText("The substrate component could not be saved."),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
+    ).toBeInTheDocument();
+  });
+
+  Vitest.it("should keep the substrate editor open when editing a component fails", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      componentEditResult: { kind: "editFailed", reason: new Error("offline") },
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+      target: { value: "repot" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Fine perlite" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+
+    Vitest.expect(
+      await Testing.screen.findByText("The substrate component could not be saved."),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
+    ).toBeInTheDocument();
+  });
+
+  Vitest.it("should keep the pesticide editor open when adding a pesticide fails", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      getPesticidesResult: { kind: "read", entries: [] },
+      pesticideAddResult: { kind: "addFailed", reason: new Error("offline") },
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new pesticide" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Neem oil" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+
+    Vitest.expect(
+      await Testing.screen.findByText("The pesticide could not be saved."),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
+  });
+
+  Vitest.it("should keep the pesticide editor open when editing a pesticide fails", async () => {
+    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      getPesticidesResult: {
+        kind: "read",
+        entries: [
+          {
+            id: neemId,
+            data: {
+              name: Journal.pesticideName("Neem oil"),
+              type: "insecticide",
+              maybeInfo: null,
+            },
+            status: "active",
+          },
+        ],
+      },
+      pesticideEditResult: { kind: "editFailed", reason: new Error("offline") },
+    });
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByRole("article", { name: "Fern" });
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Neem concentrate" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+
+    Vitest.expect(
+      await Testing.screen.findByText("The pesticide could not be saved."),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
   });
 });

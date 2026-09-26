@@ -15,6 +15,9 @@ node_modules/
 *.db
 *.db-journal
 /data/
+/.local/
+/.local-backups/
+__pycache__/
 
 # Agent working directory (checklists, investigation trails)
 .agent-work/
@@ -23,4 +26,6 @@ node_modules/
 .DS_Store
 
 # Local, un-tracked overrides
+AGENTS.local.md
 CLAUDE.local.md
+.scout/

@@ -31,7 +31,8 @@ export interface paths {
         /** List plants by status */
         get: operations["getPlants"];
         put?: never;
-        post?: never;
+        /** Create an active plant */
+        post: operations["postPlants"];
         delete?: never;
         options?: never;
         head?: never;
@@ -55,7 +56,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/archive": {
+    "/plants/{plantId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -64,12 +65,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Permanently archive an active plant */
-        post: operations["postPlantsPlantidArchive"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch a plant */
+        patch: operations["patchPlantsPlantid"];
         trace?: never;
     };
     "/attention": {
@@ -89,7 +90,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operations": {
+    "/operations": {
         parameters: {
             query?: never;
             header?: never;
@@ -97,17 +98,17 @@ export interface paths {
             cookie?: never;
         };
         /** List a bounded page of plant operations */
-        get: operations["getPlantsPlantidOperations"];
+        get: operations["getOperations"];
         put?: never;
         /** Log a plant operation */
-        post: operations["postPlantsPlantidOperations"];
+        post: operations["postOperations"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/plants/{plantId}/operation-date-range": {
+    "/operations/date-range": {
         parameters: {
             query?: never;
             header?: never;
@@ -115,7 +116,7 @@ export interface paths {
             cookie?: never;
         };
         /** Read the first and last recorded operation dates */
-        get: operations["getPlantsPlantidOperation-date-range"];
+        get: operations["getOperationsDate-range"];
         put?: never;
         post?: never;
         delete?: never;
@@ -135,7 +136,8 @@ export interface paths {
         /** Edit a plant operation */
         put: operations["putOperationsOperationid"];
         post?: never;
-        delete?: never;
+        /** Delete a plant operation */
+        delete: operations["deleteOperationsOperationid"];
         options?: never;
         head?: never;
         patch?: never;
@@ -176,7 +178,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/substrate/components": {
+    "/pesticides/{pesticideId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a pesticide */
+        post: operations["postPesticidesPesticideidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/components": {
         parameters: {
             query?: never;
             header?: never;
@@ -184,17 +203,17 @@ export interface paths {
             cookie?: never;
         };
         /** List substrate components */
-        get: operations["getSubstrateComponents"];
+        get: operations["getSubstratesComponents"];
         put?: never;
         /** Add a substrate component */
-        post: operations["postSubstrateComponents"];
+        post: operations["postSubstratesComponents"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/substrate/components/{componentId}": {
+    "/substrates/components/{componentId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -203,7 +222,111 @@ export interface paths {
         };
         get?: never;
         /** Edit a substrate component */
-        put: operations["putSubstrateComponentsComponentid"];
+        put: operations["putSubstratesComponentsComponentid"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/components/{componentId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a substrate component */
+        post: operations["postSubstratesComponentsComponentidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/mixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List substrate mixes */
+        get: operations["getSubstratesMixes"];
+        put?: never;
+        /** Save a substrate mix */
+        post: operations["postSubstratesMixes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substrates/mixes/{mixId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a substrate mix */
+        delete: operations["deleteSubstratesMixesMixid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plants/{plantId}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded page of plant photos */
+        get: operations["getPlantsPlantidPhotos"];
+        put?: never;
+        /** Upload a photo for a plant */
+        post: operations["postPlantsPlantidPhotos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a photo */
+        delete: operations["deletePhotosPhotoid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve the raw photo content */
+        get: operations["getPhotosPhotoidContent"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -220,6 +343,12 @@ export interface components {
          * @enum {string}
          */
         ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "watered";
+        /** AddedPhoto */
+        AddedPhoto: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
         /** ApiError */
         ApiError: {
             message: string;
@@ -262,6 +391,7 @@ export interface components {
         };
         /** LogOperationRequest */
         LogOperationRequest: {
+            plantId: string;
             /** Format: date-time */
             date: string;
             details: components["schemas"]["OperationDetails"];
@@ -297,6 +427,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             data: components["schemas"]["PesticideData"];
+            status: components["schemas"]["PesticideStatus"];
         };
         /** PesticideData */
         PesticideData: {
@@ -305,10 +436,31 @@ export interface components {
             info: string | null;
         };
         /**
+         * PesticideStatus
+         * @enum {string}
+         */
+        PesticideStatus: "active" | "archived";
+        /**
          * PesticideType
          * @enum {string}
          */
         PesticideType: "fungicide" | "insecticide" | "treatment";
+        /** PhotoItem */
+        PhotoItem: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
+        /** PhotoPageResponse */
+        PhotoPageResponse: {
+            photos: components["schemas"]["PhotoItem"][];
+            hasNextPage: boolean;
+        };
+        /** PhotoUploadPart */
+        PhotoUploadPart: {
+            /** Format: binary */
+            file: string;
+        };
         /** Plant */
         Plant: {
             id: string;
@@ -319,6 +471,13 @@ export interface components {
             plantId: string;
             watering: components["schemas"]["WateringAttention"];
         };
+        /** PlantCreation */
+        PlantCreation: {
+            species: string;
+            nickname: string | null;
+            location: string;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
         /** PlantDetails */
         PlantDetails: {
             species: string;
@@ -326,6 +485,12 @@ export interface components {
             location: string;
             substrate: components["schemas"]["SubstratePart"][];
             status: components["schemas"]["PlantStatus"];
+        };
+        /** PlantPatchOperation */
+        PlantPatchOperation: {
+            op: string;
+            path: string;
+            value: unknown;
         };
         /**
          * PlantStatus
@@ -359,11 +524,31 @@ export interface components {
             /** Format: uuid */
             id: string;
             data: components["schemas"]["SubstrateComponentData"];
+            status: components["schemas"]["SubstrateComponentStatus"];
         };
         /** SubstrateComponentData */
         SubstrateComponentData: {
             name: string;
             info: string | null;
+        };
+        /**
+         * SubstrateComponentStatus
+         * @enum {string}
+         */
+        SubstrateComponentStatus: "active" | "archived";
+        /** SubstrateMix */
+        SubstrateMix: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            notes: string | null;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
+        /** SubstrateMixData */
+        SubstrateMixData: {
+            name: string;
+            notes: string | null;
+            substrate: components["schemas"]["SubstratePart"][];
         };
         /** SubstratePart */
         SubstratePart: {
@@ -487,6 +672,62 @@ export interface operations {
             };
         };
     };
+    postPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlantCreation"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plant"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getPlantsArchivedCount: {
         parameters: {
             query?: never;
@@ -514,7 +755,7 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidArchive: {
+    patchPlantsPlantid: {
         parameters: {
             query?: never;
             header?: never;
@@ -523,13 +764,25 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json-patch+json": components["schemas"]["PlantPatchOperation"][];
+            };
+        };
         responses: {
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
             };
             404: {
                 headers: {
@@ -547,7 +800,31 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -576,16 +853,15 @@ export interface operations {
             };
         };
     };
-    getPlantsPlantidOperations: {
+    getOperations: {
         parameters: {
-            query?: {
+            query: {
+                plantId: string;
                 offset?: number;
                 pageSize?: number;
             };
             header?: never;
-            path: {
-                plantId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -598,7 +874,7 @@ export interface operations {
                     "application/json": components["schemas"]["OperationPage"];
                 };
             };
-            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            /** @description Invalid value for: query parameter plantId, Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -617,13 +893,11 @@ export interface operations {
             };
         };
     };
-    postPlantsPlantidOperations: {
+    postOperations: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                plantId: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -675,13 +949,13 @@ export interface operations {
             };
         };
     };
-    "getPlantsPlantidOperation-date-range": {
+    "getOperationsDate-range": {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 plantId: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -692,6 +966,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationDateRange"];
+                };
+            };
+            /** @description Invalid value for: query parameter plantId */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
                 };
             };
             404: {
@@ -743,6 +1026,49 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteOperationsOperationid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: {
                 headers: {
@@ -876,6 +1202,14 @@ export interface operations {
                     "application/json": components["schemas"]["ApiError"];
                 };
             };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -886,7 +1220,60 @@ export interface operations {
             };
         };
     };
-    getSubstrateComponents: {
+    postPesticidesPesticideidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pesticideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getSubstratesComponents: {
         parameters: {
             query?: never;
             header?: never;
@@ -913,7 +1300,7 @@ export interface operations {
             };
         };
     };
-    postSubstrateComponents: {
+    postSubstratesComponents: {
         parameters: {
             query?: never;
             header?: never;
@@ -953,7 +1340,7 @@ export interface operations {
             };
         };
     };
-    putSubstrateComponentsComponentid: {
+    putSubstratesComponentsComponentid: {
         parameters: {
             query?: never;
             header?: never;
@@ -982,6 +1369,357 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postSubstratesComponentsComponentidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                componentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateMixData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteSubstratesMixesMixid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mixId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPlantsPlantidPhotos: {
+        parameters: {
+            query?: {
+                offset?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoPageResponse"];
+                };
+            };
+            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPlantsPlantidPhotos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["PhotoUploadPart"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedPhoto"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deletePhotosPhotoid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPhotosPhotoidContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Type": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
                 };
             };
             404: {

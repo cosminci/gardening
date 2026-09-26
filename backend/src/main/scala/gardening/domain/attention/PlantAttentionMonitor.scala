@@ -13,33 +13,53 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
+import scala.util.chaining.scalaUtilChainingOps
 
 trait PlantAttentionMonitor:
   def current: AttentionProjection
   def refreshAll: RefreshAttentionResult
-  def removeArchivedPlant(id: PlantId): Unit
 
 object PlantAttentionMonitor:
 
-  def make(using store: PlantAttentionStore^, clock: Clock^): Either[Throwable, PlantAttentionMonitor^{store, clock}] =
-    computeProjection.map(new LivePlantAttentionMonitor(_))
+  def make(using
+      store: PlantAttentionStore^,
+      clock: Clock^
+  )(using
+      log: Logger^,
+      metrics: PlantAttentionMonitorMetricsApi^
+  ): Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
+    computeProjection.tap(_.foreach(recordWateringMetrics)).map(new LivePlantAttentionMonitor(_))
 
-  private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using store: PlantAttentionStore^, clock: Clock^)
-      extends PlantAttentionMonitor:
+  private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using
+      store: PlantAttentionStore^,
+      clock: Clock^
+  )(using log: Logger^, metrics: PlantAttentionMonitorMetricsApi^) extends PlantAttentionMonitor:
     private val currentProjection = AtomicReference(initialProjection)
 
     override def current: AttentionProjection = currentProjection.get()
 
     override def refreshAll: RefreshAttentionResult = synchronized:
       computeProjection match
-        case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason)
+        case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason).tap(_ => log.error("refresh attention", reason))
         case Right(projection) =>
+          val previousLevels = currentProjection.get().plants.map(p => p.plantId -> p.watering.level).toMap
           currentProjection.set(projection)
+          logLevelTransitions(projection, previousLevels)
+          recordWateringMetrics(projection)
           RefreshAttentionResult.Refreshed(projection)
 
-    override def removeArchivedPlant(id: PlantId): Unit = synchronized:
-      val projection = currentProjection.get()
-      currentProjection.set(projection.copy(plants = projection.plants.filterNot(_.plantId.value === id.value)))
+    private def logLevelTransitions(projection: AttentionProjection, previousLevels: Map[PlantId, AttentionLevel]): Unit =
+      val transitions = projection.plants.flatMap: plant =>
+        val nextLevel = plant.watering.level
+        previousLevels.get(plant.plantId).filter(_ =!= nextLevel).map(previousLevel => s"${plant.plantId.value}:$previousLevel->$nextLevel")
+      if transitions.nonEmpty then log.info(s"attention changed ${transitions.mkString(",")}")
+
+  private def recordWateringMetrics(projection: AttentionProjection)(using metrics: PlantAttentionMonitorMetricsApi^): Unit =
+    projection.plants.foreach:
+      case PlantAttention(plantId, available: WateringAttention.Available) =>
+        metrics.setWateringUrgencyRatio(plantId, available.elapsed.toNanos.toDouble / available.averageInterval.toNanos.toDouble)
+        metrics.setWateringCadence(plantId, available.averageInterval)
+      case _: PlantAttention => ()
 
   private def computeProjection(using store: PlantAttentionStore^, clock: Clock^) =
     store.getAttentionSamples(size = 20) match

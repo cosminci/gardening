@@ -14,15 +14,17 @@ describe("archive confirmation", () => {
         onCancel={onCancel}
       />
     ));
-    const warning = screen.getByRole("alertdialog", { name: "Archive Fern" });
+    const warning = screen.getByRole("alertdialog", { name: "Move Fern to cemetery" });
     const cancel = within(warning).getByRole("button", { name: "Cancel" });
-    const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
+    const confirm = within(warning).getByRole("button", { name: "Move to cemetery" });
 
     const initialFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
     const backwardsFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Tab" });
     const forwardsFocus = document.activeElement;
+    fireEvent.keyDown(window, { key: "Tab" });
+    const forwardsFromCancelFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Escape" });
     const escapeCalls = onCancel.mock.calls.length;
     fireEvent.click(cancel);
@@ -30,6 +32,7 @@ describe("archive confirmation", () => {
     expect(initialFocus).toBe(cancel);
     expect(backwardsFocus).toBe(confirm);
     expect(forwardsFocus).toBe(cancel);
+    expect(forwardsFromCancelFocus).toBe(cancel);
     expect(escapeCalls).toBe(1);
     expect(onCancel).toHaveBeenCalledTimes(2);
   });
@@ -52,9 +55,9 @@ describe("archive confirmation", () => {
       />
     ));
 
-    const warning = screen.getByRole("alertdialog", { name: "Archive Fern" });
+    const warning = screen.getByRole("alertdialog", { name: "Move Fern to cemetery" });
     const cancel = within(warning).getByRole("button", { name: "Cancel" });
-    const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
+    const confirm = within(warning).getByRole("button", { name: "Move to cemetery" });
 
     fireEvent.click(confirm);
     const pendingFocus = document.activeElement;
@@ -66,7 +69,7 @@ describe("archive confirmation", () => {
 
     const alert = await screen.findByRole("alert");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Archive permanently" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Move to cemetery" })).toBeEnabled();
     });
     const restoredFocus = document.activeElement;
     fireEvent.keyDown(window, { key: "Escape" });
