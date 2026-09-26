@@ -650,7 +650,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Active requests",
+      "title": "Active connections",
       "gridPos": {
         "x": 12,
         "y": 14,
@@ -695,8 +695,8 @@
             "uid": "P3875CC3B49F869A8"
           },
           "editorMode": "code",
-          "expr": "gardening_request_active",
-          "legendFormat": "{{method}} {{path}}"
+          "expr": "gardening_attention_feed_connections",
+          "legendFormat": "open connections"
         }
       ]
     },
@@ -985,7 +985,7 @@
       "gridPos": {
         "x": 0,
         "y": 27,
-        "w": 6,
+        "w": 8,
         "h": 6
       },
       "datasource": {
@@ -1048,6 +1048,112 @@
           "editorMode": "code",
           "expr": "jvm_threads_peak",
           "legendFormat": "peak"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Database size",
+      "gridPos": {
+        "x": 8,
+        "y": 27,
+        "w": 8,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P3875CC3B49F869A8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P3875CC3B49F869A8"
+          },
+          "editorMode": "code",
+          "expr": "gardening_storage_db_bytes",
+          "legendFormat": "size"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "Photo storage size",
+      "gridPos": {
+        "x": 16,
+        "y": 27,
+        "w": 8,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P3875CC3B49F869A8"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P3875CC3B49F869A8"
+          },
+          "editorMode": "code",
+          "expr": "gardening_storage_photos_bytes",
+          "legendFormat": "size"
         }
       ]
     }

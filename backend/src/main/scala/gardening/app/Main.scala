@@ -36,8 +36,15 @@ object Main:
 
     val registry = new PrometheusRegistry
     JvmMetrics.builder().register(registry)
-    val prometheusMetrics = PrometheusMetrics.default[Identity](namespace = "gardening", registry = registry)
-    val serverOptions     =
+    // `.default` also registers `request_active`: tapir increments that gauge for every request in
+    // its top-level interceptor, before `ignoreEndpoints` is even checked, but only decrements it via
+    // completion hooks that `ignoreEndpoints` skips — so any excluded endpoint (the feed, and tapir's
+    // own metrics endpoint below) leaks it permanently. Verified live: a closed feed connection and a
+    // /metrics scrape each leave a permanent +1. `gardening_attention_feed_connections` is the gauge
+    // that actually tracks feed concurrency, so request_active isn't registered at all.
+    val prometheusMetrics =
+      PrometheusMetrics[Identity](namespace = "gardening", registry = registry).addRequestsTotal().addRequestsDuration()
+    val serverOptions =
       NettySyncServerOptions.customiseInterceptors.metricsInterceptor(
         prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
       ).options
