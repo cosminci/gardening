@@ -27,6 +27,7 @@ import * as Controls from "./OperationControlIds";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { orderPlantAttention } from "./PlantAttentionOrdering";
+import { filterHistoriesBySearch } from "./PlantSearch";
 import { createPesticideCatalogController } from "./PesticideCatalogController";
 import { PlantSheet, editPlantControlId, type PlantTarget } from "./PlantSheet";
 import { createSubstrateCatalogController } from "./SubstrateCatalogController";
@@ -53,6 +54,7 @@ export const App: Component<AppProps> = (props) => {
   const [cemeteryHistories, setCemeteryHistories] = createSignal<readonly CemeteryHistory[]>([]);
   const [cemeteryCount, setCemeteryCount] = createSignal(0);
   const [selected, setSelected] = createSignal<PlantView>(viewFromUrl());
+  const [searchQuery, setSearchQuery] = createSignal("");
   const [ready, setReady] = createSignal(false);
   const [archiveTarget, setArchiveTarget] = createSignal<Journal.Plant>();
   const [archiveCompleted, setArchiveCompleted] = createSignal(false);
@@ -112,6 +114,14 @@ export const App: Component<AppProps> = (props) => {
 
   const histories = () =>
     selected() === "garden" ? orderedGardenHistories() : cemeteryHistories();
+
+  const filteredHistories = createMemo(() => filterHistoriesBySearch(histories(), searchQuery()));
+
+  const emptyMessage = createMemo(() =>
+    searchQuery().trim() !== "" && filteredHistories().length === 0
+      ? "No plants match your search."
+      : undefined,
+  );
 
   const isProjectionValid = (
     proj: Journal.AttentionProjection,
@@ -228,6 +238,7 @@ export const App: Component<AppProps> = (props) => {
   };
 
   const selectView = (next: PlantView, updateUrl = true) => {
+    setSearchQuery("");
     if (updateUrl) {
       const url = new URL(window.location.href);
       if (next === "cemetery") url.searchParams.set("view", "cemetery");
@@ -482,12 +493,14 @@ export const App: Component<AppProps> = (props) => {
         selected={selected()}
         connectionState={feedConnectionState()}
         lastUpdateAt={lastAttentionUpdate()}
+        searchQuery={searchQuery()}
         onSelect={selectView}
         onAddPlant={() => {
           setPlantSaveError(undefined);
           setPlantSheetCompleted(false);
           setPlantTarget({ kind: "add" });
         }}
+        onSearchQuery={setSearchQuery}
       />
       <Switch>
         <Match when={view() === "loading"}>
@@ -503,7 +516,8 @@ export const App: Component<AppProps> = (props) => {
         <Match when={view() === "loaded"}>
           <JournalList
             view={selected()}
-            histories={histories()}
+            histories={filteredHistories()}
+            emptyMessage={emptyMessage()}
             attentionProjection={attentionProjection()}
             substrateComponents={substrateComponents()}
             pesticides={pesticides()}

@@ -9,8 +9,10 @@ interface JournalHeaderProps {
   readonly selected: "garden" | "cemetery";
   readonly connectionState: FeedConnectionState;
   readonly lastUpdateAt: number | undefined;
+  readonly searchQuery: string;
   readonly onSelect: (view: "garden" | "cemetery") => void;
   readonly onAddPlant: () => void;
+  readonly onSearchQuery: (query: string) => void;
 }
 
 const connectionStateLabel = (state: FeedConnectionState) => {
@@ -44,8 +46,6 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
     <header class="masthead">
       <div class="masthead__heading">
         <h1>Plant Journal</h1>
-      </div>
-      <div class="masthead__actions">
         <span
           role="status"
           aria-label={connectionStateLabel(props.connectionState)}
@@ -57,6 +57,8 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
             <span class="backend-status__age">{updateAge(props.lastUpdateAt, now())}</span>
           </span>
         </span>
+      </div>
+      <div class="masthead__actions">
         <Show when={props.loaded}>
           <button
             id="add-plant"
@@ -68,6 +70,17 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
           >
             Add plant
           </button>
+          <input
+            id="plant-search"
+            class="plant-search"
+            type="search"
+            aria-label="Search plants by nickname, species, or location"
+            placeholder="Search plants…"
+            value={props.searchQuery}
+            onInput={(event) => {
+              props.onSearchQuery(event.currentTarget.value);
+            }}
+          />
           <div class="plant-views" role="group" aria-label="Plant views">
             <button
               id="garden-toggle"

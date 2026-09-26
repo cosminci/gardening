@@ -863,7 +863,10 @@ describe("browsing the journal", () => {
     ));
     await screen.findByRole("article", { name: "Fern" });
     const addPlant = screen.getByRole("button", { name: "Add plant" });
-    expect(addPlant.nextElementSibling).toHaveAttribute("aria-label", "Plant views");
+    const plantViews = screen.getByRole("group", { name: "Plant views" });
+    expect(
+      addPlant.compareDocumentPosition(plantViews) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
     const dialog = screen.getByRole("dialog", { name: "Plant editor" });
