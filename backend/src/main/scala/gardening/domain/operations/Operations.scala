@@ -73,7 +73,7 @@ object Operations:
             case Right(_)     =>
               store.addOperation(operation) match
                 case res: LogOperationResult.Logged =>
-                  log.info(s"operation logged id=${res.id.value}")
+                  log.info(s"operation logged $operation")
                   updatePlantIfOperationIsLatestRepot(operation)
                     .compensateWith(store.removeOperation(operation.id))
                     .tap(_.left.foreach(reason => log.error("log operation", reason)))
@@ -94,7 +94,7 @@ object Operations:
             case Right(_)     =>
               store.updateOperation(operation, details) match
                 case res @ EditOperationResult.Edited(edited) =>
-                  log.info(s"operation edited id=${edited.id.value}")
+                  log.info(s"operation edited $edited")
                   updatePlantIfOperationIsLatestRepot(edited)
                     .compensateWith(store.restoreOperation(found))
                     .tap(_.left.foreach(reason => log.error("edit operation", reason)))
@@ -108,10 +108,8 @@ object Operations:
           found   <- readOperation(operation)
           _       <- rejectLatestRepot(found)
           deleted <- deleteFromStore(found.id)
-        yield deleted
-      outcome.merge.tap:
-        case DeleteOperationResult.Deleted => log.info(s"operation deleted id=${operation.value}")
-        case _                             => ()
+        yield deleted.tap(_ => log.info(s"operation deleted $found"))
+      outcome.merge
 
     private def readOperation(operation: OperationId): Either[DeleteOperationResult, Operation] =
       store.getOperation(operation) match

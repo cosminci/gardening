@@ -30,18 +30,18 @@ object PesticideCatalog:
 
     override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
       store.addPesticide(Pesticide(PesticideId(UUID.fromString(idGen.nextId())), data, PesticideStatus.Active)).tap:
-        case CatalogAddResult.Added(entry)      => log.info(s"pesticide added id=${entry.id.value}")
+        case CatalogAddResult.Added(entry)      => log.info(s"pesticide added $entry")
         case CatalogAddResult.AddFailed(reason) => log.error("add pesticide", reason)
 
     override def editPesticide(id: PesticideId, data: PesticideData): PesticideUpdateResult =
       update(id)(editFn = _.copy(data = data)).tap:
-        case PesticideUpdateResult.Updated(pesticide)   => log.info(s"pesticide edited id=${pesticide.id.value}")
+        case PesticideUpdateResult.Updated(pesticide)   => log.info(s"pesticide edited $pesticide")
         case PesticideUpdateResult.UpdateFailed(reason) => log.error("edit pesticide", reason)
         case _                                          => ()
 
     override def archivePesticide(id: PesticideId): PesticideUpdateResult =
       update(id)(editFn = _.copy(status = PesticideStatus.Archived)).tap:
-        case PesticideUpdateResult.Updated(pesticide)   => log.info(s"pesticide archived id=${pesticide.id.value}")
+        case PesticideUpdateResult.Updated(pesticide)   => log.info(s"pesticide archived $pesticide")
         case PesticideUpdateResult.UpdateFailed(reason) => log.error("archive pesticide", reason)
         case _                                          => ()
 

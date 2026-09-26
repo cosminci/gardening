@@ -53,7 +53,7 @@ object Plants:
             val plant = Plant(PlantId(idGen.nextId()), PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
             store.addPlant(plant) match
               case AddPlantResult.Added =>
-                log.info(s"plant created id=${plant.id.value}")
+                log.info(s"plant created $plant")
                 substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
                 CreatePlantResult.Created(plant)
               case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason).tap(_ => log.error("create plant", reason))
@@ -76,7 +76,7 @@ object Plants:
           saved  <- persistEdit(edited)
         yield saved
       outcome.fold(identity, EditPlantResult.Edited.apply).tap:
-        case EditPlantResult.Edited(edited) => log.info(s"plant edited id=${edited.id.value}")
+        case EditPlantResult.Edited(edited) => log.info(s"plant edited $edited")
         case _                              => ()
 
     private def readAndRevise(plant: PlantId, revise: PlantDetails => PlantDetails): Either[EditPlantResult, Plant] =
@@ -107,7 +107,7 @@ object Plants:
         case PhotoWriteResult.Written =>
           store.addPhoto(photo) match
             case result @ AddPhotoResult.Added(added) =>
-              log.info(s"photo added id=${added.id.value}")
+              log.info(s"photo added $added mediaType=${content.mediaType}")
               result
             case AddPhotoResult.PlantMissing      => compensateContentDeleteAfterMissingPlant(photo.id)
             case AddPhotoResult.AddFailed(reason) => compensateContentDeleteAfterAddFailed(photo.id, reason)
@@ -120,7 +120,7 @@ object Plants:
         case RemovePhotoResult.Removed(removed) =>
           contentStore.delete(removed.id) match
             case PhotoWriteResult.Written =>
-              log.info(s"photo removed id=${removed.id.value}")
+              log.info(s"photo removed $removed")
               RemovePhotoResult.Removed(removed)
             case PhotoWriteResult.WriteFailed(reason) => compensateMetadataRestore(removed, reason)
 

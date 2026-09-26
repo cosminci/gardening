@@ -43,18 +43,18 @@ object SubstrateCatalog:
       store
         .addSubstrateComponent(SubstrateComponent(SubstrateComponentId(UUID.fromString(idGen.nextId())), data, SubstrateComponentStatus.Active))
         .tap:
-          case CatalogAddResult.Added(entry)      => log.info(s"substrate component added id=${entry.id.value}")
+          case CatalogAddResult.Added(entry)      => log.info(s"substrate component added $entry")
           case CatalogAddResult.AddFailed(reason) => log.error("add substrate component", reason)
 
     override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult =
       update(id)(editFn = _.copy(data = data)).tap:
-        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component edited id=${component.id.value}")
+        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component edited $component")
         case SubstrateComponentUpdateResult.UpdateFailed(reason) => log.error("edit substrate component", reason)
         case _                                                   => ()
 
     override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult =
       update(id)(editFn = _.copy(status = SubstrateComponentStatus.Archived)).tap:
-        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component archived id=${component.id.value}")
+        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component archived $component")
         case SubstrateComponentUpdateResult.UpdateFailed(reason) => log.error("archive substrate component", reason)
         case _                                                   => ()
 
@@ -82,7 +82,7 @@ object SubstrateCatalog:
         case CatalogReadResult.Read(_)                                                    =>
           val mix = SubstrateMix(UUID.fromString(idGen.nextId()), name, notes, substrate)
           store.addSubstrateMix(mix) match
-            case CatalogAddResult.Added(entry)      => AddSubstrateMixResult.Added(entry).tap(_ => log.info(s"substrate mix added id=${entry.id}"))
+            case CatalogAddResult.Added(entry)      => AddSubstrateMixResult.Added(entry).tap(_ => log.info(s"substrate mix added $entry"))
             case CatalogAddResult.AddFailed(reason) => AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
 
     override def deleteSubstrateMix(id: UUID): CatalogDeleteResult =
