@@ -18,9 +18,8 @@ Add Prometheus-format metrics and a committed Grafana dashboard, so the househol
 
 ## Domain / Design Notes
 
-**Business metrics are a domain capability; RED and process metrics are not.** Business metrics carry meaning only the domain knows (a logged operation's kind, an attention level), so they are recorded in the domain services, threaded exactly like `Logger` — a capability resolved with `using`, substituted in tests, never a global. RED and process metrics carry no business meaning; they belong entirely to the HTTP transport and the JVM, wired once in the composition root, with no domain threading at all.
-
-**One `*MetricsApi` port per domain trait with business signal to publish** — not one catalog-all trait. Each port is deliberately low-level, the same granularity as a persistence port: every method increments one counter or sets one gauge for one label value — nothing takes a whole business object for the adapter to interpret. The owning domain service decides *which* of these calls a business event maps to, by pattern-matching its own domain types before calling out. Swap the concrete metrics backend later, and only "increment this counter" / "set this gauge" needs reimplementing — deciding what a `Care` operation's action types or a `Repot`'s substrate parts mean never moves, because it never left the domain.
+- Business metrics are domain-owned, threaded via `using` exactly like `Logger` — substituted in tests, never global. RED and process metrics carry no business meaning; they're wired once in the composition root with no domain threading.
+- One `*MetricsApi` port per domain trait with signal worth publishing, not one catalog-all trait. Each port is as low-level as a persistence port: every method increments one counter or sets one gauge for one label value. The domain decides *which* calls a business event maps to, by pattern-matching its own types — swap the metrics backend later, and only "increment"/"set" needs reimplementing.
 
 ```scala
 trait PlantJournalMetricsApi:
@@ -36,11 +35,10 @@ trait PlantAttentionMonitorMetricsApi:
   def setWateringCadence(plant: PlantId, cadence: FiniteDuration): Unit
 ```
 
-`setPlantsCount` is a gauge, not an accumulator, reused across both statuses by its caller — set to the exact count a read just returned, every time that read happens, never incremented on create or decremented on archive. A counter that only reacts to create/archive events can only get *more* wrong over time if any single one is ever missed — a failed write, a manual fix applied straight to the database, a bug; a gauge re-derived from the real row count self-corrects on the very next read regardless of what happened before it. `setWateringUrgencyRatio` and `setWateringCadence` already have this property for the same reason: each recomputation re-derives both from the plant's actual watering history, never from the previous scrape's value.
+- `setPlantsCount` and the two watering setters are gauges re-derived from a real read every time, never incremented/decremented — a missed update self-corrects on the next read instead of compounding forever. Everything else counts *how often*, not a current total, so a counter plus `rate()`/`increase()` is correct.
+- No household-wide repot counter: `incrementRepot` always carries a plant; the household total is `sum(gardening_journal_repots_total)` with the label dropped, not a second series to keep in sync.
 
-Everything else here counts *how often* something happened, not a current total — there is no "true state" to re-derive for "how many times has this occurred", so a counter plus `rate()`/`increase()` is the right tool, not a drift risk. There is no separate household-wide repot counter: `incrementRepot` only ever carries a plant, because a household total is `sum(gardening_journal_repots_total)` with the label dropped, not a second series to keep in sync with the first.
-
-`PlantJournal.logOperation`'s success branch fans one logged detail out into several of these calls — one per fact worth its own series, decided entirely by the domain:
+`PlantJournal.logOperation`'s success branch fans one logged detail out into the calls that fact deserves, decided entirely by the domain:
 
 ```scala
 op match
@@ -53,25 +51,23 @@ op match
     repot.substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
 ```
 
-This fires after `logOperation`'s existing `log.info`, once its repot-compensation step resolves — a compensated repot failure returns a failure result and calls none of these. `createPlant`'s success branch calls the same `incrementSubstrateComponent` for each part of a plant's *initial* substrate, so usage tracking covers both origins of a mix, not just repots. `getPlants`/`getArchivedCount` call `setPlantsCount` with whichever status and count they just read — the only two call sites that touch it, both already existing today, unlogged on success. Editing or deleting an operation calls none of the above: both correct or remove already-recorded history, and replaying them into these counters would double-count (or, for a delete, falsely un-count) care that happened regardless of what the journal now says about it.
+- Fires after the existing `log.info`, once repot-compensation resolves; a compensated failure calls none of these.
+- `createPlant`'s success branch also calls `incrementSubstrateComponent` per part of the plant's *initial* substrate, so usage tracking covers both origins of a mix.
+- `getPlants`/`getArchivedCount` call `setPlantsCount` with whichever status/count they just read — the only two call sites, both pre-existing.
+- Editing or deleting an operation calls none of the above: replaying corrected or removed history into these counters would double-count, or falsely un-count, care that already happened.
+- Both ports thread into `PlantJournal.make`/`PlantAttentionMonitor.make` via `using`, the same shape `Logger` already uses (see the backend-logging spec).
 
-Threading follows the same before/after shape logging introduced:
+`PlantAttentionMonitor.refreshAll` — and its startup projection in `make` — sets both watering gauges for every plant with an available assessment (`WateringAttention.Available`): `setWateringUrgencyRatio(elapsed / averageInterval)`, `setWateringCadence(averageInterval)`. A plant without enough watering history gets neither call, reporting no value rather than a stale one.
 
-```scala
-// before
-def make(using store: PlantJournalStore^, substrateStore: SubstrateComponentStore^, pesticideStore: PesticideStore^, idGen: IdGenerator^)
-    (using log: Logger^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log}
+Names follow Prometheus's own convention, not OpenTelemetry's — this backend emits Prometheus exposition directly, never OTLP:
 
-// after
-def make(using store: PlantJournalStore^, substrateStore: SubstrateComponentStore^, pesticideStore: PesticideStore^, idGen: IdGenerator^)
-    (using log: Logger^, metrics: PlantJournalMetricsApi^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log, metrics}
-```
+- `<namespace>_<subsystem>_<name>_<unit>`
+- `_total` only for a monotonic counter, never a gauge
+- base units only (`seconds`, never `hours`)
+- `_ratio` for a dimensionless proportion
+- `journal`/`attention` subsystems match the domain package names that own each metric
 
-`PlantAttentionMonitor.refreshAll` interprets its own projection the same way before calling out: for each plant with an available assessment (`WateringAttention.Available`), it calls `setWateringUrgencyRatio` with `elapsed / averageInterval` and `setWateringCadence` with `averageInterval` directly — no unit conversion in the domain, the adapter decides how a `FiniteDuration` becomes a Prometheus value; a plant without enough watering history calls neither, so it reports no value rather than a stale or zero one. `PlantAttentionMonitor.make` calls the same two setters for the projection it computes at startup, not only inside `refreshAll` — these gauges need real values before the first scheduled recomputation runs (minutes away), even though today's logging deliberately covers only `refreshAll`. `PlantAttentionMonitor.make` and `PlantJournal.make` are both threaded the same way as the diff above.
-
-Names follow Prometheus's own convention (VM speaks the same wire format and imposes nothing extra beyond it; OpenTelemetry's naming scheme doesn't apply — this backend emits Prometheus exposition directly, never OTLP): `<namespace>_<subsystem>_<name>_<unit>`, `_total` reserved for a monotonic counter and never a gauge, base units only (`seconds`, never `hours`), and `_ratio` for a dimensionless proportion. `journal` and `attention` as subsystems are the same names as the domain packages that own each metric, so the metric namespace and the module namespace stay one fact, not two independently-maintained ones.
-
-**Metric inventory** — every series this change adds, by owning layer:
+**Metric inventory.** The eight business rows are ours to name. The three request rows are tapir's own default metric set (`PrometheusMetrics.default`), reproduced here under our `namespace = "gardening"` override so the whole `/metrics` surface is in one table — confirmed against the `tapir-prometheus-metrics` 1.13.31 source, which builds every one of its names as `s"${namespace}_${metricName}"`, so the override is real, not assumed.
 
 | Metric | Type | Labels |
 | --- | --- | --- |
@@ -83,31 +79,30 @@ Names follow Prometheus's own convention (VM speaks the same wire format and imp
 | `gardening_journal_repots_total` | Counter | `plant` |
 | `gardening_journal_substrate_component_usage_total` | Counter | `component` |
 | `gardening_journal_pesticide_applications_total` | Counter | `pesticide` |
-| `gardening_request_total` | Counter | `path`, `method`, `status` |
-| `gardening_request_active` | Gauge | `path`, `method` |
-| `gardening_request_duration_seconds` | Histogram | `path`, `method`, `status` |
+| `gardening_request_total` (tapir) | Counter | `path`, `method`, `status` |
+| `gardening_request_active` (tapir) | Gauge | `path`, `method` |
+| `gardening_request_duration_seconds` (tapir) | Histogram | `path`, `method`, `status` |
 
-`gardening_attention_urgency_ratio` and `gardening_attention_watering_cadence_seconds` are set only for a plant with an available assessment (`WateringAttention.Available` — five or more waterings); a plant with too little history to assess reports neither series, the same "unavailable" case the app itself shows instead of a number.
+- The two watering gauges are set only for a plant with an available assessment; an unavailable plant reports neither, the same case the app itself shows instead of a number.
+- Process/JVM series (`process_cpu_seconds_total`, `jvm_memory_used_bytes`, etc.) aren't itemized — the library names them, not this change. The NAS's existing cAdvisor container metrics aren't itemized or added by this change either — Victoria Metrics already scrapes cAdvisor independently, the same way it backs the existing Infra dashboard.
 
-Process/JVM series (`process_cpu_seconds_total`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds`, `jvm_threads_current`, and the rest of that standard instrumentation set) are not itemized here — their names and types are the library's, not this change's, to define. The NAS's existing cAdvisor container metrics (`container_cpu_usage_seconds_total`, `container_memory_working_set_bytes`, `container_network_{receive,transmit}_bytes_total`, and the cgroup-v2 PSI series `container_pressure_cpu_stalled_seconds_total`, all labeled `name="plant-journal"` for this container) are not itemized either, and not added by this change at all — Victoria Metrics already scrapes cAdvisor independently of this backend's own `/metrics`, the same way it already backs the existing Infra dashboard. The dashboard queries both sources; only the process/JVM series go through the registry this change builds.
+**Composition, RED, USE.**
 
-**Composition — one registry, one scrape.** A single registry (the Prometheus Java client's current, non-deprecated `PrometheusRegistry` — see Alternatives Considered) is built once in the composition root, the same way `Clock`, `IdGenerator`, and `Logger` are already built once and threaded via `using`. The transport's request metrics, the JVM process instrumentation, and each `Prometheus<Trait>Metrics` business adapter all register their collectors into that same registry. `GET /metrics` scrapes the one registry, so one response always carries all three families — there is no second registry for anything to fall out of sync with.
+- One `PrometheusRegistry` (the current, non-deprecated Prometheus Java client registry, not the deprecated simpleclient one) is built once in the composition root, the same way `Clock`/`IdGenerator`/`Logger` already are. Tapir's request metrics, JVM process instrumentation, and each `Prometheus<Trait>Metrics` adapter all register into it; `GET /metrics` scrapes that one registry.
+- RED: every endpoint is labeled by its declared path template and method, never a real ID, by construction — covering archived-count, patch, static-file, and the attention WebSocket upgrade (measured as one ordinary request: handshake duration only).
+- USE: cAdvisor stays authoritative for container CPU/memory/network/PSI (already scraped, backs the existing Infra dashboard); this change adds JVM-internal detail cAdvisor can't see (heap/non-heap, GC pause, thread count), registered at startup so it's present in the first scrape. The two sources are independently scraped — neither depends on the other staying up.
 
-**RED specifics.** Every endpoint's request metrics are labeled by its *declared* path template and method — `/plants/{plantId}`, never the real identifier that was requested — by construction, covering the archived-count, patch, and static-file routes too. The attention WebSocket upgrade is measured as one ordinary request: its duration is the handshake time, not the socket's open lifetime; the feed itself carries no further RED signal.
+**Grafana dashboard.** Committed to this repo, deployed the same way as the existing Insights/Infra dashboards: a one-shot script copies the JSON to Grafana's file-provisioning directory (10s poll, matched by hardcoded UID) — no API call, no restart, no live sync.
 
-**USE specifics.** The NAS's existing cAdvisor deployment is the authoritative source for this container's utilization and saturation — CPU and memory usage, network throughput, and cgroup-v2 PSI (the real saturation signal: time spent stalled waiting on a resource) — already scraped by Victoria Metrics the same way it already backs the existing Infra dashboard. This change adds process/JVM metrics alongside it: internal detail (heap/non-heap split, GC pause time, live thread count) a container-level view cannot see, registered once at startup — before any request, so they appear in the very first scrape.
-
-**Grafana dashboard.** Committed to this repo, deployed the same way every other dashboard on this Grafana instance is: a one-shot script copies the JSON to the NAS's Grafana file-provisioning directory (the same mechanism already serving the Insights and Infra dashboards); Grafana's file provider polls that directory every 10s and loads or updates the dashboard by its hardcoded UID — no API call, no restart, no live sync from this repo's side. Layout mirrors the panel/query quality bar of the reference `ingest-controller` dashboard, scaled to a single-instance service: business on top (the eight metrics above, two rows of four), HTTP RED in the middle, USE at the bottom (cAdvisor's container panels alongside this change's process/JVM panels); content panels tiled four across a 24-unit grid (`w=6`); every business panel is `timeseries` — the whole point of this section is a trend, so there is no `stat`/current-value panel to have; every query multi-line and indented, one label matcher per line. The three per-plant series (urgency ratio, cadence, repots) query `topk($top_k, ...)`, reusing the `$top_k` templating variable the NAS's existing Infra dashboard already established, so "top 10 most urgent" is a variable change, not a different panel. Unlike the reference dashboard, there is no environment/region templating — one NAS, one instance.
+- Layout: business on top (the eight metrics above, two rows of four), RED middle, USE bottom (cAdvisor panels alongside this change's process/JVM panels).
+- 24-unit grid, panels tiled four across (`w=6`); every business panel is `timeseries` — no `stat` panel, since the point is a trend.
+- Every query multi-line and indented, one label matcher per line.
+- Per-plant series (urgency ratio, cadence, repots) use `topk($top_k, ...)`, reusing the `$top_k` variable the Infra dashboard already established.
+- No environment/region templating — one NAS, one instance.
 
 ## Alternatives Considered
 
-- `tapir-prometheus-simpleclient-metrics` (matching the reference repo's `io.prometheus.client.CollectorRegistry`) was rejected: it is deprecated and scheduled for removal, and this repo's build guardrails treat carrying a deprecated dependency as a defect to pay down, not accept.
-- Micrometer was rejected: tapir's own metrics integration targets the Prometheus Java client registry directly, and adding a second metrics facade on top would duplicate what `tapir-prometheus-metrics` and the JVM instrumentation module already provide.
-
-## Tradeoffs Accepted
-
-- The dashboard's USE row spans two independently-scraped sources — cAdvisor's pre-existing container metrics and this change's own process/JVM metrics — rather than one. Acceptable because both already land in the same Victoria Metrics instance Grafana queries; this backend has no dependency on cAdvisor beyond assuming it keeps running, and loses nothing if it doesn't (the JVM series stand on their own).
-- This backend being scraped at all depends on one addition to Victoria Metrics' existing scrape config — a new job pointed at this container, made outside this repo (NAS-side, alongside the existing home-assistant and cadvisor jobs). Acceptable: every other scrape target here was added the same way, and VM reloads its scrape config on file change with no restart.
+- Micrometer was rejected: tapir's own metrics integration targets the Prometheus Java client registry directly, and a second metrics facade on top would duplicate what `tapir-prometheus-metrics` and the JVM instrumentation module already provide.
 
 ## Acceptance Criteria
 
