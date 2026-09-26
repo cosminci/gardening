@@ -1,14 +1,16 @@
 create table substrate_component (
     id text primary key check (length(id) = 36),
     name text not null,
-    info text
+    info text,
+    status text not null default 'Active' check (status in ('Active', 'Archived'))
 );
 
 create table pesticide (
     id text primary key check (length(id) = 36),
     name text not null,
     type text not null check (type in ('Fungicide', 'Insecticide', 'Treatment')),
-    info text
+    info text,
+    status text not null default 'Active' check (status in ('Active', 'Archived'))
 );
 
 create table plant (
@@ -30,21 +32,17 @@ create table operation (
 
 create index operation_plant_date_id_idx on operation (plant_id, date desc, id desc);
 
-insert into substrate_component (id, name) values
-    ('00000000-0000-4000-8000-000000000001', 'Kekkila universal peat'),
-    ('00000000-0000-4000-8000-000000000002', 'Kekkila ericaceous peat'),
-    ('00000000-0000-4000-8000-000000000003', 'Perlite'),
-    ('00000000-0000-4000-8000-000000000004', 'Pine bark'),
-    ('00000000-0000-4000-8000-000000000005', 'Sand 3-5 mm'),
-    ('00000000-0000-4000-8000-000000000006', 'Sand 4-8 mm'),
-    ('00000000-0000-4000-8000-000000000007', 'LECA');
+create table substrate_mix (
+    id text primary key check (length(id) = 36),
+    name text not null,
+    notes text,
+    substrate text not null check (json_valid(substrate))
+);
 
-insert into pesticide (id, name, type, info) values
-    ('00000000-0000-4000-8001-000000000001', 'ORTIVA TOP', 'Fungicide', '1ml/L'),
-    ('00000000-0000-4000-8001-000000000002', 'SWITCH 62.5 WG', 'Fungicide', null),
-    ('00000000-0000-4000-8001-000000000003', 'VERTAB', 'Insecticide', '0.8ml/L'),
-    ('00000000-0000-4000-8001-000000000004', 'SIMFONIA', 'Insecticide', 'organic'),
-    ('00000000-0000-4000-8001-000000000005', 'SPRUZIT AF Neudorff', 'Insecticide', null),
-    ('00000000-0000-4000-8001-000000000006', 'MOSPILAN 20SG', 'Insecticide', null),
-    ('00000000-0000-4000-8001-000000000007', 'Neem oil + Catille soap', 'Insecticide', '5ml:5ml:1L'),
-    ('00000000-0000-4000-8001-000000000008', 'H2O2', 'Treatment', null);
+create table plant_photo (
+    id text primary key check (length(id) = 36),
+    plant_id text not null references plant (id),
+    captured_at text not null
+);
+
+create index plant_photo_plant_captured_id_idx on plant_photo (plant_id, captured_at desc, id desc);

@@ -9,7 +9,6 @@ import com.augustnagro.magnum.Transactor
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
-import org.flywaydb.core.api.MigrationVersion
 
 import java.sql.Connection
 import java.time.Instant
@@ -148,24 +147,13 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
           assertEquals(reason.getMessage, "invalid stored substrate: DecodingFailure at : DuplicateComponent")
         case other => fail(s"expected ReadFailed, got $other")
 
-  test("should apply the plant and photo schema migrations"):
+  test("should support photos against a freshly migrated plant schema"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val migration = Flyway.configure().dataSource(connection.dataSource).load()
-      val _         = migration.migrate()
+      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
       seedPlant(connection.dataSource, id = "p1")
 
       val photo      = PlantPhoto(photoId, PlantId("p1"), date)
       val plantStore = SqlitePlantStore.make(connection.transactor)
-      assertEquals(
-        migration.info().applied().toVector.map(_.getVersion),
-        Vector(
-          MigrationVersion.fromVersion("1"),
-          MigrationVersion.fromVersion("2"),
-          MigrationVersion.fromVersion("3"),
-          MigrationVersion.fromVersion("4"),
-          MigrationVersion.fromVersion("5")
-        )
-      )
       assertEquals(plantStore.addPhoto(photo), AddPhotoResult.Added(photo))
       assertEquals(plantStore.getPhotos(PlantId("p1"), fullPhotoWindow), GetPhotosResult.Read(PhotoPage(Vector(photo), hasNextPage = false)))
 

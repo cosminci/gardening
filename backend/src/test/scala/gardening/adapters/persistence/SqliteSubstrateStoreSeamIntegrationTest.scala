@@ -24,36 +24,23 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
   private val substrate = Substrate.of(List(SubstratePart(perliteId, share = 100))).getOrElse(fail("invalid test substrate"))
   private val mix       = SubstrateMix(mixId, SubstrateMixName("Cactus mix"), SubstrateMixNotes("Free-draining").some, substrate)
 
-  test("should read seeded components and persist additions, edits, and archiving"):
+  test("should persist additions, edits, and archiving"):
     Using.resource(storeResource): resource =>
       val store   = resource.store
       val missing = store.getSubstrateComponent(componentId)
-      val seeded  = store.getSubstrateComponents
+      val empty   = store.getSubstrateComponents
 
-      val added          = store.addSubstrateComponent(component)
-      val afterAdd       = store.getSubstrateComponent(componentId)
-      val editedData     = SubstrateComponentData(SubstrateComponentName("Fine pumice"), none)
-      val edited         = component.copy(data = editedData)
-      val editResult     = store.updateSubstrateComponent(edited)
-      val archived       = edited.copy(status = SubstrateComponentStatus.Archived)
-      val archiveResult  = store.updateSubstrateComponent(archived)
-      val afterArchive   = store.getSubstrateComponent(componentId)
-      val expectedSeeded = Vector(
-        ("Kekkila universal peat", SubstrateComponentStatus.Active),
-        ("Kekkila ericaceous peat", SubstrateComponentStatus.Active),
-        ("Perlite", SubstrateComponentStatus.Active),
-        ("Pine bark", SubstrateComponentStatus.Active),
-        ("Sand 3-5 mm", SubstrateComponentStatus.Active),
-        ("Sand 4-8 mm", SubstrateComponentStatus.Active),
-        ("LECA", SubstrateComponentStatus.Active)
-      )
+      val added         = store.addSubstrateComponent(component)
+      val afterAdd      = store.getSubstrateComponent(componentId)
+      val editedData    = SubstrateComponentData(SubstrateComponentName("Fine pumice"), none)
+      val edited        = component.copy(data = editedData)
+      val editResult    = store.updateSubstrateComponent(edited)
+      val archived      = edited.copy(status = SubstrateComponentStatus.Archived)
+      val archiveResult = store.updateSubstrateComponent(archived)
+      val afterArchive  = store.getSubstrateComponent(componentId)
 
       assertEquals(missing, GetSubstrateComponentResult.RecordMissing)
-      seeded match
-        case CatalogReadResult.Read(components) =>
-          val actualSeeded = components.map(c => (c.data.name.value, c.status))
-          assertEquals(actualSeeded, expectedSeeded)
-        case other => fail(s"expected Read, got $other")
+      assertEquals(empty, CatalogReadResult.Read(Vector.empty))
       assertEquals(added, CatalogAddResult.Added(component))
       assertEquals(afterAdd, GetSubstrateComponentResult.Read(component))
       assertEquals(editResult, UpdateSubstrateComponentResult.Updated)
@@ -71,7 +58,8 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
   test("should report invalid stored component identifiers"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
-      execute(dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Perlite'")
+      val _          = resource.store.addSubstrateComponent(component)
+      execute(dataSource, "update substrate_component set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Pumice'")
 
       val actualError = intercept[DatabaseCorruption](resource.store.getSubstrateComponents).err.getMessage
 
@@ -79,8 +67,9 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
 
   test("should reject invalid stored substrate component status"):
     Using.resource(storeResource): resource =>
-      val rejected = intercept[java.sql.SQLException]:
-        execute(resource.dataSource, "update substrate_component set status = 'Unknown' where name = 'Perlite'")
+      val _         = resource.store.addSubstrateComponent(component)
+      val rejected  = intercept[java.sql.SQLException]:
+        execute(resource.dataSource, "update substrate_component set status = 'Unknown' where name = 'Pumice'")
 
       assert(rejected.getMessage.contains("CHECK constraint failed"))
 

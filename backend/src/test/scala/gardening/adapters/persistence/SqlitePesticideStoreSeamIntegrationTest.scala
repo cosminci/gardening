@@ -18,37 +18,23 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
   private val pesticideData = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, none[PesticideInfo])
   private val pesticide     = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)
 
-  test("should read seeded pesticides and persist additions, edits, and archiving"):
+  test("should persist additions, edits, and archiving"):
     Using.resource(storeResource): resource =>
       val store   = resource.store
       val missing = store.getPesticide(pesticideId)
-      val seeded  = store.getPesticides
+      val empty   = store.getPesticides
 
-      val added          = store.addPesticide(pesticide)
-      val afterAdd       = store.getPesticide(pesticideId)
-      val editedData     = PesticideData(PesticideName("Wettable sulfur"), PesticideType.Treatment, PesticideInfo("2g/L").some)
-      val edited         = pesticide.copy(data = editedData)
-      val editResult     = store.updatePesticide(edited)
-      val archived       = edited.copy(status = PesticideStatus.Archived)
-      val archiveResult  = store.updatePesticide(archived)
-      val afterArchive   = store.getPesticide(pesticideId)
-      val expectedSeeded = Vector(
-        ("ORTIVA TOP", PesticideType.Fungicide, "1ml/L".some, PesticideStatus.Active),
-        ("SWITCH 62.5 WG", PesticideType.Fungicide, none[PesticideInfo], PesticideStatus.Active),
-        ("VERTAB", PesticideType.Insecticide, "0.8ml/L".some, PesticideStatus.Active),
-        ("SIMFONIA", PesticideType.Insecticide, "organic".some, PesticideStatus.Active),
-        ("SPRUZIT AF Neudorff", PesticideType.Insecticide, none[PesticideInfo], PesticideStatus.Active),
-        ("MOSPILAN 20SG", PesticideType.Insecticide, none[PesticideInfo], PesticideStatus.Active),
-        ("Neem oil + Catille soap", PesticideType.Insecticide, "5ml:5ml:1L".some, PesticideStatus.Active),
-        ("H2O2", PesticideType.Treatment, none[PesticideInfo], PesticideStatus.Active)
-      )
+      val added         = store.addPesticide(pesticide)
+      val afterAdd      = store.getPesticide(pesticideId)
+      val editedData    = PesticideData(PesticideName("Wettable sulfur"), PesticideType.Treatment, PesticideInfo("2g/L").some)
+      val edited        = pesticide.copy(data = editedData)
+      val editResult    = store.updatePesticide(edited)
+      val archived      = edited.copy(status = PesticideStatus.Archived)
+      val archiveResult = store.updatePesticide(archived)
+      val afterArchive  = store.getPesticide(pesticideId)
 
       assertEquals(missing, GetPesticideResult.RecordMissing)
-      seeded match
-        case CatalogReadResult.Read(pesticides) =>
-          val actualSeeded = pesticides.map(p => (p.data.name.value, p.data.kind, p.data.maybeInfo.map(_.value), p.status))
-          assertEquals(actualSeeded, expectedSeeded)
-        case other => fail(s"expected Read, got $other")
+      assertEquals(empty, CatalogReadResult.Read(Vector.empty))
       assertEquals(added, CatalogAddResult.Added(pesticide))
       assertEquals(afterAdd, GetPesticideResult.Read(pesticide))
       assertEquals(editResult, UpdatePesticideResult.Updated)
@@ -65,15 +51,17 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
 
   test("should reject invalid stored pesticide values"):
     Using.resource(storeResource): resource =>
-      execute(resource.dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'H2O2'")
+      val _ = resource.store.addPesticide(pesticide)
+      execute(resource.dataSource, "update pesticide set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where name = 'Sulfur'")
 
       val actualError = intercept[DatabaseCorruption](resource.store.getPesticides).err.getMessage
 
       assertEquals(actualError, "invalid pesticide id: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
     Using.resource(storeResource): resource =>
+      val _        = resource.store.addPesticide(pesticide)
       val rejected = intercept[java.sql.SQLException]:
-        execute(resource.dataSource, "update pesticide set type = 'Unknown' where name = 'H2O2'")
+        execute(resource.dataSource, "update pesticide set type = 'Unknown' where name = 'Sulfur'")
 
       assert(rejected.getMessage.contains("CHECK constraint failed"))
 
