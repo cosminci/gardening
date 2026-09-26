@@ -11,3 +11,5 @@
 ## Validation beyond isolated tests
 
 Reduced-motion presentation depends on a browser media query rather than application logic; inspect the rendered behavior under that preference.
+
+Lazy-loaded photo pagination and file upload depend on real browser interaction (native file picker, incremental page requests); validate them in e2e, not isolated tests alone.

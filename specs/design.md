@@ -18,6 +18,7 @@ flowchart LR
   Substrate -->|saved as| Mix["Substrate mix"]
   Mix -->|loaded into| Substrate
   Care -->|may reference| Pesticide
+  Plant -->|has dated| Photo
   Waterings["Watering history"] --> Attention["Watering attention"]
   Care --> Waterings
   Attention -->|by plant identity| Plant
@@ -28,6 +29,7 @@ flowchart LR
 - Archiving keeps plant history and its care-date range but prevents new operations; existing operation details may still be corrected without changing their date or kind.
 - A logged operation may be permanently deleted from a plant's history, except a plant's current latest repot, which must remain so the plant's current substrate stays meaningful.
 - Substrate components and pesticides each gain their own active/archived status, matching a plant's status shape but not sharing its type; archiving excludes an entry from new repot and care-operation validation and locks it from further edits, while existing references keep resolving and displaying it unchanged.
+- A plant has an unbounded, paginated set of dated photos, added or removed independently of its operation history; a photo's identity and content never change after upload.
 
 ## Use cases and workflows
 
