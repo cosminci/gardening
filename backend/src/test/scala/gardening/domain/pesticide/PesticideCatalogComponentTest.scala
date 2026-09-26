@@ -26,8 +26,8 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(readResult, CatalogReadResult.Read(Vector(pesticide)))
     assertEquals(addResult, CatalogAddResult.Added(pesticide))
-    assertEquals(editResult, PesticideEditResult.PesticideMissing)
-    assertEquals(archiveResult, PesticideArchiveResult.PesticideMissing)
+    assertEquals(editResult, PesticideUpdateResult.PesticideMissing)
+    assertEquals(archiveResult, PesticideUpdateResult.PesticideMissing)
     assertEquals(refs.added.get(), Vector(pesticide))
     assertEquals(refs.updated.get(), Vector.empty)
 
@@ -35,14 +35,14 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val refs       = Refs()
     val editResult = buildCatalog(refs, getResult = GetPesticideResult.Read(pesticide)).editPesticide(pesticideId, pesticideData)
 
-    assertEquals(editResult, PesticideEditResult.Edited(pesticide))
+    assertEquals(editResult, PesticideUpdateResult.Updated(pesticide))
     assertEquals(refs.updated.get(), Vector(pesticide))
 
   test("should archive an active pesticide"):
     val refs          = Refs()
     val archiveResult = buildCatalog(refs, getResult = GetPesticideResult.Read(pesticide)).archivePesticide(pesticideId)
 
-    assertEquals(archiveResult, PesticideArchiveResult.Archived(archived))
+    assertEquals(archiveResult, PesticideUpdateResult.Updated(archived))
     assertEquals(refs.updated.get(), Vector(archived))
 
   test("should reject editing or re-archiving an already-archived pesticide without writing"):
@@ -51,8 +51,8 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val editResult    = catalog.editPesticide(pesticideId, pesticideData)
     val archiveResult = catalog.archivePesticide(pesticideId)
 
-    assertEquals(editResult, PesticideEditResult.PesticideArchived)
-    assertEquals(archiveResult, PesticideArchiveResult.AlreadyArchived)
+    assertEquals(editResult, PesticideUpdateResult.PesticideArchived)
+    assertEquals(archiveResult, PesticideUpdateResult.PesticideArchived)
     assertEquals(refs.updated.get(), Vector.empty)
 
   test("should preserve pesticide catalog failures"):
@@ -75,10 +75,10 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
     assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
-    assertEquals(editResult, PesticideEditResult.EditFailed(readFailure))
-    assertEquals(archiveResult, PesticideArchiveResult.ArchiveFailed(readFailure))
-    assertEquals(writeFailingEdit, PesticideEditResult.EditFailed(writeFailure))
-    assertEquals(writeFailingArchive, PesticideArchiveResult.ArchiveFailed(writeFailure))
+    assertEquals(editResult, PesticideUpdateResult.UpdateFailed(readFailure))
+    assertEquals(archiveResult, PesticideUpdateResult.UpdateFailed(readFailure))
+    assertEquals(writeFailingEdit, PesticideUpdateResult.UpdateFailed(writeFailure))
+    assertEquals(writeFailingArchive, PesticideUpdateResult.UpdateFailed(writeFailure))
 
   private case class Refs(
       added: AtomicReference[Vector[Pesticide]] = AtomicReference(Vector.empty),

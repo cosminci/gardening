@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideArchiveResult, PesticideCatalog, PesticideEditResult}
+import gardening.domain.pesticide.{PesticideCatalog, PesticideUpdateResult}
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, SttpBackend, basicRequest}
@@ -41,12 +41,12 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should edit pesticides and reject invalid, missing, or archived identifiers"):
     val refs   = Refs()
-    val server = buildServer(refs, editResult = PesticideEditResult.Edited(pesticide))
+    val server = buildServer(refs, editResult = PesticideUpdateResult.Updated(pesticide))
 
     val edited   = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, server)
     val invalid  = put("/pesticides/not-a-uuid", pesticideDataJson, server)
     val missing  = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer())
-    val archived = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(editResult = PesticideEditResult.PesticideArchived))
+    val archived = put(s"/pesticides/${pesticideId.value}", pesticideDataJson, buildServer(editResult = PesticideUpdateResult.PesticideArchived))
 
     assertResponse(edited, StatusCode.Ok, pesticideJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid pesticide id"}""")
@@ -67,13 +67,13 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should archive pesticides and reject unknown, already-archived, or invalid identifiers"):
     val refs   = Refs()
-    val server = buildServer(refs, archiveResult = PesticideArchiveResult.Archived(archivedPesticide))
+    val server = buildServer(refs, archiveResult = PesticideUpdateResult.Updated(archivedPesticide))
 
     val archived        = post(s"/pesticides/${pesticideId.value}/archive", "", server)
     val invalid         = post("/pesticides/not-a-uuid/archive", "", server)
     val missing         = post(s"/pesticides/${pesticideId.value}/archive", "", buildServer())
     val alreadyArchived =
-      post(s"/pesticides/${pesticideId.value}/archive", "", buildServer(archiveResult = PesticideArchiveResult.AlreadyArchived))
+      post(s"/pesticides/${pesticideId.value}/archive", "", buildServer(archiveResult = PesticideUpdateResult.PesticideArchived))
 
     assertResponse(archived, StatusCode.Ok, archivedPesticideJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid pesticide id"}""")
@@ -86,8 +86,8 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
     val server  = buildServer(
       readResult = CatalogReadResult.ReadFailed(failure),
       addResult = CatalogAddResult.AddFailed(failure),
-      editResult = PesticideEditResult.EditFailed(failure),
-      archiveResult = PesticideArchiveResult.ArchiveFailed(failure)
+      editResult = PesticideUpdateResult.UpdateFailed(failure),
+      archiveResult = PesticideUpdateResult.UpdateFailed(failure)
     )
 
     val listed   = get("/pesticides", server)
@@ -110,16 +110,16 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
       refs: Refs = Refs(),
       readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector(pesticide)),
       addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
-      editResult: PesticideEditResult = PesticideEditResult.PesticideMissing,
-      archiveResult: PesticideArchiveResult = PesticideArchiveResult.PesticideMissing
+      editResult: PesticideUpdateResult = PesticideUpdateResult.PesticideMissing,
+      archiveResult: PesticideUpdateResult = PesticideUpdateResult.PesticideMissing
   ) =
     val catalog = new PesticideCatalog:
       override def getPesticides: CatalogReadResult[Pesticide]                    = readResult
       override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
         refs.added.updateAndGet(_ :+ data).pipe(_ => addResult)
-      override def editPesticide(id: PesticideId, data: PesticideData): PesticideEditResult =
+      override def editPesticide(id: PesticideId, data: PesticideData): PesticideUpdateResult =
         refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
-      override def archivePesticide(id: PesticideId): PesticideArchiveResult =
+      override def archivePesticide(id: PesticideId): PesticideUpdateResult =
         refs.archived.updateAndGet(_ :+ id).pipe(_ => archiveResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(PesticideApi.serverEndpoints(using catalog))
