@@ -44,7 +44,7 @@ object Main:
     // that actually tracks feed concurrency, so request_active isn't registered at all.
     val prometheusMetrics =
       PrometheusMetrics[Identity](namespace = "gardening", registry = registry).addRequestsTotal().addRequestsDuration()
-    val serverOptions     =
+    val serverOptions =
       NettySyncServerOptions.customiseInterceptors.metricsInterceptor(
         prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
       ).options
