@@ -1,6 +1,6 @@
 # Plant journal on Unraid
 
-The private `ghcr.io/cosminci/plant-journal` image serves the frontend and API on port 8080. Its SQLite journal lives in `/mnt/user/appdata/plant-journal` on the NAS. There is no application login: allow access from the household LAN and tailnet, **not the public internet**.
+Operator runbook for installing, updating, and recovering the NAS deployment. See [Deployment topology](../specs/operational.md#deployment-topology) for the image, port, data path, and backup coverage this template configures; see [Pipeline operations](../ci/specs/operational.md) for how publishing works.
 
 ## Publish a version
 
