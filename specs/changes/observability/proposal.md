@@ -26,7 +26,6 @@ Add Prometheus-format metrics and a committed Grafana dashboard, so the househol
 trait PlantJournalMetricsApi:
   def setPlantsCount(status: PlantStatus, count: Long): Unit
   def incrementAction(kind: ActionType): Unit
-  def incrementRepot(): Unit
   def incrementRepot(plant: PlantId): Unit
   def incrementMoisture(level: MoistureLevel): Unit
   def incrementSubstrateComponent(component: SubstrateComponentId): Unit
@@ -34,12 +33,12 @@ trait PlantJournalMetricsApi:
 
 trait PlantAttentionMonitorMetricsApi:
   def setWateringUrgencyRatio(plant: PlantId, ratio: Double): Unit
-  def setWateringCadence(plant: PlantId, hours: Double): Unit
+  def setWateringCadence(plant: PlantId, cadence: FiniteDuration): Unit
 ```
 
 `setPlantsCount` is a gauge, not an accumulator, reused across both statuses by its caller — set to the exact count a read just returned, every time that read happens, never incremented on create or decremented on archive. A counter that only reacts to create/archive events can only get *more* wrong over time if any single one is ever missed — a failed write, a manual fix applied straight to the database, a bug; a gauge re-derived from the real row count self-corrects on the very next read regardless of what happened before it. `setWateringUrgencyRatio` and `setWateringCadence` already have this property for the same reason: each recomputation re-derives both from the plant's actual watering history, never from the previous scrape's value.
 
-Everything else here counts *how often* something happened, not a current total — there is no "true state" to re-derive for "how many times has this occurred", so a counter plus `rate()`/`increase()` is the right tool, not a drift risk. `incrementRepot` is overloaded by arity, not two differently-named methods, the same way `Logger.error` already is — one call for the household total, one adding the per-plant series, both the same underlying fact.
+Everything else here counts *how often* something happened, not a current total — there is no "true state" to re-derive for "how many times has this occurred", so a counter plus `rate()`/`increase()` is the right tool, not a drift risk. There is no separate household-wide repot counter: `incrementRepot` only ever carries a plant, because a household total is `sum(gardening_repots_total)` with the label dropped, not a second series to keep in sync with the first.
 
 `PlantJournal.logOperation`'s success branch fans one logged detail out into several of these calls — one per fact worth its own series, decided entirely by the domain:
 
@@ -50,7 +49,6 @@ op match
     metrics.incrementMoisture(care.moisture)
     care.pesticides.foreach(metrics.incrementPesticide)
   case repot: OperationDetails.Repot =>
-    metrics.incrementRepot()
     metrics.incrementRepot(plantId)
     repot.substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
 ```
@@ -69,7 +67,7 @@ def make(using store: PlantJournalStore^, substrateStore: SubstrateComponentStor
     (using log: Logger^, metrics: PlantJournalMetricsApi^): PlantJournal^{store, substrateStore, pesticideStore, idGen, log, metrics}
 ```
 
-`PlantAttentionMonitor.refreshAll` interprets its own projection the same way before calling out: for each plant with an available assessment (`WateringAttention.Available`), it calls `setWateringUrgencyRatio` with `elapsed / averageInterval` and `setWateringCadence` with `averageInterval` in hours; a plant without enough watering history calls neither, so it reports no value rather than a stale or zero one. `PlantAttentionMonitor.make` calls the same two setters for the projection it computes at startup, not only inside `refreshAll` — these gauges need real values before the first scheduled recomputation runs (minutes away), even though today's logging deliberately covers only `refreshAll`. `PlantAttentionMonitor.make` and `PlantJournal.make` are both threaded the same way as the diff above.
+`PlantAttentionMonitor.refreshAll` interprets its own projection the same way before calling out: for each plant with an available assessment (`WateringAttention.Available`), it calls `setWateringUrgencyRatio` with `elapsed / averageInterval` and `setWateringCadence` with `averageInterval` directly — no unit conversion in the domain, the adapter decides how a `FiniteDuration` becomes a Prometheus value; a plant without enough watering history calls neither, so it reports no value rather than a stale or zero one. `PlantAttentionMonitor.make` calls the same two setters for the projection it computes at startup, not only inside `refreshAll` — these gauges need real values before the first scheduled recomputation runs (minutes away), even though today's logging deliberately covers only `refreshAll`. `PlantAttentionMonitor.make` and `PlantJournal.make` are both threaded the same way as the diff above.
 
 **Metric inventory** — every series this change adds, by owning layer:
 
@@ -77,8 +75,8 @@ def make(using store: PlantJournalStore^, substrateStore: SubstrateComponentStor
 | --- | --- | --- |
 | `gardening_plants_total` | Gauge | `status` (active, archived) |
 | `gardening_watering_urgency_ratio` | Gauge | `plant` |
-| `gardening_watering_cadence_hours` | Gauge | `plant` |
-| `gardening_operations_total` | Counter | `type` (watered, fertilized, pesticide, pruned, noAction, repot) |
+| `gardening_watering_cadence_seconds` | Gauge | `plant` |
+| `gardening_operations_total` | Counter | `type` (watered, fertilized, pesticide, pruned, noAction) |
 | `gardening_moisture_readings_total` | Counter | `level` (wet, moderatePlus, moderateMinus, dry, noReading) |
 | `gardening_repots_total` | Counter | `plant` |
 | `gardening_substrate_component_usage_total` | Counter | `component` |
@@ -87,7 +85,7 @@ def make(using store: PlantJournalStore^, substrateStore: SubstrateComponentStor
 | `gardening_request_active` | Gauge | `path`, `method` |
 | `gardening_request_duration_seconds` | Histogram | `path`, `method`, `status` |
 
-`gardening_watering_urgency_ratio` and `gardening_watering_cadence_hours` are set only for a plant with an available assessment (`WateringAttention.Available` — five or more waterings); a plant with too little history to assess reports neither series, the same "unavailable" case the app itself shows instead of a number.
+`gardening_watering_urgency_ratio` and `gardening_watering_cadence_seconds` are set only for a plant with an available assessment (`WateringAttention.Available` — five or more waterings); a plant with too little history to assess reports neither series, the same "unavailable" case the app itself shows instead of a number.
 
 Process/JVM series (`process_cpu_seconds_total`, `jvm_memory_used_bytes`, `jvm_gc_pause_seconds`, `jvm_threads_current`, and the rest of that standard instrumentation set) are not itemized here — their names and types are the library's, not this change's, to define. The NAS's existing cAdvisor container metrics (`container_cpu_usage_seconds_total`, `container_memory_working_set_bytes`, `container_network_{receive,transmit}_bytes_total`, and the cgroup-v2 PSI series `container_pressure_cpu_stalled_seconds_total`, all labeled `name="plant-journal"` for this container) are not itemized either, and not added by this change at all — Victoria Metrics already scrapes cAdvisor independently of this backend's own `/metrics`, the same way it already backs the existing Infra dashboard. The dashboard queries both sources; only the process/JVM series go through the registry this change builds.
 
@@ -113,9 +111,9 @@ Process/JVM series (`process_cpu_seconds_total`, `jvm_memory_used_bytes`, `jvm_g
 
 - A single `GET /metrics` response contains all three families together: at least one business metric, the transport request metrics, and the process metrics — proving the shared-registry design, not three separate endpoints.
 - Every successful `getPlants`/`getArchivedCount` read sets `gardening_plants_total` to exactly the count it just returned, for the status it read; a failed read leaves the previous value in place.
-- Logging a care operation increments `gardening_operations_total` once per action type it carries, `gardening_moisture_readings_total` for its recorded level, and `gardening_pesticide_applications_total` once per selected pesticide; logging a repot increments `gardening_operations_total{type="repot"}`, `gardening_repots_total` for that plant, and `gardening_substrate_component_usage_total` once per component in the new mix — all only on success. Editing or deleting either kind of operation increments none of them.
+- Logging a care operation increments `gardening_operations_total` once per action type it carries, `gardening_moisture_readings_total` for its recorded level, and `gardening_pesticide_applications_total` once per selected pesticide; logging a repot increments `gardening_repots_total` for that plant and `gardening_substrate_component_usage_total` once per component in the new mix — all only on success. Editing or deleting either kind of operation increments none of them.
 - Creating a plant increments `gardening_substrate_component_usage_total` once per component in its initial mix on success; a failed attempt increments nothing.
-- `gardening_watering_urgency_ratio` and `gardening_watering_cadence_hours` carry a value for every plant with an available assessment after each completed recomputation, including the one at startup, and no value for a plant with too little watering history to assess.
+- `gardening_watering_urgency_ratio` and `gardening_watering_cadence_seconds` carry a value for every plant with an available assessment after each completed recomputation, including the one at startup, and no value for a plant with too little watering history to assess.
 - Every HTTP endpoint's request metrics are labeled by its declared path template and method — never a real plant, operation, substrate-component, or pesticide identifier — including the attention WebSocket upgrade and static-asset serving.
 - Process metrics are present in the first scrape taken immediately after startup, before any request has been served.
 - A dashboard loaded into Grafana from the committed file renders every panel without an unknown-metric or broken-query error, and its per-plant panels respect the dashboard's top-N variable rather than always plotting every plant unconditionally; copying it to the NAS with its push script results in Grafana loading or updating that same dashboard (matched by its hardcoded UID) within one provisioning scan, with no manual UI step.
