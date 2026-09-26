@@ -1,6 +1,6 @@
 {
   "uid": "gardening-observability",
-  "title": "Plant Journal \u2014 Observability",
+  "title": "Plant Journal",
   "tags": [
     "plant-journal"
   ],
@@ -22,15 +22,15 @@
         "type": "custom",
         "query": "3,5,10,20",
         "current": {
-          "text": "3",
-          "value": "3",
+          "text": "10",
+          "value": "10",
           "selected": true
         },
         "options": [
           {
             "text": "3",
             "value": "3",
-            "selected": true
+            "selected": false
           },
           {
             "text": "5",
@@ -40,12 +40,48 @@
           {
             "text": "10",
             "value": "10",
-            "selected": false
+            "selected": true
           },
           {
             "text": "20",
             "value": "20",
             "selected": false
+          }
+        ],
+        "hide": 0,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "percentile",
+        "label": "Percentile",
+        "type": "custom",
+        "query": "0.5,0.9,0.95,0.99",
+        "current": {
+          "text": "0.99",
+          "value": "0.99",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "0.5",
+            "value": "0.5",
+            "selected": false
+          },
+          {
+            "text": "0.9",
+            "value": "0.9",
+            "selected": false
+          },
+          {
+            "text": "0.95",
+            "value": "0.95",
+            "selected": false
+          },
+          {
+            "text": "0.99",
+            "value": "0.99",
+            "selected": true
           }
         ],
         "hide": 0,
@@ -76,7 +112,7 @@
         "x": 0,
         "y": 1,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -129,7 +165,7 @@
         "x": 6,
         "y": 1,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -182,7 +218,7 @@
         "x": 12,
         "y": 1,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -235,7 +271,7 @@
         "x": 18,
         "y": 1,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -286,9 +322,9 @@
       "title": "Moisture readings recorded",
       "gridPos": {
         "x": 0,
-        "y": 9,
+        "y": 7,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -339,9 +375,9 @@
       "title": "Repots logged",
       "gridPos": {
         "x": 6,
-        "y": 9,
+        "y": 7,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -392,9 +428,9 @@
       "title": "Substrate component usage",
       "gridPos": {
         "x": 12,
-        "y": 9,
+        "y": 7,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -445,9 +481,9 @@
       "title": "Pesticide applications",
       "gridPos": {
         "x": 18,
-        "y": 9,
+        "y": 7,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -498,7 +534,7 @@
       "title": "HTTP RED Metrics",
       "gridPos": {
         "x": 0,
-        "y": 17,
+        "y": 13,
         "w": 24,
         "h": 1
       },
@@ -511,9 +547,9 @@
       "title": "Request rate",
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 14,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -564,9 +600,9 @@
       "title": "Error rate (5xx)",
       "gridPos": {
         "x": 6,
-        "y": 18,
+        "y": 14,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -617,9 +653,9 @@
       "title": "Active requests",
       "gridPos": {
         "x": 12,
-        "y": 18,
+        "y": 14,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -667,12 +703,12 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Request duration (p99)",
+      "title": "Request duration (p${percentile})",
       "gridPos": {
         "x": 18,
-        "y": 18,
+        "y": 14,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -712,7 +748,7 @@
             "uid": "P3875CC3B49F869A8"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99,\n  sum by (le, path, method) (\n    rate(gardening_request_duration_seconds_bucket{phase=\"body\"}[5m])\n  )\n)",
+          "expr": "histogram_quantile(${percentile},\n  sum by (le, path, method) (\n    rate(gardening_request_duration_seconds_bucket{phase=\"body\"}[5m])\n  )\n) or vector(0)",
           "legendFormat": "{{method}} {{path}}"
         }
       ]
@@ -720,10 +756,10 @@
     {
       "id": 102,
       "type": "row",
-      "title": "Process USE Metrics",
+      "title": "Resource Usage",
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 20,
         "w": 24,
         "h": 1
       },
@@ -736,9 +772,9 @@
       "title": "Container CPU",
       "gridPos": {
         "x": 0,
-        "y": 27,
+        "y": 21,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -746,7 +782,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "percent",
           "custom": {
             "drawStyle": "line",
             "lineInterpolation": "smooth",
@@ -778,7 +814,7 @@
             "uid": "P3875CC3B49F869A8"
           },
           "editorMode": "code",
-          "expr": "sum by (name) (\n  rate(container_cpu_usage_seconds_total{name=\"plant-journal\"}[5m])\n)",
+          "expr": "sum by (name) (\n  rate(container_cpu_usage_seconds_total{name=\"plant-journal\"}[5m])\n) / 8 * 100",
           "legendFormat": "{{name}}"
         }
       ]
@@ -789,9 +825,9 @@
       "title": "Container memory",
       "gridPos": {
         "x": 6,
-        "y": 27,
+        "y": 21,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -842,9 +878,9 @@
       "title": "JVM memory used",
       "gridPos": {
         "x": 12,
-        "y": 27,
+        "y": 21,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -895,9 +931,9 @@
       "title": "GC pause time",
       "gridPos": {
         "x": 18,
-        "y": 27,
+        "y": 21,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
@@ -948,9 +984,9 @@
       "title": "JVM thread count",
       "gridPos": {
         "x": 0,
-        "y": 35,
+        "y": 27,
         "w": 6,
-        "h": 8
+        "h": 6
       },
       "datasource": {
         "type": "prometheus",
