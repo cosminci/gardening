@@ -42,11 +42,7 @@ export function backendCheck(source: Dagger.Directory): Dagger.Container {
     "-batch",
     "-Dsbt.color=false",
     "-Dsbt.supershell=false",
-    "scalafmtCheckAll",
-    "coverage",
-    "test",
-    "coverageReport",
-    "scalafixAll --check",
+    ";scalafmtCheckAll;coverage;test;coverageReport;scalafixAll --check",
   ]);
 }
 
