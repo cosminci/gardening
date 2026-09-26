@@ -35,7 +35,10 @@ object Operations:
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^,
       lock: PlantUpdateLock^
-  )(using log: Logger^): Operations^{store, plantStore, substrateStore, pesticideStore, idGen, lock, log} =
+  )(using
+      log: Logger^,
+      metrics: OperationsMetricsApi^
+  ): Operations^{store, plantStore, substrateStore, pesticideStore, idGen, lock, log, metrics} =
     new LiveOperations
 
   private class LiveOperations(using
@@ -45,7 +48,7 @@ object Operations:
       pesticideStore: PesticideStore^,
       idGen: IdGenerator^,
       lock: PlantUpdateLock^
-  )(using log: Logger^) extends Operations:
+  )(using log: Logger^, metrics: OperationsMetricsApi^) extends Operations:
 
     override def getOperations(plant: PlantId, window: OperationWindow): GetOperationsResult =
       store.getOperations(plant, window).tap:
@@ -74,6 +77,7 @@ object Operations:
                   updatePlantIfOperationIsLatestRepot(operation)
                     .compensateWith(store.removeOperation(operation.id))
                     .tap(_.left.foreach(reason => log.error("log operation", reason)))
+                    .tap(_.foreach(_ => recordOperationMetrics(plant, details)))
                     .fold(LogOperationResult.LoggingFailed.apply, _ => res)
                 case failure: LogOperationResult.LoggingFailed => failure.tap(_ => log.error("log operation", failure.reason))
                 case other                                     => other
@@ -134,6 +138,16 @@ object Operations:
     private enum PlantUpdateInterruption:
       case NotLatestRepot
       case Failed(reason: Throwable)
+
+    private def recordOperationMetrics(plant: PlantId, details: OperationDetails): Unit =
+      details match
+        case care: OperationDetails.Care =>
+          care.actions.foreach(metrics.incrementAction)
+          metrics.incrementMoisture(care.moisture)
+          care.pesticides.foreach(metrics.incrementPesticide)
+        case repot: OperationDetails.Repot =>
+          metrics.incrementRepot(plant)
+          repot.substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
 
     private def validateOperationDetails(details: OperationDetails) =
       details match

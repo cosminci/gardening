@@ -31,7 +31,7 @@ object Plants:
       idGen: IdGenerator^,
       clock: Clock^,
       lock: PlantUpdateLock^
-  )(using log: Logger^): Plants^{store, contentStore, substrateStore, idGen, clock, lock, log} =
+  )(using log: Logger^, metrics: PlantsMetricsApi^): Plants^{store, contentStore, substrateStore, idGen, clock, lock, log, metrics} =
     new LivePlants
 
   private class LivePlants(using
@@ -41,7 +41,7 @@ object Plants:
       idGen: IdGenerator^,
       clock: Clock^,
       lock: PlantUpdateLock^
-  )(using log: Logger^) extends Plants:
+  )(using log: Logger^, metrics: PlantsMetricsApi^) extends Plants:
 
     override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
       substrateStore.getSubstrateComponents match
@@ -52,18 +52,21 @@ object Plants:
           else
             val plant = Plant(PlantId(idGen.nextId()), PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
             store.addPlant(plant) match
-              case AddPlantResult.Added             => CreatePlantResult.Created(plant).tap(_ => log.info(s"plant created id=${plant.id.value}"))
+              case AddPlantResult.Added =>
+                log.info(s"plant created id=${plant.id.value}")
+                substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
+                CreatePlantResult.Created(plant)
               case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason).tap(_ => log.error("create plant", reason))
 
     override def getPlants(status: PlantStatus): GetPlantsResult =
       store.getPlants(status).tap:
         case GetPlantsResult.ReadFailed(reason) => log.error("get plants", reason)
-        case _                                  => ()
+        case GetPlantsResult.Read(found)        => metrics.setPlantsCount(status, found.size.toLong)
 
     override def getArchivedCount: ArchivedCountResult =
       store.getArchivedCount.tap:
         case ArchivedCountResult.ReadFailed(reason) => log.error("get archived count", reason)
-        case _                                      => ()
+        case ArchivedCountResult.Counted(count)     => metrics.setPlantsCount(PlantStatus.Archived, count)
 
     override def editPlant(plant: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = lock.exclusively:
       val outcome =

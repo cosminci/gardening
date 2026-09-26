@@ -24,13 +24,16 @@ object PlantAttentionMonitor:
   def make(using
       store: PlantAttentionStore^,
       clock: Clock^
-  )(using log: Logger^): Either[Throwable, PlantAttentionMonitor^{store, clock, log}] =
-    computeProjection.map(new LivePlantAttentionMonitor(_))
+  )(using
+      log: Logger^,
+      metrics: PlantAttentionMonitorMetricsApi^
+  ): Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
+    computeProjection.tap(_.foreach(recordWateringMetrics)).map(new LivePlantAttentionMonitor(_))
 
   private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using
       store: PlantAttentionStore^,
       clock: Clock^
-  )(using log: Logger^) extends PlantAttentionMonitor:
+  )(using log: Logger^, metrics: PlantAttentionMonitorMetricsApi^) extends PlantAttentionMonitor:
     private val currentProjection = AtomicReference(initialProjection)
 
     override def current: AttentionProjection = currentProjection.get()
@@ -42,6 +45,7 @@ object PlantAttentionMonitor:
           val previousLevels = currentProjection.get().plants.map(p => p.plantId -> p.watering.level).toMap
           currentProjection.set(projection)
           logLevelTransitions(projection, previousLevels)
+          recordWateringMetrics(projection)
           RefreshAttentionResult.Refreshed(projection)
 
     private def logLevelTransitions(projection: AttentionProjection, previousLevels: Map[PlantId, AttentionLevel]): Unit =
@@ -49,6 +53,13 @@ object PlantAttentionMonitor:
         val nextLevel = plant.watering.level
         previousLevels.get(plant.plantId).filter(_ =!= nextLevel).map(previousLevel => s"${plant.plantId.value}:$previousLevel->$nextLevel")
       if transitions.nonEmpty then log.info(s"attention changed ${transitions.mkString(",")}")
+
+  private def recordWateringMetrics(projection: AttentionProjection)(using metrics: PlantAttentionMonitorMetricsApi^): Unit =
+    projection.plants.foreach:
+      case PlantAttention(plantId, available: WateringAttention.Available) =>
+        metrics.setWateringUrgencyRatio(plantId, available.elapsed.toNanos.toDouble / available.averageInterval.toNanos.toDouble)
+        metrics.setWateringCadence(plantId, available.averageInterval)
+      case _: PlantAttention => ()
 
   private def computeProjection(using store: PlantAttentionStore^, clock: Clock^) =
     store.getAttentionSamples(size = 20) match

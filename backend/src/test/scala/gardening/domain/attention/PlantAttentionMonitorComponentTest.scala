@@ -15,6 +15,10 @@ import scala.jdk.DurationConverters.*
 
 class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplicits:
 
+  private given metrics: PlantAttentionMonitorMetricsApi = new PlantAttentionMonitorMetricsApi:
+    def setWateringUrgencyRatio(plant: PlantId, ratio: Double): Unit      = ()
+    def setWateringCadence(plant: PlantId, cadence: FiniteDuration): Unit = ()
+
   private val referenceTime = Instant.parse("2026-01-01T00:00:00Z")
   private val componentId   = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000001"))
   private val substrate     = Substrate.of(List(SubstratePart(componentId, 100))).toOption.getOrElse(fail("invalid substrate"))

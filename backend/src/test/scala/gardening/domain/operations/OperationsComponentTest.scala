@@ -20,6 +20,13 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class OperationsComponentTest extends munit.FunSuite with TestImplicits:
 
+  private given metrics: OperationsMetricsApi = new OperationsMetricsApi:
+    def incrementAction(kind: ActionType): Unit                            = ()
+    def incrementRepot(plant: PlantId): Unit                               = ()
+    def incrementMoisture(level: MoistureLevel): Unit                      = ()
+    def incrementSubstrateComponent(component: SubstrateComponentId): Unit = ()
+    def incrementPesticide(pesticide: PesticideId): Unit                   = ()
+
   private val date       = Instant.parse("2026-01-01T00:00:00Z")
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
   private val pineBarkId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000004"))
