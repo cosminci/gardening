@@ -3,7 +3,8 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideCatalog, PesticideUpdateResult}
+import gardening.domain.pesticide.PesticideUpdateResult
+import gardening.usecases.PesticideCatalog
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import sttp.model.StatusCode

@@ -2,10 +2,10 @@ package gardening.app
 
 import cats.syntax.either.*
 import gardening.adapters.http.*
-import gardening.adapters.persistence.SqliteLocation
+import gardening.adapters.sqlite.SqliteLocation
 import gardening.adapters.prometheus.{PrometheusAttentionFeedMetrics, PrometheusStorageMetrics}
 import gardening.adapters.system.SystemClock
-import gardening.domain.Logger
+import gardening.capabilities.Logger
 import io.prometheus.metrics.instrumentation.jvm.JvmMetrics
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 import org.flywaydb.core.Flyway

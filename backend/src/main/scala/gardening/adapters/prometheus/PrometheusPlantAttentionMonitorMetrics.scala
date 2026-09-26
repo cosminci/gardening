@@ -1,7 +1,7 @@
 package gardening.adapters.prometheus
 
 import gardening.domain.PlantId
-import gardening.domain.attention.PlantAttentionMonitorMetricsApi
+import gardening.ports.PlantAttentionMonitorMetricsApi
 import io.prometheus.metrics.core.metrics.Gauge
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 

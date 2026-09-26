@@ -1,6 +1,6 @@
 package gardening.adapters.system
 
-import gardening.domain.IdGenerator
+import gardening.capabilities.IdGenerator
 
 class UuidIdGeneratorComponentTest extends munit.FunSuite:
 

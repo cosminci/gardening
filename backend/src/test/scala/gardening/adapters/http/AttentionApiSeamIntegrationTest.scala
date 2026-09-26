@@ -4,6 +4,7 @@ import cats.syntax.option.*
 import gardening.adapters.system.SystemClock
 import gardening.domain.*
 import gardening.domain.attention.*
+import gardening.usecases.PlantAttentionMonitor
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import ox.flow.Flow

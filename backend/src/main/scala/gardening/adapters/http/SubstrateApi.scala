@@ -3,7 +3,8 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentUpdateResult}
+import gardening.domain.substrate.SubstrateComponentUpdateResult
+import gardening.usecases.{AddSubstrateMixResult, SubstrateCatalog}
 import io.circe.derivation.{Configuration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -120,7 +121,7 @@ object SubstrateApi:
           case CatalogReadResult.Read(mixes)   => mixes.asRight
           case CatalogReadResult.ReadFailed(_) => (StatusCode.InternalServerError, mixesReadFailed).asLeft,
       addMixEndpoint.handle: data =>
-        catalog.addSubstrateMix(data.name, data.notes, data.substrate) match
+        catalog.addSubstrateMix(data.name, data.maybeNotes, data.substrate) match
           case AddSubstrateMixResult.Added(mix)         => mix.asRight
           case AddSubstrateMixResult.DuplicateSubstrate => duplicateSubstrate.asLeft
           case AddSubstrateMixResult.AddFailed(_)       => mixWriteFailed.asLeft,
@@ -131,17 +132,19 @@ object SubstrateApi:
             case CatalogDeleteResult.DeleteFailed(_) => mixDeleteFailed.asLeft
     )
 
-  private case class SubstrateMixData(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate)
+  private case class SubstrateMixData(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate)
 
   private given Configuration = Configuration.default
     .withTransformMemberNames {
-      case "maybeInfo" => "info"
-      case name        => name
+      case "maybeInfo"  => "info"
+      case "maybeNotes" => "notes"
+      case name         => name
     }
     .withTransformConstructorNames(lowerCamel)
   private given TapirConfiguration = TapirConfiguration.default.copy(toEncodedName = {
-    case "maybeInfo" => "info"
-    case name        => name
+    case "maybeInfo"  => "info"
+    case "maybeNotes" => "notes"
+    case name         => name
   })
 
   private given Codec[SubstrateComponentName] =
@@ -204,10 +207,10 @@ object SubstrateApi:
     .map(parts => Substrate.of(parts).toOption)(_.parts)
   // $COVERAGE-ON$
   private given Schema[SubstrateMixData] = Schema.derived[SubstrateMixData]
-    .modify(_.notes)(_.copy(isOptional = false).nullable)
+    .modify(_.maybeNotes)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))
   private given Schema[SubstrateMix] = Schema.derived[SubstrateMix]
-    .modify(_.notes)(_.copy(isOptional = false).nullable)
+    .modify(_.maybeNotes)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))
 
   private def lowerCamel(name: String) =

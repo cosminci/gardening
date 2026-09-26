@@ -1,6 +1,6 @@
 package gardening.adapters.http
 
-import gardening.domain.Clock
+import gardening.capabilities.Clock
 import ox.discard
 
 import java.time.{Duration as JavaDuration, Instant}

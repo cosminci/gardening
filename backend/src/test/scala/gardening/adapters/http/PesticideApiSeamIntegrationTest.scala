@@ -3,7 +3,8 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideCatalog, PesticideUpdateResult}
+import gardening.domain.pesticide.PesticideUpdateResult
+import gardening.usecases.PesticideCatalog
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, SttpBackend, basicRequest}

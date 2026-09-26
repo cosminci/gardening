@@ -4,6 +4,7 @@ import cats.syntax.either.*
 import cats.syntax.eq.*
 import gardening.domain.*
 import gardening.domain.plants.*
+import gardening.usecases.PlantManager
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
@@ -86,7 +87,7 @@ object PhotoApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(addPhotoEndpoint, getPhotosEndpoint, removePhotoEndpoint, photoContentEndpoint)
 
-  def serverEndpoints(using plants: Plants): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using plants: PlantManager): List[ServerEndpoint[Any, Identity]] =
     List(
       addPhotoEndpoint.handle: (plantId, upload) =>
         val part = upload.file

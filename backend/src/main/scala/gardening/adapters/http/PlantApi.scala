@@ -2,8 +2,9 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
-import gardening.domain.attention.PlantAttentionMonitor
+import gardening.usecases.PlantAttentionMonitor
 import gardening.domain.plants.*
+import gardening.usecases.PlantManager
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder, Json}
 import sttp.model.{MediaType, StatusCode}
@@ -69,7 +70,7 @@ object PlantApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(createPlantEndpoint, getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
 
-  def serverEndpoints(using plants: Plants, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using plants: PlantManager, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
       createPlantEndpoint.handle: input =>
         plants.createPlant(input.species, input.maybeNickname, input.location, input.substrate) match

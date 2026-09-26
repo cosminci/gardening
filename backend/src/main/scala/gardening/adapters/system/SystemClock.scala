@@ -1,6 +1,6 @@
 package gardening.adapters.system
 
-import gardening.domain.Clock
+import gardening.capabilities.Clock
 
 import java.time.Instant
 

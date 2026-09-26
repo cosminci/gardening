@@ -3,6 +3,7 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.attention.*
+import gardening.usecases.{PlantManager, PlantAttentionMonitor}
 import gardening.domain.plants.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
@@ -224,7 +225,7 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
       editPlantResult: EditPlantResult = EditPlantResult.Edited(plant),
       refreshResult: RefreshAttentionResult = RefreshAttentionResult.Refreshed(AttentionProjection(date, Vector.empty))
   ) =
-    val plants = new Plants:
+    val plants = new PlantManager:
       override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
         refs.createdDetails.updateAndGet(_ :+ PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
         createPlantResult

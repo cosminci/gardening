@@ -1,7 +1,7 @@
 package gardening.app
 
 import com.augustnagro.magnum.Transactor
-import gardening.adapters.persistence.{Sqlite, SqliteConnection, SqliteLocation}
+import gardening.adapters.sqlite.{Sqlite, SqliteConnection, SqliteLocation}
 
 import javax.sql.DataSource
 

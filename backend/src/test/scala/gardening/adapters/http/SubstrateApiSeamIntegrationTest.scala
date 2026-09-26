@@ -4,7 +4,8 @@ import cats.syntax.option.*
 import io.github.iltotore.iron.autoRefine
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentUpdateResult}
+import gardening.domain.substrate.SubstrateComponentUpdateResult
+import gardening.usecases.{AddSubstrateMixResult, SubstrateCatalog}
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, SttpBackend, basicRequest}
