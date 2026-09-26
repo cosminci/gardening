@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentArchiveResult, SubstrateComponentEditResult}
+import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentUpdateResult}
 import io.circe.derivation.{Configuration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -104,17 +104,17 @@ object SubstrateApi:
       editComponentEndpoint.handle: (encodedId, data) =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
-            case SubstrateComponentEditResult.Edited(component) => component.asRight
-            case SubstrateComponentEditResult.ComponentMissing  => componentMissing.asLeft
-            case SubstrateComponentEditResult.ComponentArchived => componentArchived.asLeft
-            case SubstrateComponentEditResult.EditFailed(_)     => componentWriteFailed.asLeft,
+            case SubstrateComponentUpdateResult.Updated(component) => component.asRight
+            case SubstrateComponentUpdateResult.ComponentMissing   => componentMissing.asLeft
+            case SubstrateComponentUpdateResult.ComponentArchived  => componentArchived.asLeft
+            case SubstrateComponentUpdateResult.UpdateFailed(_)    => componentWriteFailed.asLeft,
       archiveComponentEndpoint.handle: encodedId =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.archiveSubstrateComponent(id) match
-            case SubstrateComponentArchiveResult.Archived(component) => component.asRight
-            case SubstrateComponentArchiveResult.ComponentMissing    => componentMissing.asLeft
-            case SubstrateComponentArchiveResult.AlreadyArchived     => alreadyArchived.asLeft
-            case SubstrateComponentArchiveResult.ArchiveFailed(_)    => archiveFailed.asLeft,
+            case SubstrateComponentUpdateResult.Updated(component) => component.asRight
+            case SubstrateComponentUpdateResult.ComponentMissing   => componentMissing.asLeft
+            case SubstrateComponentUpdateResult.ComponentArchived  => alreadyArchived.asLeft
+            case SubstrateComponentUpdateResult.UpdateFailed(_)    => archiveFailed.asLeft,
       getMixesEndpoint.handle: _ =>
         catalog.getSubstrateMixes match
           case CatalogReadResult.Read(mixes)   => mixes.asRight

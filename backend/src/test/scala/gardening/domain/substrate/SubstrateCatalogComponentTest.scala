@@ -33,8 +33,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(readResult, CatalogReadResult.Read(Vector(component)))
     assertEquals(addResult, CatalogAddResult.Added(component))
-    assertEquals(editResult, SubstrateComponentEditResult.ComponentMissing)
-    assertEquals(archiveResult, SubstrateComponentArchiveResult.ComponentMissing)
+    assertEquals(editResult, SubstrateComponentUpdateResult.ComponentMissing)
+    assertEquals(archiveResult, SubstrateComponentUpdateResult.ComponentMissing)
     assertEquals(refs.addedComponents.get(), Vector(component))
     assertEquals(refs.updatedComponents.get(), Vector.empty)
 
@@ -42,14 +42,14 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val refs       = Refs()
     val editResult = buildCatalog(refs, getResult = GetSubstrateComponentResult.Read(component)).editSubstrateComponent(componentId, componentData)
 
-    assertEquals(editResult, SubstrateComponentEditResult.Edited(component))
+    assertEquals(editResult, SubstrateComponentUpdateResult.Updated(component))
     assertEquals(refs.updatedComponents.get(), Vector(component))
 
   test("should archive an active substrate component"):
     val refs          = Refs()
     val archiveResult = buildCatalog(refs, getResult = GetSubstrateComponentResult.Read(component)).archiveSubstrateComponent(componentId)
 
-    assertEquals(archiveResult, SubstrateComponentArchiveResult.Archived(archived))
+    assertEquals(archiveResult, SubstrateComponentUpdateResult.Updated(archived))
     assertEquals(refs.updatedComponents.get(), Vector(archived))
 
   test("should reject editing or re-archiving an already-archived substrate component without writing"):
@@ -58,8 +58,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val editResult    = catalog.editSubstrateComponent(componentId, componentData)
     val archiveResult = catalog.archiveSubstrateComponent(componentId)
 
-    assertEquals(editResult, SubstrateComponentEditResult.ComponentArchived)
-    assertEquals(archiveResult, SubstrateComponentArchiveResult.AlreadyArchived)
+    assertEquals(editResult, SubstrateComponentUpdateResult.ComponentArchived)
+    assertEquals(archiveResult, SubstrateComponentUpdateResult.ComponentArchived)
     assertEquals(refs.updatedComponents.get(), Vector.empty)
 
   test("should preserve substrate component catalog failures"):
@@ -82,10 +82,10 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
     assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
-    assertEquals(editResult, SubstrateComponentEditResult.EditFailed(readFailure))
-    assertEquals(archiveResult, SubstrateComponentArchiveResult.ArchiveFailed(readFailure))
-    assertEquals(writeFailingEdit, SubstrateComponentEditResult.EditFailed(writeFailure))
-    assertEquals(writeFailingArchive, SubstrateComponentArchiveResult.ArchiveFailed(writeFailure))
+    assertEquals(editResult, SubstrateComponentUpdateResult.UpdateFailed(readFailure))
+    assertEquals(archiveResult, SubstrateComponentUpdateResult.UpdateFailed(readFailure))
+    assertEquals(writeFailingEdit, SubstrateComponentUpdateResult.UpdateFailed(writeFailure))
+    assertEquals(writeFailingArchive, SubstrateComponentUpdateResult.UpdateFailed(writeFailure))
 
   test("should delegate substrate mix reads"):
     val readResult = buildCatalog(mixReadResult = CatalogReadResult.Read(Vector(mix))).getSubstrateMixes

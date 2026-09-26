@@ -11,14 +11,8 @@ enum UpdateSubstrateComponentResult:
   case Updated
   case UpdateFailed(reason: Throwable)
 
-enum SubstrateComponentEditResult:
-  case Edited(component: SubstrateComponent)
+enum SubstrateComponentUpdateResult:
+  case Updated(component: SubstrateComponent)
   case ComponentMissing
   case ComponentArchived
-  case EditFailed(reason: Throwable)
-
-enum SubstrateComponentArchiveResult:
-  case Archived(component: SubstrateComponent)
-  case ComponentMissing
-  case AlreadyArchived
-  case ArchiveFailed(reason: Throwable)
+  case UpdateFailed(reason: Throwable)

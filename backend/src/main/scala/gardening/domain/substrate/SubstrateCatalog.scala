@@ -18,8 +18,8 @@ enum AddSubstrateMixResult:
 trait SubstrateCatalog:
   def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
   def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent]
-  def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentEditResult
-  def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentArchiveResult
+  def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult
+  def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult
   def getSubstrateMixes: CatalogReadResult[SubstrateMix]
   def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult
   def deleteSubstrateMix(id: UUID): CatalogDeleteResult
@@ -46,37 +46,29 @@ object SubstrateCatalog:
           case CatalogAddResult.Added(entry)      => log.info(s"substrate component added id=${entry.id.value}")
           case CatalogAddResult.AddFailed(reason) => log.error("add substrate component", reason)
 
-    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentEditResult =
+    override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult =
+      update(id)(editFn = _.copy(data = data)).tap:
+        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component edited id=${component.id.value}")
+        case SubstrateComponentUpdateResult.UpdateFailed(reason) => log.error("edit substrate component", reason)
+        case _                                                   => ()
+
+    override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult =
+      update(id)(editFn = _.copy(status = SubstrateComponentStatus.Archived)).tap:
+        case SubstrateComponentUpdateResult.Updated(component)   => log.info(s"substrate component archived id=${component.id.value}")
+        case SubstrateComponentUpdateResult.UpdateFailed(reason) => log.error("archive substrate component", reason)
+        case _                                                   => ()
+
+    private def update(id: SubstrateComponentId)(editFn: SubstrateComponent => SubstrateComponent): SubstrateComponentUpdateResult =
       store.getSubstrateComponent(id) match
-        case GetSubstrateComponentResult.RecordMissing      => SubstrateComponentEditResult.ComponentMissing
-        case GetSubstrateComponentResult.ReadFailed(reason) =>
-          SubstrateComponentEditResult.EditFailed(reason).tap(_ => log.error("edit substrate component", reason))
+        case GetSubstrateComponentResult.RecordMissing      => SubstrateComponentUpdateResult.ComponentMissing
+        case GetSubstrateComponentResult.ReadFailed(reason) => SubstrateComponentUpdateResult.UpdateFailed(reason)
         case GetSubstrateComponentResult.Read(component) if component.status === SubstrateComponentStatus.Archived =>
-          SubstrateComponentEditResult.ComponentArchived
-        case GetSubstrateComponentResult.Read(component) => persistEdit(component.copy(data = data))
-
-    private def persistEdit(edited: SubstrateComponent): SubstrateComponentEditResult =
-      store.updateSubstrateComponent(edited) match
-        case UpdateSubstrateComponentResult.Updated =>
-          SubstrateComponentEditResult.Edited(edited).tap(_ => log.info(s"substrate component edited id=${edited.id.value}"))
-        case UpdateSubstrateComponentResult.UpdateFailed(reason) =>
-          SubstrateComponentEditResult.EditFailed(reason).tap(_ => log.error("edit substrate component", reason))
-
-    override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentArchiveResult =
-      store.getSubstrateComponent(id) match
-        case GetSubstrateComponentResult.RecordMissing      => SubstrateComponentArchiveResult.ComponentMissing
-        case GetSubstrateComponentResult.ReadFailed(reason) =>
-          SubstrateComponentArchiveResult.ArchiveFailed(reason).tap(_ => log.error("archive substrate component", reason))
-        case GetSubstrateComponentResult.Read(component) if component.status === SubstrateComponentStatus.Archived =>
-          SubstrateComponentArchiveResult.AlreadyArchived
-        case GetSubstrateComponentResult.Read(component) => persistArchive(component.copy(status = SubstrateComponentStatus.Archived))
-
-    private def persistArchive(archived: SubstrateComponent): SubstrateComponentArchiveResult =
-      store.updateSubstrateComponent(archived) match
-        case UpdateSubstrateComponentResult.Updated =>
-          SubstrateComponentArchiveResult.Archived(archived).tap(_ => log.info(s"substrate component archived id=${archived.id.value}"))
-        case UpdateSubstrateComponentResult.UpdateFailed(reason) =>
-          SubstrateComponentArchiveResult.ArchiveFailed(reason).tap(_ => log.error("archive substrate component", reason))
+          SubstrateComponentUpdateResult.ComponentArchived
+        case GetSubstrateComponentResult.Read(component) =>
+          val edited = editFn(component)
+          store.updateSubstrateComponent(edited) match
+            case UpdateSubstrateComponentResult.Updated              => SubstrateComponentUpdateResult.Updated(edited)
+            case UpdateSubstrateComponentResult.UpdateFailed(reason) => SubstrateComponentUpdateResult.UpdateFailed(reason)
 
     override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
       store.getSubstrateMixes.tap:

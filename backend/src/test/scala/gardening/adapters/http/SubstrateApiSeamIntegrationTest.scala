@@ -4,7 +4,7 @@ import cats.syntax.option.*
 import io.github.iltotore.iron.autoRefine
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentArchiveResult, SubstrateComponentEditResult}
+import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentUpdateResult}
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, SttpBackend, basicRequest}
@@ -54,13 +54,17 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should edit substrate components and reject invalid, missing, or archived identifiers"):
     val refs   = Refs()
-    val server = buildServer(refs, editResult = SubstrateComponentEditResult.Edited(component))
+    val server = buildServer(refs, editResult = SubstrateComponentUpdateResult.Updated(component))
 
     val edited   = put(s"/substrates/components/${componentId.value}", componentDataJson, server)
     val invalid  = put("/substrates/components/not-a-uuid", componentDataJson, server)
     val missing  = put(s"/substrates/components/${componentId.value}", componentDataJson, buildServer())
     val archived =
-      put(s"/substrates/components/${componentId.value}", componentDataJson, buildServer(editResult = SubstrateComponentEditResult.ComponentArchived))
+      put(
+        s"/substrates/components/${componentId.value}",
+        componentDataJson,
+        buildServer(editResult = SubstrateComponentUpdateResult.ComponentArchived)
+      )
 
     assertResponse(edited, StatusCode.Ok, componentJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid substrate component id"}""")
@@ -70,7 +74,7 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should archive substrate components and reject unknown, already-archived, or invalid identifiers"):
     val refs   = Refs()
-    val server = buildServer(refs, archiveResult = SubstrateComponentArchiveResult.Archived(archivedComponent))
+    val server = buildServer(refs, archiveResult = SubstrateComponentUpdateResult.Updated(archivedComponent))
 
     val archived        = post(s"/substrates/components/${componentId.value}/archive", "", server)
     val invalid         = post("/substrates/components/not-a-uuid/archive", "", server)
@@ -78,7 +82,7 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
     val alreadyArchived = post(
       s"/substrates/components/${componentId.value}/archive",
       "",
-      buildServer(archiveResult = SubstrateComponentArchiveResult.AlreadyArchived)
+      buildServer(archiveResult = SubstrateComponentUpdateResult.ComponentArchived)
     )
 
     assertResponse(archived, StatusCode.Ok, archivedComponentJson)
@@ -92,8 +96,8 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
     val server  = buildServer(
       readResult = CatalogReadResult.ReadFailed(failure),
       addResult = CatalogAddResult.AddFailed(failure),
-      editResult = SubstrateComponentEditResult.EditFailed(failure),
-      archiveResult = SubstrateComponentArchiveResult.ArchiveFailed(failure)
+      editResult = SubstrateComponentUpdateResult.UpdateFailed(failure),
+      archiveResult = SubstrateComponentUpdateResult.UpdateFailed(failure)
     )
 
     val listed   = get("/substrates/components", server)
@@ -167,8 +171,8 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
       refs: Refs = Refs(),
       readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
       addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
-      editResult: SubstrateComponentEditResult = SubstrateComponentEditResult.ComponentMissing,
-      archiveResult: SubstrateComponentArchiveResult = SubstrateComponentArchiveResult.ComponentMissing,
+      editResult: SubstrateComponentUpdateResult = SubstrateComponentUpdateResult.ComponentMissing,
+      archiveResult: SubstrateComponentUpdateResult = SubstrateComponentUpdateResult.ComponentMissing,
       mixReadResult: CatalogReadResult[SubstrateMix] = CatalogReadResult.Read(Vector(mix)),
       mixAddResult: AddSubstrateMixResult = AddSubstrateMixResult.Added(mix),
       mixDeleteResult: CatalogDeleteResult = CatalogDeleteResult.Deleted
@@ -177,9 +181,9 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
       override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = readResult
       override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
         refs.addedComponents.updateAndGet(_ :+ data).pipe(_ => addResult)
-      override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentEditResult =
+      override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult =
         refs.editedComponents.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
-      override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentArchiveResult =
+      override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult =
         refs.archivedComponents.updateAndGet(_ :+ id).pipe(_ => archiveResult)
       override def getSubstrateMixes: CatalogReadResult[SubstrateMix] = mixReadResult
       override def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
