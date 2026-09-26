@@ -102,6 +102,13 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 - Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
 - Every line is a single line — never a raw stack trace.
 
+## Metrics
+
+- Business metrics are domain-owned, via low-level `*MetricsApi` ports threaded like `Logger`: one counter increment or gauge set per call, chosen by the domain for a trend the current-state UI can't show — never a restatement of it.
+- A count with a current true state (plant counts, watering urgency) is a gauge re-derived from a read, never an accumulator; a missed update self-corrects on the next read instead of compounding.
+- Recorded at the same success-path call sites logging already uses, after any compensation resolves; never on an edit or delete of already-recorded history.
+- HTTP RED and process/JVM USE metrics are transport/JVM-owned, with no domain threading; one shared registry backs `/metrics`.
+
 ## Development workflow — SDD
 
 Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.agents/skills/sdd/SKILL.md) — spec-driven development, one skill that forks by change type:

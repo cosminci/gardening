@@ -48,3 +48,7 @@ flowchart LR
 - The garden loads active plants and an archived count; the cemetery loads archived histories only when opened. After creation, the garden joins the new plant to the last complete attention projection and shows unavailable cadence until it has enough watering history. Unrelated attention identity mismatches fail the garden load; a recently archived plant may still appear in the last measurement.
 - Garden plants without a measured cadence appear first in their existing order; the rest are ordered by time remaining until their next expected watering, most overdue first. A plant editor can close its nested substrate editor before closing itself, with each sheet sliding independently.
 - Later refresh failures keep the last complete projection; insufficient watering history leaves cadence unavailable.
+
+## Architecture constraints
+
+- Metrics split three ways: business counters/gauges are domain capability ports (like `Logger`); HTTP RED and process/JVM USE are transport/JVM-owned, with no domain threading. All three register into one shared `PrometheusRegistry` behind a single `/metrics` endpoint.
