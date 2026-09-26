@@ -3,7 +3,6 @@ package gardening.usecases
 import cats.syntax.option.*
 import io.github.iltotore.iron.autoRefine
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.substrate.*
 import gardening.ports.{SubstrateStore, SubstrateCatalogMetricsApi}
 import gardening.capabilities.{IdGenerator, TestImplicits}
@@ -37,8 +36,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val editResult    = catalog.editSubstrateComponent(componentId, componentData)
     val archiveResult = catalog.archiveSubstrateComponent(componentId)
 
-    assertEquals(readResult, CatalogReadResult.Read(Vector(component)))
-    assertEquals(addResult, CatalogAddResult.Added(component))
+    assertEquals(readResult, GetSubstrateComponentsResult.Read(Vector(component)))
+    assertEquals(addResult, AddSubstrateComponentResult.Added(component))
     assertEquals(editResult, SubstrateComponentUpdateResult.ComponentMissing)
     assertEquals(archiveResult, SubstrateComponentUpdateResult.ComponentMissing)
     assertEquals(refs.addedComponents.get(), Vector(component))
@@ -72,8 +71,8 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val readFailure  = RuntimeException("storage unavailable")
     val writeFailure = RuntimeException("write unavailable")
     val catalog      = buildCatalog(
-      readResult = CatalogReadResult.ReadFailed(readFailure),
-      addResult = CatalogAddResult.AddFailed(readFailure),
+      readResult = GetSubstrateComponentsResult.ReadFailed(readFailure),
+      addResult = AddSubstrateComponentResult.AddFailed(readFailure),
       getResult = GetSubstrateComponentResult.ReadFailed(readFailure)
     )
     val writeFailingCatalog =
@@ -86,17 +85,17 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val writeFailingEdit    = writeFailingCatalog.editSubstrateComponent(componentId, componentData)
     val writeFailingArchive = writeFailingCatalog.archiveSubstrateComponent(componentId)
 
-    assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
-    assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
+    assertEquals(readResult, GetSubstrateComponentsResult.ReadFailed(readFailure))
+    assertEquals(addResult, AddSubstrateComponentResult.AddFailed(readFailure))
     assertEquals(editResult, SubstrateComponentUpdateResult.UpdateFailed(readFailure))
     assertEquals(archiveResult, SubstrateComponentUpdateResult.UpdateFailed(readFailure))
     assertEquals(writeFailingEdit, SubstrateComponentUpdateResult.UpdateFailed(writeFailure))
     assertEquals(writeFailingArchive, SubstrateComponentUpdateResult.UpdateFailed(writeFailure))
 
   test("should delegate substrate mix reads"):
-    val readResult = buildCatalog(mixReadResult = CatalogReadResult.Read(Vector(mix))).getSubstrateMixes
+    val readResult = buildCatalog(mixReadResult = GetSubstrateMixesResult.Read(Vector(mix))).getSubstrateMixes
 
-    assertEquals(readResult, CatalogReadResult.Read(Vector(mix)))
+    assertEquals(readResult, GetSubstrateMixesResult.Read(Vector(mix)))
 
   test("should assign an identifier when saving a substrate mix"):
     val refs    = Refs()
@@ -108,7 +107,7 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.addedMixes.get(), Vector(mix))
 
   test("should reject saving a substrate mix with the same components and shares as an existing one"):
-    val catalog = buildCatalog(mixReadResult = CatalogReadResult.Read(Vector(mix)))
+    val catalog = buildCatalog(mixReadResult = GetSubstrateMixesResult.Read(Vector(mix)))
 
     val addResult = catalog.addSubstrateMix(SubstrateMixName("Another name"), none, substrate)
 
@@ -120,24 +119,25 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
     val deleteResult = catalog.deleteSubstrateMix(mixId)
 
-    assertEquals(deleteResult, CatalogDeleteResult.Deleted)
+    assertEquals(deleteResult, DeleteSubstrateMixResult.Deleted)
     assertEquals(refs.deletedMixes.get(), Vector(mixId))
 
   test("should preserve substrate mix read and delete catalog failures"):
     val failure = RuntimeException("storage unavailable")
-    val catalog = buildCatalog(mixReadResult = CatalogReadResult.ReadFailed(failure), mixDeleteResult = CatalogDeleteResult.DeleteFailed(failure))
+    val catalog =
+      buildCatalog(mixReadResult = GetSubstrateMixesResult.ReadFailed(failure), mixDeleteResult = DeleteSubstrateMixResult.DeleteFailed(failure))
 
     val readResult   = catalog.getSubstrateMixes
     val addResult    = catalog.addSubstrateMix(mixName, mixNotes, substrate)
     val deleteResult = catalog.deleteSubstrateMix(mixId)
 
-    assertEquals(readResult, CatalogReadResult.ReadFailed(failure))
+    assertEquals(readResult, GetSubstrateMixesResult.ReadFailed(failure))
     assertEquals(addResult, AddSubstrateMixResult.AddFailed(failure))
-    assertEquals(deleteResult, CatalogDeleteResult.DeleteFailed(failure))
+    assertEquals(deleteResult, DeleteSubstrateMixResult.DeleteFailed(failure))
 
   test("should preserve substrate mix write failures once the mix is known not to be a duplicate"):
     val failure = RuntimeException("storage unavailable")
-    val catalog = buildCatalog(mixAddResult = CatalogAddResult.AddFailed(failure))
+    val catalog = buildCatalog(mixAddResult = SaveSubstrateMixResult.SaveFailed(failure))
 
     val addResult = catalog.addSubstrateMix(mixName, mixNotes, substrate)
 
@@ -152,25 +152,25 @@ class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private def buildCatalog(
       refs: Refs = Refs(),
-      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
-      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
+      readResult: GetSubstrateComponentsResult = GetSubstrateComponentsResult.Read(Vector(component)),
+      addResult: AddSubstrateComponentResult = AddSubstrateComponentResult.Added(component),
       getResult: GetSubstrateComponentResult = GetSubstrateComponentResult.RecordMissing,
       updateResult: UpdateSubstrateComponentResult = UpdateSubstrateComponentResult.Updated,
-      mixReadResult: CatalogReadResult[SubstrateMix] = CatalogReadResult.Read(Vector.empty),
-      mixAddResult: CatalogAddResult[SubstrateMix] = CatalogAddResult.Added(mix),
-      mixDeleteResult: CatalogDeleteResult = CatalogDeleteResult.Deleted,
+      mixReadResult: GetSubstrateMixesResult = GetSubstrateMixesResult.Read(Vector.empty),
+      mixAddResult: SaveSubstrateMixResult = SaveSubstrateMixResult.Saved(mix),
+      mixDeleteResult: DeleteSubstrateMixResult = DeleteSubstrateMixResult.Deleted,
       nextId: () => String = () => componentId.value.toString
   ) =
     val store = new SubstrateStore:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                          = readResult
-      override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult           = getResult
-      override def addSubstrateComponent(value: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      override def getSubstrateComponents: GetSubstrateComponentsResult                          = readResult
+      override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult  = getResult
+      override def addSubstrateComponent(value: SubstrateComponent): AddSubstrateComponentResult =
         refs.addedComponents.updateAndGet(_ :+ value).pipe(_ => addResult)
       override def updateSubstrateComponent(value: SubstrateComponent): UpdateSubstrateComponentResult =
         refs.updatedComponents.updateAndGet(_ :+ value).pipe(_ => updateResult)
-      override def getSubstrateMixes: CatalogReadResult[SubstrateMix]                   = mixReadResult
-      override def addSubstrateMix(value: SubstrateMix): CatalogAddResult[SubstrateMix] =
+      override def getSubstrateMixes: GetSubstrateMixesResult                    = mixReadResult
+      override def saveSubstrateMix(value: SubstrateMix): SaveSubstrateMixResult =
         refs.addedMixes.updateAndGet(_ :+ value).pipe(_ => mixAddResult)
-      override def deleteSubstrateMix(id: UUID): CatalogDeleteResult =
+      override def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult =
         refs.deletedMixes.updateAndGet(_ :+ id).pipe(_ => mixDeleteResult)
     SubstrateCatalog.make(using store, () => nextId())

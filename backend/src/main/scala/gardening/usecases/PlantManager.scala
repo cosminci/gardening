@@ -3,8 +3,8 @@ package gardening.usecases
 import cats.syntax.either.*
 import cats.syntax.eq.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.plants.*
+import gardening.domain.substrate.GetSubstrateComponentsResult
 import gardening.ports.{PlantStore, PhotoContentStore, PlantManagerMetricsApi, SubstrateStore}
 import gardening.capabilities.{IdGenerator, Clock, PlantUpdateLock, Logger}
 import monocle.syntax.all.*
@@ -47,8 +47,9 @@ object PlantManager:
 
     override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
       substrateStore.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(reason) => CreatePlantResult.CatalogReadFailed(reason).tap(_ => log.error("create plant", reason))
-        case CatalogReadResult.Read(components)   =>
+        case GetSubstrateComponentsResult.ReadFailed(reason) =>
+          CreatePlantResult.CatalogReadFailed(reason).tap(_ => log.error("create plant", reason))
+        case GetSubstrateComponentsResult.Read(components) =>
           val known = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           if !substrate.parts.forall(part => known.contains(part.componentId)) then CreatePlantResult.UnknownComponent
           else
@@ -95,9 +96,9 @@ object PlantManager:
 
     private def rejectUnknownSubstrate(substrate: Substrate) =
       substrateStore.getSubstrateComponents match
-        case CatalogReadResult.ReadFailed(reason) =>
+        case GetSubstrateComponentsResult.ReadFailed(reason) =>
           EditPlantResult.CatalogReadFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
-        case CatalogReadResult.Read(components) =>
+        case GetSubstrateComponentsResult.Read(components) =>
           val known = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           Either.cond(substrate.parts.forall(part => known.contains(part.componentId)), (), EditPlantResult.UnknownComponent)
 

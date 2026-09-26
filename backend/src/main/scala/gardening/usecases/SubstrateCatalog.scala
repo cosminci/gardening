@@ -2,7 +2,6 @@ package gardening.usecases
 
 import cats.syntax.eq.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.substrate.*
 import gardening.ports.{SubstrateStore, SubstrateCatalogMetricsApi}
 import gardening.capabilities.{IdGenerator, Logger}
@@ -19,13 +18,13 @@ enum AddSubstrateMixResult:
   case AddFailed(reason: Throwable)
 
 trait SubstrateCatalog:
-  def getSubstrateComponents: CatalogReadResult[SubstrateComponent]
-  def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent]
+  def getSubstrateComponents: GetSubstrateComponentsResult
+  def addSubstrateComponent(data: SubstrateComponentData): AddSubstrateComponentResult
   def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult
   def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult
-  def getSubstrateMixes: CatalogReadResult[SubstrateMix]
-  def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult
-  def deleteSubstrateMix(id: UUID): CatalogDeleteResult
+  def getSubstrateMixes: GetSubstrateMixesResult
+  def addSubstrateMix(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult
+  def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult
 
 object SubstrateCatalog:
 
@@ -38,18 +37,18 @@ object SubstrateCatalog:
   private class LiveSubstrateCatalog(using store: SubstrateStore^, idGen: IdGenerator^)(using log: Logger^, metrics: SubstrateCatalogMetricsApi^)
       extends SubstrateCatalog:
 
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
+    override def getSubstrateComponents: GetSubstrateComponentsResult =
       store.getSubstrateComponents.tap:
-        case CatalogReadResult.ReadFailed(reason) => log.error("get substrate components", reason)
-        case CatalogReadResult.Read(found)        =>
+        case GetSubstrateComponentsResult.ReadFailed(reason) => log.error("get substrate components", reason)
+        case GetSubstrateComponentsResult.Read(found)        =>
           metrics.setComponentDisplayNames(found.map(component => component.id -> component.data.name.value))
 
-    override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
+    override def addSubstrateComponent(data: SubstrateComponentData): AddSubstrateComponentResult =
       store
         .addSubstrateComponent(SubstrateComponent(SubstrateComponentId(UUID.fromString(idGen.nextId())), data, SubstrateComponentStatus.Active))
         .tap:
-          case CatalogAddResult.Added(entry)      => log.info(s"substrate component added $entry")
-          case CatalogAddResult.AddFailed(reason) => log.error("add substrate component", reason)
+          case AddSubstrateComponentResult.Added(entry)      => log.info(s"substrate component added $entry")
+          case AddSubstrateComponentResult.AddFailed(reason) => log.error("add substrate component", reason)
 
     override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult =
       update(id)(editFn = _.copy(data = data)).tap:
@@ -75,25 +74,26 @@ object SubstrateCatalog:
             case UpdateSubstrateComponentResult.Updated              => SubstrateComponentUpdateResult.Updated(edited)
             case UpdateSubstrateComponentResult.UpdateFailed(reason) => SubstrateComponentUpdateResult.UpdateFailed(reason)
 
-    override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
+    override def getSubstrateMixes: GetSubstrateMixesResult =
       store.getSubstrateMixes.tap:
-        case CatalogReadResult.ReadFailed(reason) => log.error("get substrate mixes", reason)
-        case _                                    => ()
+        case GetSubstrateMixesResult.ReadFailed(reason) => log.error("get substrate mixes", reason)
+        case _                                          => ()
 
-    override def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
+    override def addSubstrateMix(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
       store.getSubstrateMixes match
-        case CatalogReadResult.ReadFailed(reason) => AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
-        case CatalogReadResult.Read(mixes) if mixes.exists(sameComposition(_, substrate)) => AddSubstrateMixResult.DuplicateSubstrate
-        case CatalogReadResult.Read(_)                                                    =>
-          val mix = SubstrateMix(UUID.fromString(idGen.nextId()), name, notes, substrate)
-          store.addSubstrateMix(mix) match
-            case CatalogAddResult.Added(entry)      => AddSubstrateMixResult.Added(entry).tap(_ => log.info(s"substrate mix added $entry"))
-            case CatalogAddResult.AddFailed(reason) => AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
+        case GetSubstrateMixesResult.ReadFailed(reason) => AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
+        case GetSubstrateMixesResult.Read(mixes) if mixes.exists(sameComposition(_, substrate)) => AddSubstrateMixResult.DuplicateSubstrate
+        case GetSubstrateMixesResult.Read(_)                                                    =>
+          val mix = SubstrateMix(UUID.fromString(idGen.nextId()), name, maybeNotes, substrate)
+          store.saveSubstrateMix(mix) match
+            case SaveSubstrateMixResult.Saved(entry)       => AddSubstrateMixResult.Added(entry).tap(_ => log.info(s"substrate mix added $entry"))
+            case SaveSubstrateMixResult.SaveFailed(reason) =>
+              AddSubstrateMixResult.AddFailed(reason).tap(_ => log.error("add substrate mix", reason))
 
-    override def deleteSubstrateMix(id: UUID): CatalogDeleteResult =
+    override def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult =
       store.deleteSubstrateMix(id).tap:
-        case CatalogDeleteResult.Deleted              => log.info(s"substrate mix deleted id=$id")
-        case CatalogDeleteResult.DeleteFailed(reason) => log.error("delete substrate mix", reason)
+        case DeleteSubstrateMixResult.Deleted              => log.info(s"substrate mix deleted id=$id")
+        case DeleteSubstrateMixResult.DeleteFailed(reason) => log.error("delete substrate mix", reason)
 
     private def sameComposition(mix: SubstrateMix, substrate: Substrate) =
       mix.substrate.parts.toSet.equals(substrate.parts.toSet)

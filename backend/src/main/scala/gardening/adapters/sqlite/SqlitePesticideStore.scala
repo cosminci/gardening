@@ -3,8 +3,7 @@ package gardening.adapters.sqlite
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.pesticide.{GetPesticideResult, UpdatePesticideResult}
+import gardening.domain.pesticide.{AddPesticideResult, GetPesticideResult, GetPesticidesResult, UpdatePesticideResult}
 import gardening.ports.PesticideStore
 
 import scala.util.Try
@@ -15,12 +14,12 @@ object SqlitePesticideStore:
 
   private class LiveSqlitePesticideStore(transactor: Transactor) extends PesticideStore:
 
-    override def getPesticides: CatalogReadResult[Pesticide] =
+    override def getPesticides: GetPesticidesResult =
       try
         val query      = sql"select id, name, type, info, status from pesticide order by rowid"
         val pesticides = trust(connect(transactor)(query.query[PesticideRow].run()).traverse(toPesticide))
-        CatalogReadResult.Read(pesticides)
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
+        GetPesticidesResult.Read(pesticides)
+      catch case error: SqlException => GetPesticidesResult.ReadFailed(error)
 
     override def getPesticide(id: PesticideId): GetPesticideResult =
       try
@@ -29,15 +28,15 @@ object SqlitePesticideStore:
           case Some(row) => GetPesticideResult.Read(trust(toPesticide(row)))
       catch case error: SqlException => GetPesticideResult.ReadFailed(error)
 
-    override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+    override def addPesticide(pesticide: Pesticide): AddPesticideResult =
       try
         val id   = pesticide.id.value.toString
         val data = pesticide.data
         transact(transactor):
           sql"insert into pesticide (id, name, type, info, status) values ($id, ${data.name.value}, ${data.kind.toString}, ${data.maybeInfo.map(_.value)}, ${pesticide.status.toString})"
             .update.run()
-        CatalogAddResult.Added(pesticide)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
+        AddPesticideResult.Added(pesticide)
+      catch case error: SqlException => AddPesticideResult.AddFailed(error)
 
     override def updatePesticide(pesticide: Pesticide): UpdatePesticideResult =
       try

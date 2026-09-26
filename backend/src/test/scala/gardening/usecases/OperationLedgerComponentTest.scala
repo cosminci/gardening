@@ -2,12 +2,11 @@ package gardening.usecases
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.pesticide.{GetPesticideResult, UpdatePesticideResult}
+import gardening.domain.pesticide.{AddPesticideResult, GetPesticideResult, GetPesticidesResult, UpdatePesticideResult}
 import gardening.domain.operations.*
 import gardening.ports.{PesticideStore, OperationStore, PlantStore, OperationLedgerMetricsApi}
 import gardening.domain.plants.*
-import gardening.domain.substrate.{GetSubstrateComponentResult, UpdateSubstrateComponentResult}
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
 import gardening.ports.SubstrateStore
 import gardening.capabilities.{IdGenerator, PlantUpdateLock, TestImplicits}
 import io.github.iltotore.iron.*
@@ -117,7 +116,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       Pesticide(neemOilId, neemOilData, status = PesticideStatus.Active)
     )
     assertEquals(
-      buildOperations(pesticideReadResult = CatalogReadResult.Read(pesticides)).logOperation(plant.id, date, selectedCare),
+      buildOperations(pesticideReadResult = GetPesticidesResult.Read(pesticides)).logOperation(plant.id, date, selectedCare),
       LogOperationResult.Logged(OperationId("id-1"))
     )
 
@@ -129,14 +128,15 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
 
     val archivedPesticides    = pesticides.map(_.copy(status = PesticideStatus.Archived))
     val archivedPesticideRefs = Refs()
-    val archivedRead          = CatalogReadResult.Read(archivedPesticides)
+    val archivedRead          = GetPesticidesResult.Read(archivedPesticides)
     buildOperations(archivedPesticideRefs, pesticideReadResult = archivedRead).logOperation(plant.id, date, selectedCare) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(archivedPesticideRefs.recordedOperations.get(), Vector.empty)
 
     val readFailure      = RuntimeException("catalog unavailable")
-    val unreadableResult = buildOperations(pesticideReadResult = CatalogReadResult.ReadFailed(readFailure)).logOperation(plant.id, date, selectedCare)
+    val unreadableResult =
+      buildOperations(pesticideReadResult = GetPesticidesResult.ReadFailed(readFailure)).logOperation(plant.id, date, selectedCare)
     assertEquals(unreadableResult, LogOperationResult.LoggingFailed(readFailure))
 
     val unknownComponents = Substrate
@@ -146,7 +146,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val unknownComponentRefs       = Refs()
     buildOperations(
       unknownComponentRefs,
-      componentReadResult = CatalogReadResult.Read(Vector.empty)
+      componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
     ).logOperation(plant.id, date, repotWithUnknownComponents) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
@@ -156,14 +156,14 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       SubstrateComponent(perliteId, SubstrateComponentData(SubstrateComponentName(perliteId.value.toString), none), SubstrateComponentStatus.Archived)
     val archivedComponents    = archivedPerlite +: seededComponents.drop(1)
     val archivedComponentRefs = Refs()
-    val archivedComponentRead = CatalogReadResult.Read(archivedComponents)
+    val archivedComponentRead = GetSubstrateComponentsResult.Read(archivedComponents)
     buildOperations(archivedComponentRefs, componentReadResult = archivedComponentRead).logOperation(plant.id, date, repot) match
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(archivedComponentRefs.recordedOperations.get(), Vector.empty)
 
     assertEquals(
-      buildOperations(componentReadResult = CatalogReadResult.ReadFailed(readFailure)).logOperation(plant.id, date, repot),
+      buildOperations(componentReadResult = GetSubstrateComponentsResult.ReadFailed(readFailure)).logOperation(plant.id, date, repot),
       LogOperationResult.LoggingFailed(readFailure)
     )
 
@@ -653,8 +653,8 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
-      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(seededComponents),
-      pesticideReadResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector.empty),
+      componentReadResult: GetSubstrateComponentsResult = GetSubstrateComponentsResult.Read(seededComponents),
+      pesticideReadResult: GetPesticidesResult = GetPesticidesResult.Read(Vector.empty),
       nextId: () => String = () => "id-1"
   ) =
     val plantReads     = AtomicInteger(0)
@@ -688,23 +688,23 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       override def restoreOperation(operation: Operation): OperationCompensationResult =
         refs.restoredOperations.updateAndGet(_ :+ operation).pipe(_ => restoreOperationResult)
     val substrateStore = new SubstrateStore:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                = componentReadResult
+      override def getSubstrateComponents: GetSubstrateComponentsResult                         = componentReadResult
       override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
         fail("operations must not read a single substrate component")
-      override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      override def addSubstrateComponent(component: SubstrateComponent): AddSubstrateComponentResult =
         fail("operations must not write substrate components")
       override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
         fail("operations must not edit substrate components")
-      override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
+      override def getSubstrateMixes: GetSubstrateMixesResult =
         fail("operations must not read substrate mixes")
-      override def addSubstrateMix(mix: SubstrateMix): CatalogAddResult[SubstrateMix] =
+      override def saveSubstrateMix(mix: SubstrateMix): SaveSubstrateMixResult =
         fail("operations must not write substrate mixes")
-      override def deleteSubstrateMix(id: java.util.UUID): CatalogDeleteResult =
+      override def deleteSubstrateMix(id: java.util.UUID): DeleteSubstrateMixResult =
         fail("operations must not delete substrate mixes")
     val pesticideStore = new PesticideStore:
-      override def getPesticides: CatalogReadResult[Pesticide]                     = pesticideReadResult
-      override def getPesticide(id: PesticideId): GetPesticideResult               = fail("operations must not read a single pesticide")
-      override def addPesticide(pesticide: Pesticide): CatalogAddResult[Pesticide] =
+      override def getPesticides: GetPesticidesResult                     = pesticideReadResult
+      override def getPesticide(id: PesticideId): GetPesticideResult      = fail("operations must not read a single pesticide")
+      override def addPesticide(pesticide: Pesticide): AddPesticideResult =
         fail("operations must not write pesticides")
       override def updatePesticide(pesticide: Pesticide): UpdatePesticideResult =
         fail("operations must not update pesticides")

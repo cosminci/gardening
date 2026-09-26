@@ -4,11 +4,12 @@ import cats.syntax.either.*
 import cats.syntax.eq.*
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.operations.*
 import gardening.ports.{OperationStore, PlantStore, SubstrateStore, PesticideStore, OperationLedgerMetricsApi}
 import gardening.capabilities.{IdGenerator, PlantUpdateLock, Logger}
 import gardening.domain.plants.*
+import gardening.domain.pesticide.GetPesticidesResult
+import gardening.domain.substrate.GetSubstrateComponentsResult
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 import io.github.iltotore.iron.constraint.numeric.GreaterEqual
@@ -157,19 +158,19 @@ object OperationLedger:
       if selected.isEmpty then ().asRight
       else
         pesticideStore.getPesticides match
-          case CatalogReadResult.Read(pesticides) =>
+          case GetPesticidesResult.Read(pesticides) =>
             val known   = pesticides.filter(_.status === PesticideStatus.Active).map(_.id).toSet
             val missing = selected.diff(known)
             Either.cond(missing.isEmpty, (), unknownPesticides(missing))
-          case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+          case GetPesticidesResult.ReadFailed(reason) => reason.asLeft
 
     private def validateSubstrateComponents(substrate: Substrate) =
       substrateStore.getSubstrateComponents match
-        case CatalogReadResult.Read(components) =>
+        case GetSubstrateComponentsResult.Read(components) =>
           val known   = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           val missing = substrate.parts.map(_.componentId).toSet.diff(known)
           Either.cond(missing.isEmpty, (), unknownSubstrateComponents(missing))
-        case CatalogReadResult.ReadFailed(reason) => reason.asLeft
+        case GetSubstrateComponentsResult.ReadFailed(reason) => reason.asLeft
 
     private def unknownPesticides(ids: Set[PesticideId]) =
       RuntimeException(s"unknown pesticide ids: ${ids.toVector.map(_.value).sorted.mkString(", ")}")

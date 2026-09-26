@@ -2,7 +2,6 @@ package gardening.usecases
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.pesticide.*
 import gardening.ports.{PesticideStore, PesticideCatalogMetricsApi}
 import gardening.capabilities.{IdGenerator, TestImplicits}
@@ -30,8 +29,8 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val editResult    = catalog.editPesticide(pesticideId, pesticideData)
     val archiveResult = catalog.archivePesticide(pesticideId)
 
-    assertEquals(readResult, CatalogReadResult.Read(Vector(pesticide)))
-    assertEquals(addResult, CatalogAddResult.Added(pesticide))
+    assertEquals(readResult, GetPesticidesResult.Read(Vector(pesticide)))
+    assertEquals(addResult, AddPesticideResult.Added(pesticide))
     assertEquals(editResult, PesticideUpdateResult.PesticideMissing)
     assertEquals(archiveResult, PesticideUpdateResult.PesticideMissing)
     assertEquals(refs.added.get(), Vector(pesticide))
@@ -65,8 +64,8 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val readFailure  = RuntimeException("storage unavailable")
     val writeFailure = RuntimeException("write unavailable")
     val catalog      = buildCatalog(
-      readResult = CatalogReadResult.ReadFailed(readFailure),
-      addResult = CatalogAddResult.AddFailed(readFailure),
+      readResult = GetPesticidesResult.ReadFailed(readFailure),
+      addResult = AddPesticideResult.AddFailed(readFailure),
       getResult = GetPesticideResult.ReadFailed(readFailure)
     )
     val writeFailingCatalog =
@@ -79,8 +78,8 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
     val writeFailingEdit    = writeFailingCatalog.editPesticide(pesticideId, pesticideData)
     val writeFailingArchive = writeFailingCatalog.archivePesticide(pesticideId)
 
-    assertEquals(readResult, CatalogReadResult.ReadFailed(readFailure))
-    assertEquals(addResult, CatalogAddResult.AddFailed(readFailure))
+    assertEquals(readResult, GetPesticidesResult.ReadFailed(readFailure))
+    assertEquals(addResult, AddPesticideResult.AddFailed(readFailure))
     assertEquals(editResult, PesticideUpdateResult.UpdateFailed(readFailure))
     assertEquals(archiveResult, PesticideUpdateResult.UpdateFailed(readFailure))
     assertEquals(writeFailingEdit, PesticideUpdateResult.UpdateFailed(writeFailure))
@@ -93,16 +92,16 @@ class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
   private def buildCatalog(
       refs: Refs = Refs(),
-      readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector(pesticide)),
-      addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
+      readResult: GetPesticidesResult = GetPesticidesResult.Read(Vector(pesticide)),
+      addResult: AddPesticideResult = AddPesticideResult.Added(pesticide),
       getResult: GetPesticideResult = GetPesticideResult.RecordMissing,
       updateResult: UpdatePesticideResult = UpdatePesticideResult.Updated,
       nextId: () => String = () => pesticideId.value.toString
   ) =
     val store = new PesticideStore:
-      override def getPesticides: CatalogReadResult[Pesticide]                 = readResult
-      override def getPesticide(id: PesticideId): GetPesticideResult           = getResult
-      override def addPesticide(value: Pesticide): CatalogAddResult[Pesticide] =
+      override def getPesticides: GetPesticidesResult                 = readResult
+      override def getPesticide(id: PesticideId): GetPesticideResult  = getResult
+      override def addPesticide(value: Pesticide): AddPesticideResult =
         refs.added.updateAndGet(_ :+ value).pipe(_ => addResult)
       override def updatePesticide(value: Pesticide): UpdatePesticideResult =
         refs.updated.updateAndGet(_ :+ value).pipe(_ => updateResult)

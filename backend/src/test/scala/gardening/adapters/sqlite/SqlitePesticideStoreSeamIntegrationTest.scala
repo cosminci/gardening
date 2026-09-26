@@ -3,8 +3,7 @@ package gardening.adapters.sqlite
 import cats.syntax.option.*
 import com.augustnagro.magnum.Transactor
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.pesticide.{GetPesticideResult, UpdatePesticideResult}
+import gardening.domain.pesticide.{AddPesticideResult, GetPesticideResult, GetPesticidesResult, UpdatePesticideResult}
 import gardening.ports.PesticideStore
 import org.flywaydb.core.Flyway
 
@@ -35,8 +34,8 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
       val afterArchive  = store.getPesticide(pesticideId)
 
       assertEquals(missing, GetPesticideResult.RecordMissing)
-      assertEquals(empty, CatalogReadResult.Read(Vector.empty))
-      assertEquals(added, CatalogAddResult.Added(pesticide))
+      assertEquals(empty, GetPesticidesResult.Read(Vector.empty))
+      assertEquals(added, AddPesticideResult.Added(pesticide))
       assertEquals(afterAdd, GetPesticideResult.Read(pesticide))
       assertEquals(editResult, UpdatePesticideResult.Updated)
       assertEquals(archiveResult, UpdatePesticideResult.Updated)
@@ -74,8 +73,8 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
       val updateResult = readOnlyStore.updatePesticide(pesticide)
 
       addResult match
-        case CatalogAddResult.AddFailed(_) => ()
-        case other                         => fail(s"expected AddFailed, got $other")
+        case AddPesticideResult.AddFailed(_) => ()
+        case other                           => fail(s"expected AddFailed, got $other")
       updateResult match
         case UpdatePesticideResult.UpdateFailed(_) => ()
         case other                                 => fail(s"expected UpdateFailed, got $other")
@@ -88,8 +87,8 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
       val getResult  = store.getPesticide(pesticideId)
 
       readResult match
-        case CatalogReadResult.ReadFailed(_) => ()
-        case other                           => fail(s"expected ReadFailed, got $other")
+        case GetPesticidesResult.ReadFailed(_) => ()
+        case other                             => fail(s"expected ReadFailed, got $other")
       getResult match
         case GetPesticideResult.ReadFailed(_) => ()
         case other                            => fail(s"expected ReadFailed, got $other")

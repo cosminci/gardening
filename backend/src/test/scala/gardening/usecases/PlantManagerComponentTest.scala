@@ -2,10 +2,9 @@ package gardening.usecases
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.plants.*
 import gardening.domain.plants.PhotoMediaType.*
-import gardening.domain.substrate.{GetSubstrateComponentResult, UpdateSubstrateComponentResult}
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
 import gardening.ports.{SubstrateStore, PlantStore, PhotoContentStore, PlantManagerMetricsApi}
 import gardening.capabilities.{IdGenerator, Clock, PlantUpdateLock, TestImplicits}
 import io.github.iltotore.iron.*
@@ -72,11 +71,11 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
 
     val missing = buildPlants(
       missingRefs,
-      componentReadResult = CatalogReadResult.Read(Vector.empty)
+      componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
     ).createPlant(plant.details.species, none, plant.details.location, substrate)
     val readFailed = buildPlants(
       readFailedRefs,
-      componentReadResult = CatalogReadResult.ReadFailed(failure)
+      componentReadResult = GetSubstrateComponentsResult.ReadFailed(failure)
     ).createPlant(plant.details.species, none, plant.details.location, substrate)
     val writeFailed =
       buildPlants(addPlantResult = AddPlantResult.AddFailed(failure)).createPlant(plant.details.species, none, plant.details.location, substrate)
@@ -147,7 +146,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val archivedWithUnknownComponentResult = buildPlants(
       refs,
       getPlantResult = GetPlantResult.Read(archivedPlant),
-      componentReadResult = CatalogReadResult.Read(Vector.empty)
+      componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
     ).editPlant(plant.id, _.copy(location = Location("Kitchen")))
     val missingResult = buildPlants(refs, getPlantResult = GetPlantResult.RecordMissing)
       .editPlant(plant.id, _.copy(location = Location("Kitchen")))
@@ -169,9 +168,9 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val failure      = RuntimeException("unavailable")
     val refs         = Refs()
 
-    val unknownResult = buildPlants(refs, componentReadResult = CatalogReadResult.Read(Vector.empty))
+    val unknownResult = buildPlants(refs, componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty))
       .editPlant(plant.id, _.copy(substrate = newSubstrate))
-    val readFailedResult = buildPlants(refs, componentReadResult = CatalogReadResult.ReadFailed(failure))
+    val readFailedResult = buildPlants(refs, componentReadResult = GetSubstrateComponentsResult.ReadFailed(failure))
       .editPlant(plant.id, _.copy(substrate = newSubstrate))
 
     assertEquals(unknownResult, EditPlantResult.UnknownComponent)
@@ -367,7 +366,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
       archivedCountResult: ArchivedCountResult = ArchivedCountResult.Counted(0),
       getPlantResult: GetPlantResult = GetPlantResult.Read(plant),
       updatePlantResult: UpdatePlantResult = UpdatePlantResult.Updated,
-      componentReadResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(seededComponents),
+      componentReadResult: GetSubstrateComponentsResult = GetSubstrateComponentsResult.Read(seededComponents),
       nextId: () => String = () => "id-1",
       addPhotoResult: AddPhotoResult = AddPhotoResult.Added(photo),
       removePhotoResult: RemovePhotoResult = RemovePhotoResult.Removed(photo),
@@ -400,17 +399,17 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
       override def delete(photo: PhotoId): PhotoWriteResult =
         refs.deletedPhotoContentIds.updateAndGet(_ :+ photo).pipe(_ => deleteContentResult)
     val substrateStore = new SubstrateStore:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                = componentReadResult
+      override def getSubstrateComponents: GetSubstrateComponentsResult                         = componentReadResult
       override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
         fail("plants must not read a single substrate component")
-      override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+      override def addSubstrateComponent(component: SubstrateComponent): AddSubstrateComponentResult =
         fail("plants must not write substrate components")
       override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
         fail("plants must not edit substrate components")
-      override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
+      override def getSubstrateMixes: GetSubstrateMixesResult =
         fail("plants must not read substrate mixes")
-      override def addSubstrateMix(mix: SubstrateMix): CatalogAddResult[SubstrateMix] =
+      override def saveSubstrateMix(mix: SubstrateMix): SaveSubstrateMixResult =
         fail("plants must not write substrate mixes")
-      override def deleteSubstrateMix(id: java.util.UUID): CatalogDeleteResult =
+      override def deleteSubstrateMix(id: java.util.UUID): DeleteSubstrateMixResult =
         fail("plants must not delete substrate mixes")
     PlantManager.make(using store, contentStore, substrateStore, () => nextId(), () => captureTime, PlantUpdateLock.make)

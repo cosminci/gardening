@@ -2,8 +2,7 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.substrate.SubstrateComponentUpdateResult
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SubstrateComponentUpdateResult}
 import gardening.usecases.{AddSubstrateMixResult, SubstrateCatalog}
 import io.circe.derivation.{Configuration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
@@ -96,12 +95,12 @@ object SubstrateApi:
     List(
       getComponentsEndpoint.handle: _ =>
         catalog.getSubstrateComponents match
-          case CatalogReadResult.Read(components) => components.asRight
-          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, componentsReadFailed).asLeft,
+          case GetSubstrateComponentsResult.Read(components) => components.asRight
+          case GetSubstrateComponentsResult.ReadFailed(_)    => (StatusCode.InternalServerError, componentsReadFailed).asLeft,
       addComponentEndpoint.handle: data =>
         catalog.addSubstrateComponent(data) match
-          case CatalogAddResult.Added(component) => component.asRight
-          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, componentWriteFailed).asLeft,
+          case AddSubstrateComponentResult.Added(component) => component.asRight
+          case AddSubstrateComponentResult.AddFailed(_)     => (StatusCode.InternalServerError, componentWriteFailed).asLeft,
       editComponentEndpoint.handle: (encodedId, data) =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
@@ -118,8 +117,8 @@ object SubstrateApi:
             case SubstrateComponentUpdateResult.UpdateFailed(_)    => archiveFailed.asLeft,
       getMixesEndpoint.handle: _ =>
         catalog.getSubstrateMixes match
-          case CatalogReadResult.Read(mixes)   => mixes.asRight
-          case CatalogReadResult.ReadFailed(_) => (StatusCode.InternalServerError, mixesReadFailed).asLeft,
+          case GetSubstrateMixesResult.Read(mixes)   => mixes.asRight
+          case GetSubstrateMixesResult.ReadFailed(_) => (StatusCode.InternalServerError, mixesReadFailed).asLeft,
       addMixEndpoint.handle: data =>
         catalog.addSubstrateMix(data.name, data.maybeNotes, data.substrate) match
           case AddSubstrateMixResult.Added(mix)         => mix.asRight
@@ -128,8 +127,8 @@ object SubstrateApi:
       deleteMixEndpoint.handle: encodedId =>
         Try(UUID.fromString(encodedId)).toOption.fold(invalidMixId.asLeft): id =>
           catalog.deleteSubstrateMix(id) match
-            case CatalogDeleteResult.Deleted         => ().asRight
-            case CatalogDeleteResult.DeleteFailed(_) => mixDeleteFailed.asLeft
+            case DeleteSubstrateMixResult.Deleted         => ().asRight
+            case DeleteSubstrateMixResult.DeleteFailed(_) => mixDeleteFailed.asLeft
     )
 
   private case class SubstrateMixData(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate)

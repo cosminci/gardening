@@ -2,6 +2,14 @@ package gardening.domain.pesticide
 
 import gardening.domain.*
 
+enum GetPesticidesResult:
+  case Read(entries: Vector[Pesticide])
+  case ReadFailed(reason: Throwable)
+
+enum AddPesticideResult:
+  case Added(entry: Pesticide)
+  case AddFailed(reason: Throwable)
+
 enum GetPesticideResult:
   case Read(pesticide: Pesticide)
   case RecordMissing

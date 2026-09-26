@@ -2,8 +2,7 @@ package gardening.adapters.http
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.pesticide.PesticideUpdateResult
+import gardening.domain.pesticide.{AddPesticideResult, GetPesticidesResult, PesticideUpdateResult}
 import gardening.usecases.PesticideCatalog
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
@@ -85,8 +84,8 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
   test("should hide pesticide storage failures"):
     val failure = RuntimeException("private details")
     val server  = buildServer(
-      readResult = CatalogReadResult.ReadFailed(failure),
-      addResult = CatalogAddResult.AddFailed(failure),
+      readResult = GetPesticidesResult.ReadFailed(failure),
+      addResult = AddPesticideResult.AddFailed(failure),
       editResult = PesticideUpdateResult.UpdateFailed(failure),
       archiveResult = PesticideUpdateResult.UpdateFailed(failure)
     )
@@ -109,14 +108,14 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   private def buildServer(
       refs: Refs = Refs(),
-      readResult: CatalogReadResult[Pesticide] = CatalogReadResult.Read(Vector(pesticide)),
-      addResult: CatalogAddResult[Pesticide] = CatalogAddResult.Added(pesticide),
+      readResult: GetPesticidesResult = GetPesticidesResult.Read(Vector(pesticide)),
+      addResult: AddPesticideResult = AddPesticideResult.Added(pesticide),
       editResult: PesticideUpdateResult = PesticideUpdateResult.PesticideMissing,
       archiveResult: PesticideUpdateResult = PesticideUpdateResult.PesticideMissing
   ) =
     val catalog = new PesticideCatalog:
-      override def getPesticides: CatalogReadResult[Pesticide]                    = readResult
-      override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
+      override def getPesticides: GetPesticidesResult                    = readResult
+      override def addPesticide(data: PesticideData): AddPesticideResult =
         refs.added.updateAndGet(_ :+ data).pipe(_ => addResult)
       override def editPesticide(id: PesticideId, data: PesticideData): PesticideUpdateResult =
         refs.edited.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)

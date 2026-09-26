@@ -2,7 +2,6 @@ package gardening.usecases
 
 import cats.syntax.eq.*
 import gardening.domain.*
-import gardening.domain.catalog.*
 import gardening.domain.pesticide.*
 import gardening.ports.{PesticideStore, PesticideCatalogMetricsApi}
 import gardening.capabilities.{IdGenerator, Logger}
@@ -14,8 +13,8 @@ import language.experimental.captureChecking
 import scala.util.chaining.scalaUtilChainingOps
 
 trait PesticideCatalog:
-  def getPesticides: CatalogReadResult[Pesticide]
-  def addPesticide(data: PesticideData): CatalogAddResult[Pesticide]
+  def getPesticides: GetPesticidesResult
+  def addPesticide(data: PesticideData): AddPesticideResult
   def editPesticide(id: PesticideId, data: PesticideData): PesticideUpdateResult
   def archivePesticide(id: PesticideId): PesticideUpdateResult
 
@@ -30,16 +29,16 @@ object PesticideCatalog:
   private class LivePesticideCatalog(using store: PesticideStore^, idGen: IdGenerator^)(using log: Logger^, metrics: PesticideCatalogMetricsApi^)
       extends PesticideCatalog:
 
-    override def getPesticides: CatalogReadResult[Pesticide] =
+    override def getPesticides: GetPesticidesResult =
       store.getPesticides.tap:
-        case CatalogReadResult.ReadFailed(reason) => log.error("get pesticides", reason)
-        case CatalogReadResult.Read(found)        =>
+        case GetPesticidesResult.ReadFailed(reason) => log.error("get pesticides", reason)
+        case GetPesticidesResult.Read(found)        =>
           metrics.setPesticideDisplayNames(found.map(pesticide => pesticide.id -> pesticide.data.name.value))
 
-    override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
+    override def addPesticide(data: PesticideData): AddPesticideResult =
       store.addPesticide(Pesticide(PesticideId(UUID.fromString(idGen.nextId())), data, PesticideStatus.Active)).tap:
-        case CatalogAddResult.Added(entry)      => log.info(s"pesticide added $entry")
-        case CatalogAddResult.AddFailed(reason) => log.error("add pesticide", reason)
+        case AddPesticideResult.Added(entry)      => log.info(s"pesticide added $entry")
+        case AddPesticideResult.AddFailed(reason) => log.error("add pesticide", reason)
 
     override def editPesticide(id: PesticideId, data: PesticideData): PesticideUpdateResult =
       update(id)(editFn = _.copy(data = data)).tap:

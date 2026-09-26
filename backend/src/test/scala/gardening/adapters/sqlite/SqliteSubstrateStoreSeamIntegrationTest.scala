@@ -4,8 +4,7 @@ import cats.syntax.option.*
 import io.github.iltotore.iron.autoRefine
 import com.augustnagro.magnum.Transactor
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.substrate.{GetSubstrateComponentResult, UpdateSubstrateComponentResult}
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
 import gardening.ports.SubstrateStore
 import org.flywaydb.core.Flyway
 
@@ -41,8 +40,8 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
       val afterArchive  = store.getSubstrateComponent(componentId)
 
       assertEquals(missing, GetSubstrateComponentResult.RecordMissing)
-      assertEquals(empty, CatalogReadResult.Read(Vector.empty))
-      assertEquals(added, CatalogAddResult.Added(component))
+      assertEquals(empty, GetSubstrateComponentsResult.Read(Vector.empty))
+      assertEquals(added, AddSubstrateComponentResult.Added(component))
       assertEquals(afterAdd, GetSubstrateComponentResult.Read(component))
       assertEquals(editResult, UpdateSubstrateComponentResult.Updated)
       assertEquals(archiveResult, UpdateSubstrateComponentResult.Updated)
@@ -82,8 +81,8 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
       val updateResult = readOnlyStore.updateSubstrateComponent(component)
 
       addResult match
-        case CatalogAddResult.AddFailed(_) => ()
-        case other                         => fail(s"expected AddFailed, got $other")
+        case AddSubstrateComponentResult.AddFailed(_) => ()
+        case other                                    => fail(s"expected AddFailed, got $other")
       updateResult match
         case UpdateSubstrateComponentResult.UpdateFailed(_) => ()
         case other                                          => fail(s"expected UpdateFailed, got $other")
@@ -96,8 +95,8 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
       val getResult  = store.getSubstrateComponent(componentId)
 
       readResult match
-        case CatalogReadResult.ReadFailed(_) => ()
-        case other                           => fail(s"expected ReadFailed, got $other")
+        case GetSubstrateComponentsResult.ReadFailed(_) => ()
+        case other                                      => fail(s"expected ReadFailed, got $other")
       getResult match
         case GetSubstrateComponentResult.ReadFailed(_) => ()
         case other                                     => fail(s"expected ReadFailed, got $other")
@@ -107,28 +106,28 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
       val store = resource.store
 
       val emptyRead   = store.getSubstrateMixes
-      val added       = store.addSubstrateMix(mix)
+      val added       = store.saveSubstrateMix(mix)
       val afterAdd    = store.getSubstrateMixes
       val deleted     = store.deleteSubstrateMix(mixId)
       val afterDelete = store.getSubstrateMixes
 
-      assertEquals(emptyRead, CatalogReadResult.Read(Vector.empty))
-      assertEquals(added, CatalogAddResult.Added(mix))
-      assertEquals(afterAdd, CatalogReadResult.Read(Vector(mix)))
-      assertEquals(deleted, CatalogDeleteResult.Deleted)
-      assertEquals(afterDelete, CatalogReadResult.Read(Vector.empty))
+      assertEquals(emptyRead, GetSubstrateMixesResult.Read(Vector.empty))
+      assertEquals(added, SaveSubstrateMixResult.Saved(mix))
+      assertEquals(afterAdd, GetSubstrateMixesResult.Read(Vector(mix)))
+      assertEquals(deleted, DeleteSubstrateMixResult.Deleted)
+      assertEquals(afterDelete, GetSubstrateMixesResult.Read(Vector.empty))
 
   test("should permanently delete a substrate mix that no longer exists"):
     Using.resource(storeResource): resource =>
       val result = resource.store.deleteSubstrateMix(UUID.randomUUID())
 
-      assertEquals(result, CatalogDeleteResult.Deleted)
+      assertEquals(result, DeleteSubstrateMixResult.Deleted)
 
   test("should report invalid stored substrate mix identifiers"):
     Using.resource(storeResource): resource =>
       val store      = resource.store
       val dataSource = resource.dataSource
-      val _          = store.addSubstrateMix(mix)
+      val _          = store.saveSubstrateMix(mix)
       execute(dataSource, s"update substrate_mix set id = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' where id = '$mixId'")
 
       val actualError = intercept[DatabaseCorruption](store.getSubstrateMixes).err.getMessage
@@ -139,7 +138,7 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
     Using.resource(storeResource): resource =>
       val store      = resource.store
       val dataSource = resource.dataSource
-      val _          = store.addSubstrateMix(mix)
+      val _          = store.saveSubstrateMix(mix)
       execute(dataSource, s"update substrate_mix set substrate = '[]' where id = '$mixId'")
 
       val actualError = intercept[DatabaseCorruption](store.getSubstrateMixes).err.getMessage
@@ -150,15 +149,15 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
     Using.resource(storeResource): resource =>
       val readOnlyStore = SqliteSubstrateStore.make(Transactor(resource.dataSource, connectionConfig = makeReadOnly))
 
-      val addResult    = readOnlyStore.addSubstrateMix(mix)
+      val addResult    = readOnlyStore.saveSubstrateMix(mix)
       val deleteResult = readOnlyStore.deleteSubstrateMix(mixId)
 
       addResult match
-        case CatalogAddResult.AddFailed(_) => ()
-        case other                         => fail(s"expected AddFailed, got $other")
+        case SaveSubstrateMixResult.SaveFailed(_) => ()
+        case other                                => fail(s"expected SaveFailed, got $other")
       deleteResult match
-        case CatalogDeleteResult.DeleteFailed(_) => ()
-        case other                               => fail(s"expected DeleteFailed, got $other")
+        case DeleteSubstrateMixResult.DeleteFailed(_) => ()
+        case other                                    => fail(s"expected DeleteFailed, got $other")
 
   test("should report a substrate mix read failure when the substrate schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
@@ -167,8 +166,8 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
       val result = store.getSubstrateMixes
 
       result match
-        case CatalogReadResult.ReadFailed(_) => ()
-        case other                           => fail(s"expected ReadFailed, got $other")
+        case GetSubstrateMixesResult.ReadFailed(_) => ()
+        case other                                 => fail(s"expected ReadFailed, got $other")
 
   private case class StoreResource(
       connection: SqliteConnection,

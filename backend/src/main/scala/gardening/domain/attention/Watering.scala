@@ -28,7 +28,7 @@ object WateringAttention:
     def averageInterval: FiniteDuration
     def elapsed: FiniteDuration
 
-    def assess =
+    def assess: Available =
       if elapsed >= averageInterval + 24.hours then RedAlert(sampleCount, averageInterval, elapsed)
       else if elapsed > averageInterval then Overdue(sampleCount, averageInterval, elapsed)
       else Current(sampleCount, averageInterval, elapsed)

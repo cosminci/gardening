@@ -4,8 +4,7 @@ import cats.syntax.either.*
 import cats.syntax.traverse.*
 import com.augustnagro.magnum.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.substrate.{GetSubstrateComponentResult, UpdateSubstrateComponentResult}
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
 import gardening.ports.SubstrateStore
 import io.circe.parser.decode
 import io.circe.syntax.*
@@ -22,12 +21,12 @@ object SqliteSubstrateStore:
 
   private class LiveSqliteSubstrateStore(transactor: Transactor) extends SubstrateStore:
 
-    override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
+    override def getSubstrateComponents: GetSubstrateComponentsResult =
       try
         val query      = sql"select id, name, info, status from substrate_component order by rowid"
         val components = trust(connect(transactor)(query.query[ComponentRow].run()).traverse(toComponent))
-        CatalogReadResult.Read(components)
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
+        GetSubstrateComponentsResult.Read(components)
+      catch case error: SqlException => GetSubstrateComponentsResult.ReadFailed(error)
 
     override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
       try
@@ -36,14 +35,14 @@ object SqliteSubstrateStore:
           case Some(row) => GetSubstrateComponentResult.Read(trust(toComponent(row)))
       catch case error: SqlException => GetSubstrateComponentResult.ReadFailed(error)
 
-    override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
+    override def addSubstrateComponent(component: SubstrateComponent): AddSubstrateComponentResult =
       try
         val row =
           ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value), component.status.toString)
         transact(transactor):
           sql"insert into substrate_component (id, name, info, status) values (${row.id}, ${row.name}, ${row.info}, ${row.status})".update.run()
-        CatalogAddResult.Added(component)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
+        AddSubstrateComponentResult.Added(component)
+      catch case error: SqlException => AddSubstrateComponentResult.AddFailed(error)
 
     override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
       try
@@ -74,26 +73,26 @@ object SqliteSubstrateStore:
             // $COVERAGE-ON$
       yield SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(row.name), row.info.map(SubstrateComponentInfo.apply)), status)
 
-    override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
+    override def getSubstrateMixes: GetSubstrateMixesResult =
       try
         val query = sql"select id, name, notes, substrate from substrate_mix order by rowid"
         val mixes = trust(connect(transactor)(query.query[MixRow].run()).traverse(toMix))
-        CatalogReadResult.Read(mixes)
-      catch case error: SqlException => CatalogReadResult.ReadFailed(error)
+        GetSubstrateMixesResult.Read(mixes)
+      catch case error: SqlException => GetSubstrateMixesResult.ReadFailed(error)
 
-    override def addSubstrateMix(mix: SubstrateMix): CatalogAddResult[SubstrateMix] =
+    override def saveSubstrateMix(mix: SubstrateMix): SaveSubstrateMixResult =
       try
         val row = MixRow(mix.id.toString, mix.name.value, mix.maybeNotes.map(_.value), mix.substrate.asJson.noSpaces)
         transact(transactor):
           sql"insert into substrate_mix (id, name, notes, substrate) values (${row.id}, ${row.name}, ${row.notes}, ${row.substrate})".update.run()
-        CatalogAddResult.Added(mix)
-      catch case error: SqlException => CatalogAddResult.AddFailed(error)
+        SaveSubstrateMixResult.Saved(mix)
+      catch case error: SqlException => SaveSubstrateMixResult.SaveFailed(error)
 
-    override def deleteSubstrateMix(id: UUID): CatalogDeleteResult =
+    override def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult =
       try
         transact(transactor)(sql"delete from substrate_mix where id = ${id.toString}".update.run())
-        CatalogDeleteResult.Deleted
-      catch case error: SqlException => CatalogDeleteResult.DeleteFailed(error)
+        DeleteSubstrateMixResult.Deleted
+      catch case error: SqlException => DeleteSubstrateMixResult.DeleteFailed(error)
 
     private def toMix(row: MixRow) =
       for
