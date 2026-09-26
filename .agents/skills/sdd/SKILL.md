@@ -51,7 +51,7 @@ Before drafting:
 Write each fact once:
 
 - **What & Why:** current behaviour → new behaviour; missing capability and intent.
-- **Domain / Design Notes:** changed domain contracts, ports, and boundaries.
+- **Domain / Design Notes:** changed domain contracts, ports, and boundaries — types, ADTs, traits, Flyway migrations, or DB schema when they carry the change; a short diagram or code snippet over prose when it states the fact more clearly.
 - **Acceptance Criteria:** the smallest externally observable proof set, including relevant failure and accessibility outcomes.
 - **Doc Sync:** name the section and the exact new or revised fact, decision, or workflow it will contain. Compare against the current living doc before writing it: "update the domain model" or "add tests for creation" is not a delta. Omit a doc if the change adds nothing beyond what its code, generated contract, or existing docs already say.
 
@@ -59,8 +59,10 @@ Keep the proposal proportional:
 
 - Start with required sections. Add an optional section only when it contributes new information.
 - Use short technical bullets. Avoid narrative paragraphs and introductory filler.
+- Reach for a small code snippet, schema fragment, or diagram instead of prose whenever it states the fact more directly than a sentence would — but only then; don't default to a diagram or a bullet list for something one line already covers.
 - Do not restate What & Why or Domain / Design Notes as acceptance criteria.
 - Group cohesive outcomes into one criterion; do not create a criterion per sentence or implementation branch.
+- A section holds only its own genuine content, not filler restating other sections: an "invariant" that is actually this change's own new rule, a "tradeoff" with no real downside, or an "out of scope" bullet that just restates what the acceptance criteria already exclude are not real entries for that section — cut them rather than fill the section for its own sake.
 - Compare the final proposal with the closest approved spec. If a small change approaches a foundational spec's size or criterion count, cut it.
 
 Gate: every sentence has one section that owns it; removing any sentence would lose information.
@@ -114,7 +116,9 @@ The change's own rules belong in Acceptance Criteria. -->
 
 ## Tradeoffs Accepted
 
-<!-- Optional. State what becomes worse or more constrained and why it is acceptable. -->
+<!-- Optional. State what becomes worse or more constrained and why it is acceptable.
+Litmus test: name the concrete downside and who bears it. A decision with no real
+cost is not a tradeoff — leave it out. -->
 
 ## Acceptance Criteria
 
@@ -134,7 +138,9 @@ or a test/fixture inventory in testing.md. If none changes, say so in one senten
 
 ## Out of Scope
 
-<!-- Optional. Maximum two bullets in functional/business language. Omit if unnecessary. -->
+<!-- Optional. Maximum two bullets in functional/business language. Omit if unnecessary.
+Only a bullet a reader would reasonably wonder about — not a restatement of what the
+acceptance criteria already exclude. -->
 ```
 
 ## Phase 3 — Tests projected from the spec
