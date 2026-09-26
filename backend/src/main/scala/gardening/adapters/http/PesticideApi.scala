@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideArchiveResult, PesticideCatalog, PesticideEditResult}
+import gardening.domain.pesticide.{PesticideCatalog, PesticideUpdateResult}
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import sttp.model.StatusCode
@@ -61,17 +61,17 @@ object PesticideApi:
       editPesticideEndpoint.handle: (encodedId, data) =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editPesticide(id, data) match
-            case PesticideEditResult.Edited(pesticide) => pesticide.asRight
-            case PesticideEditResult.PesticideMissing  => recordMissing.asLeft
-            case PesticideEditResult.PesticideArchived => pesticideArchived.asLeft
-            case PesticideEditResult.EditFailed(_)     => writeFailed.asLeft,
+            case PesticideUpdateResult.Updated(pesticide) => pesticide.asRight
+            case PesticideUpdateResult.PesticideMissing   => recordMissing.asLeft
+            case PesticideUpdateResult.PesticideArchived  => pesticideArchived.asLeft
+            case PesticideUpdateResult.UpdateFailed(_)    => writeFailed.asLeft,
       archivePesticideEndpoint.handle: encodedId =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.archivePesticide(id) match
-            case PesticideArchiveResult.Archived(pesticide) => pesticide.asRight
-            case PesticideArchiveResult.PesticideMissing    => recordMissing.asLeft
-            case PesticideArchiveResult.AlreadyArchived     => alreadyArchived.asLeft
-            case PesticideArchiveResult.ArchiveFailed(_)    => archiveFailed.asLeft
+            case PesticideUpdateResult.Updated(pesticide) => pesticide.asRight
+            case PesticideUpdateResult.PesticideMissing   => recordMissing.asLeft
+            case PesticideUpdateResult.PesticideArchived  => alreadyArchived.asLeft
+            case PesticideUpdateResult.UpdateFailed(_)    => archiveFailed.asLeft
     )
 
   private given CirceConfiguration = CirceConfiguration.default
