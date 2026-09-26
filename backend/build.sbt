@@ -18,6 +18,15 @@ val oxV         = "1.0.8"
 val scodecV     = "1.2.5"
 val prometheusV = "1.3.1"
 
+// Match the packaged runtime's JVM flags (see image.ts): SQLite JDBC loads a native library, and
+// Scala 3's LazyVals runtime still uses sun.misc.Unsafe. Without these, every JVM launched outside
+// the packaged image (sbt's forked `run`, the forked test JVM) prints the JDK 24+ "restricted
+// method" / "terminally deprecated" warnings on every startup.
+val nativeAccessJavaOptions = Seq(
+  "--enable-native-access=ALL-UNNAMED",
+  "--sun-misc-unsafe-memory-access=allow"
+)
+
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging, JlinkPlugin)
   .settings(
@@ -69,13 +78,8 @@ lazy val root = (project in file("."))
       "gardening\\.adapters\\.prometheus\\..*" // metrics wiring; not unit-tested, same as logging
     ).mkString(";"),
     Test / fork := true,
-    // Match the packaged runtime's JVM flags (see image.ts) so the forked test JVM doesn't print the
-    // same JDK 24+ "restricted method" / "terminally deprecated" warnings on every run: SQLite JDBC
-    // loads a native library, and Scala 3's LazyVals runtime still uses sun.misc.Unsafe.
-    Test / javaOptions ++= Seq(
-      "--enable-native-access=ALL-UNNAMED",
-      "--sun-misc-unsafe-memory-access=allow"
-    ),
+    Test / javaOptions ++= nativeAccessJavaOptions,
+    Compile / run / javaOptions ++= nativeAccessJavaOptions,
     // tapir pulls Netty's `netty-all` aggregate, which drags in codecs this app never uses (and
     // whose jdeps analysis breaks jlink on a missing optional aalto module). Dropping them fixes
     // the jlink build and trims the runtime jars.
