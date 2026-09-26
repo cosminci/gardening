@@ -197,6 +197,14 @@ when the checklist records why.
   more than one independent scenario (for example, two distinct `buildX` collaborator setups) is
   covering more than one use case; split it into one test per scenario, each with at most one
   `Refs`, instead of naming the extra instances (`careRefs`, `repotRefs`, `tieRefs`, and so on).
+- [ ] Scope a stub or mock (a `given` capability substitute, fixed collaborator response, and so
+  on) as narrowly as possible. A mock needed by exactly one suite is declared in that suite, no
+  matter how large or complex it is — do not hoist it to a shared location on the assumption it
+  might be reused later. A mock needed by more than one suite depends on its size: a trivial
+  one-liner is cheaper to repeat per suite than to add a shared indirection for; a non-trivial
+  object (roughly four or more lines to define) is worth sharing, in `TestImplicits` for a
+  capability `given` or a shared `Mocks` object for domain data. There is no sharp cutoff — weigh
+  the object's complexity against how many suites actually need it, not how many might.
 - [ ] Prefer codecs that encode a wire format directly over DTOs. Introduce a DTO only when it
   cannot leak beyond its boundary and a codec cannot express the format cleanly.
 - [ ] Keep test helpers to a minimum. A test should be readable as a use case and normally need
