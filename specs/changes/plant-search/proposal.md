@@ -42,7 +42,7 @@ after:   Plant Journal  Backend status ··········· Add plant  Search 
 
 - Backend connection status sits immediately after "Plant Journal"; the search box sits between "Add plant" and the Garden/Cemetery toggle. Both the search box and the toggle appear only once the journal has loaded, matching "Add plant" today.
 - Typing filters the active view live, no submit step; matches are case-insensitive substring matches against nickname, species, or location. An empty or whitespace-only query shows every plant in the view, matching today's behavior.
-- The query persists across Garden ⇄ Cemetery switches and filters whichever view is now active. The Garden/Cemetery toggle counts keep showing each view's total plant count, unaffected by the filter.
+- Switching Garden ⇄ Cemetery clears the query, so each view starts unfiltered; the query is in-memory only and does not survive a page reload. The Garden/Cemetery toggle counts always show each view's total plant count, unaffected by the filter.
 - When the active view's filtered result is empty, an accessible empty-state message replaces the plant list.
 
 ## Doc Sync
