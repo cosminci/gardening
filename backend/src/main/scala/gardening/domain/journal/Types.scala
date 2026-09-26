@@ -4,6 +4,48 @@ import gardening.domain.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 import java.time.Instant
+import java.util.UUID
+import scodec.bits.ByteVector
+
+opaque type PhotoId = UUID
+object PhotoId:
+  def apply(value: UUID): PhotoId         = value
+  extension (id: PhotoId) def value: UUID = id
+
+final case class PlantPhoto(id: PhotoId, plantId: PlantId, capturedAt: Instant)
+
+type PhotoOffset   = Int :| GreaterEqual[0]
+type PhotoPageSize = Int :| Interval.Closed[1, 24]
+final case class PhotoWindow(offset: PhotoOffset, size: PhotoPageSize)
+final case class PhotoPage(photos: Vector[PlantPhoto], hasNextPage: Boolean)
+
+enum PhotoMediaType:
+  case Jpeg, Png, Webp
+
+final case class PhotoContent(bytes: ByteVector, mediaType: PhotoMediaType)
+
+enum AddPhotoResult:
+  case Added(photo: PlantPhoto)
+  case PlantMissing
+  case AddFailed(reason: Throwable)
+
+enum RemovePhotoResult:
+  case Removed(photo: PlantPhoto)
+  case PhotoMissing
+  case RemoveFailed(reason: Throwable)
+
+enum GetPhotosResult:
+  case Read(page: PhotoPage)
+  case ReadFailed(reason: Throwable)
+
+enum PhotoWriteResult:
+  case Written
+  case WriteFailed(reason: Throwable)
+
+enum PhotoReadResult:
+  case Read(content: PhotoContent)
+  case ContentMissing
+  case ReadFailed(reason: Throwable)
 
 type OperationOffset   = Int :| GreaterEqual[0]
 type OperationPageSize = Int :| Interval.Closed[1, 10]

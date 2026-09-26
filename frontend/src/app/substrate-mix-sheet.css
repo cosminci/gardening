@@ -38,8 +38,10 @@
 
 .substrate-mix-card {
   display: grid;
+  height: 11rem;
   gap: 0.5rem;
   padding: 0.9rem 1rem;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   background: #fff;
@@ -57,10 +59,24 @@
   font-size: 0.95rem;
 }
 
-.substrate-mix-card__notes {
+.substrate-mix-card__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.5rem;
   margin: 0;
+}
+
+.substrate-mix-card__facts dt {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.substrate-mix-card__facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.85rem;
 }
 
 .inline-icon-action--delete::before {

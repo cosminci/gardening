@@ -24,15 +24,13 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
         <time dateTime={props.operation.date}>{date()}</time>
         <button
           id={editOperationControlId(props.operation.id)}
-          class="operation__edit"
+          class="inline-icon-action inline-icon-action--edit"
           type="button"
           aria-label={Labels.operationEditLabel(props.operation, props.position, "recent")}
           onClick={() => {
             props.onEdit();
           }}
-        >
-          Edit
-        </button>
+        />
         <span class="operation__kind">{Labels.operationKindLabel(props.operation.details)}</span>
       </div>
       <dl class="operation__details">

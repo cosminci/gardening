@@ -50,6 +50,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
@@ -57,7 +58,7 @@ Vitest.describe("changing the journal", () => {
       Testing.fireEvent.click(archiveControl);
       const warning = Testing.screen.getByRole("alertdialog");
       Testing.fireEvent.click(
-        Testing.within(warning).getByRole("button", { name: "Archive permanently" }),
+        Testing.within(warning).getByRole("button", { name: "Move to cemetery" }),
       );
       const garden = await Testing.screen.findByRole("button", { name: /Garden.*0 plants/ });
       await Testing.waitFor(() => {
@@ -93,6 +94,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
@@ -134,6 +136,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByText("3rd of March");
@@ -174,6 +177,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByText("3rd of March");
@@ -224,6 +228,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByText("3rd of March");
@@ -281,6 +286,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     Testing.fireEvent.click(
@@ -343,6 +349,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByText("3rd of March");
@@ -407,13 +414,14 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const archiveControl = await Testing.screen.findByRole("button", { name: "Archive Fern" });
     archiveControl.focus();
 
     Testing.fireEvent.click(archiveControl);
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
     const garden = await Testing.screen.findByRole("button", { name: /Garden.*1 plant/ });
     await Testing.waitFor(() => {
       Vitest.expect(garden).toHaveFocus();
@@ -480,10 +488,11 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       Testing.fireEvent.click(await Testing.screen.findByRole("button", { name: "Archive Fern" }));
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
       await Testing.screen.findByRole("button", { name: /Garden.*1 plant/ });
 
       journal.pushAttention(bothPlantsAttention);
@@ -535,12 +544,13 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("button", { name: "Archive Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
 
       const alert = await Testing.screen.findByRole("alert");
 
@@ -573,12 +583,13 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
 
       Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive Fern" }));
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive permanently" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Move to cemetery" }));
 
       const alert = await Testing.screen.findByRole("alert");
 
@@ -634,6 +645,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     Testing.fireEvent.click(
@@ -689,6 +701,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -763,6 +776,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByText("3rd of March");
@@ -833,6 +847,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const card = await Testing.screen.findByRole("article", { name: "Fern" });
@@ -872,6 +887,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -902,6 +918,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const current = Testing.within(container);
@@ -962,6 +979,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1039,6 +1057,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1139,6 +1158,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1257,6 +1277,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1394,6 +1415,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1461,6 +1483,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1513,6 +1536,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1603,6 +1627,7 @@ Vitest.describe("changing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
 
@@ -1644,6 +1669,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1679,6 +1705,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1715,6 +1742,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -1763,6 +1791,7 @@ Vitest.describe("changing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });

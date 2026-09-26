@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import { instant } from "../../src/domain/Journal";
 import type { AttentionProjection } from "../../src/domain/Journal";
-import { buildJournal, ficus, operationsPage, repot } from "./JournalTestSupport";
+import { buildJournal, ficus, noopPhotoClient, operationsPage, repot } from "./JournalTestSupport";
 
 const unavailableFicusAttention: AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
@@ -30,6 +30,7 @@ describe("operation edit failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -56,6 +57,7 @@ describe("operation edit failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -85,6 +87,7 @@ describe("operation edit failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");

@@ -282,6 +282,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plants/{plantId}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded page of plant photos */
+        get: operations["getPlantsPlantidPhotos"];
+        put?: never;
+        /** Upload a photo for a plant */
+        post: operations["postPlantsPlantidPhotos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a photo */
+        delete: operations["deletePhotosPhotoid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/photos/{photoId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve the raw photo content */
+        get: operations["getPhotosPhotoidContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -291,6 +343,12 @@ export interface components {
          * @enum {string}
          */
         ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "watered";
+        /** AddedPhoto */
+        AddedPhoto: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
         /** ApiError */
         ApiError: {
             message: string;
@@ -387,6 +445,22 @@ export interface components {
          * @enum {string}
          */
         PesticideType: "fungicide" | "insecticide" | "treatment";
+        /** PhotoItem */
+        PhotoItem: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
+        /** PhotoPageResponse */
+        PhotoPageResponse: {
+            photos: components["schemas"]["PhotoItem"][];
+            hasNextPage: boolean;
+        };
+        /** PhotoUploadPart */
+        PhotoUploadPart: {
+            /** Format: binary */
+            file: string;
+        };
         /** Plant */
         Plant: {
             id: string;
@@ -1469,6 +1543,186 @@ export interface operations {
                 content?: never;
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPlantsPlantidPhotos: {
+        parameters: {
+            query?: {
+                offset?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoPageResponse"];
+                };
+            };
+            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postPlantsPlantidPhotos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["PhotoUploadPart"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedPhoto"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deletePhotosPhotoid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getPhotosPhotoidContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Type": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

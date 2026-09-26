@@ -7,6 +7,8 @@ import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
 import { editPlantControlId } from "./PlantSheet";
+
+export const plantPhotosControlId = (plantId: Journal.PlantId) => `plant-photos-${String(plantId)}`;
 import "./plant-card.css";
 import "./plant-history.css";
 
@@ -17,6 +19,7 @@ interface PlantCardBaseProps {
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
   readonly operationChange: OperationHistoryChange | undefined;
   readonly onEdit: (operation: Journal.Operation) => void;
+  readonly onViewPhotos: (plant: Journal.Plant) => void;
 }
 
 type PlantCardProps = PlantCardBaseProps &
@@ -103,7 +106,7 @@ const wateringPresentation = (
     case "unavailable":
       return {
         label: "Watering cadence unavailable",
-        symbol: "?",
+        symbol: "",
         delta: "",
         details: (
           <p class="watering-attention__unavailable-details">Insufficient watering operations.</p>
@@ -112,21 +115,21 @@ const wateringPresentation = (
     case "current":
       return {
         label: "Watering current",
-        symbol: "✓",
+        symbol: "",
         delta: `in ${formatDuration(watering.averageInterval - watering.elapsed)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "overdue":
       return {
         label: "Watering overdue",
-        symbol: "!",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "redAlert":
       return {
         label: "Watering red alert",
-        symbol: "×",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
@@ -202,34 +205,56 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{props.plant.details.species}</p>
             </div>
-            {props.kind !== "cemetery" && (
-              <div class="plant-card__actions">
-                <button
-                  id={editPlantControlId(props.plant.id)}
-                  class="edit-plant"
-                  type="button"
-                  aria-label={`Edit ${name()}`}
-                  title={`Edit ${name()}`}
-                  onClick={() => {
-                    props.onEditPlant(props.plant);
-                  }}
+            <div class="plant-card__actions">
+              <button
+                id={plantPhotosControlId(props.plant.id)}
+                class="inline-icon-action inline-icon-action--photos"
+                type="button"
+                aria-label={`Photos for ${name()}`}
+                title={`Photos for ${name()}`}
+                onClick={() => {
+                  props.onViewPhotos(props.plant);
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
                 >
-                  Edit
-                </button>
-                <button
-                  id={`archive-plant-${props.plant.id}`}
-                  class="archive-plant"
-                  type="button"
-                  aria-label={`Archive ${name()}`}
-                  title={`Archive ${name()}`}
-                  onClick={() => {
-                    props.onArchive();
-                  }}
-                >
-                  Archive
-                </button>
-              </div>
-            )}
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+              </button>
+              {props.kind !== "cemetery" && (
+                <>
+                  <button
+                    id={editPlantControlId(props.plant.id)}
+                    class="inline-icon-action inline-icon-action--edit"
+                    type="button"
+                    aria-label={`Edit ${name()}`}
+                    title={`Edit ${name()}`}
+                    onClick={() => {
+                      props.onEditPlant(props.plant);
+                    }}
+                  />
+                  <button
+                    id={`archive-plant-${props.plant.id}`}
+                    class="inline-icon-action inline-icon-action--archive"
+                    type="button"
+                    aria-label={`Archive ${name()}`}
+                    title={`Archive ${name()}`}
+                    onClick={() => {
+                      props.onArchive();
+                    }}
+                  />
+                </>
+              )}
+            </div>
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>

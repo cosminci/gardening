@@ -1,3 +1,5 @@
+@import "./form-fields.css";
+
 .plant-card {
   --plant-card-columns: 5.25rem minmax(13rem, 1.3fr) minmax(0, 3fr) 3.25rem;
 
@@ -97,6 +99,33 @@
 
 .watering-attention--redAlert .watering-attention__icon {
   background: var(--danger);
+}
+
+.watering-attention--unavailable .watering-attention__icon {
+  position: relative;
+}
+
+.watering-attention--unavailable .watering-attention__icon::before,
+.watering-attention--unavailable .watering-attention__icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+.watering-attention--unavailable .watering-attention__icon::before {
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 0.16rem solid currentcolor;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.watering-attention--unavailable .watering-attention__icon::after {
+  width: 0.16rem;
+  height: 1.7rem;
+  background: currentcolor;
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .watering-attention__delta {
@@ -199,23 +228,27 @@
   gap: 0.3rem;
 }
 
-.edit-plant,
-.archive-plant {
-  flex: 0 0 auto;
-  padding: 0.25rem 0.3rem;
-  border: 1px solid var(--line);
-  border-radius: 0.4rem;
-  background: transparent;
-  font-size: 0.65rem;
-  cursor: pointer;
+.plant-card__actions .inline-icon-action--photos svg {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
-.archive-plant {
+.plant-card__actions .inline-icon-action--archive {
   color: var(--danger);
 }
 
-.archive-plant:hover {
+.plant-card__actions .inline-icon-action--archive:hover,
+.plant-card__actions .inline-icon-action--archive:focus-visible {
+  border-color: var(--danger);
   background: #fae9e5;
+}
+
+.plant-card__actions .inline-icon-action--archive::before {
+  content: "\2020";
+  position: relative;
+  top: 0.22rem;
+  font-size: 1.55rem;
+  line-height: 1;
 }
 
 .plant-card h2 {

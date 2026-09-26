@@ -15,3 +15,6 @@ trait PlantJournalStore:
   def updateOperation(id: OperationId, details: OperationDetails): EditOperationResult
   def removeOperation(id: OperationId): OperationCompensationResult
   def restoreOperation(operation: Operation): OperationCompensationResult
+  def addPhoto(photo: PlantPhoto): AddPhotoResult
+  def removePhoto(id: PhotoId): RemovePhotoResult
+  def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult

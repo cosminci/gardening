@@ -18,13 +18,15 @@ import scala.util.Using
 
 class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
 
-  private val date       = Instant.parse("2026-01-01T00:00:00Z")
-  private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
-  private val sand3to5Id = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
-  private val lecaId     = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
-  private val vertabId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
-  private val neemOilId  = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
-  private val fullWindow = OperationWindow(offset = 0, size = 10)
+  private val date            = Instant.parse("2026-01-01T00:00:00Z")
+  private val perliteId       = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
+  private val sand3to5Id      = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000005"))
+  private val lecaId          = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000007"))
+  private val vertabId        = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
+  private val neemOilId       = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
+  private val fullWindow      = OperationWindow(offset = 0, size = 10)
+  private val fullPhotoWindow = PhotoWindow(offset = 0, size = 10)
+  private val photoId         = PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000001"))
 
   private val perliteSubstrate    = Substrate.of(List(SubstratePart(perliteId, share = 100))).getOrElse(fail("invalid perlite substrate"))
   private val sand3to5Substrate   = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid sand substrate"))
@@ -363,6 +365,7 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
       val details = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
       val older   = Operation(OperationId("o1"), PlantId("p1"), date, details)
       val newer   = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
+      val photo   = PlantPhoto(photoId, PlantId("p1"), date)
       val store   = SqlitePlantJournalStore.make(connection.transactor)
       assertEquals(
         migration.info().applied().toVector.map(_.getVersion),
@@ -370,12 +373,15 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
           MigrationVersion.fromVersion("1"),
           MigrationVersion.fromVersion("2"),
           MigrationVersion.fromVersion("3"),
-          MigrationVersion.fromVersion("4")
+          MigrationVersion.fromVersion("4"),
+          MigrationVersion.fromVersion("5")
         )
       )
       assertEquals(store.addOperation(older), LogOperationResult.Logged(older.id))
       assertEquals(store.addOperation(newer), LogOperationResult.Logged(newer.id))
       assertEquals(store.getOperations(PlantId("p1"), fullWindow), GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false)))
+      assertEquals(store.addPhoto(photo), AddPhotoResult.Added(photo))
+      assertEquals(store.getPhotos(PlantId("p1"), fullPhotoWindow), GetPhotosResult.Read(PhotoPage(Vector(photo), hasNextPage = false)))
 
   test("should round-trip a care observation without actions"):
     Using.resource(storeResource): resource =>
@@ -617,6 +623,12 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
       readOnlyStore.updatePlant(Plant(PlantId("p1"), defaultPlantDetails)) match
         case UpdatePlantResult.UpdateFailed(_) => ()
         case other                             => fail(s"expected UpdateFailed, got $other")
+      readOnlyStore.addPhoto(PlantPhoto(photoId, PlantId("p1"), date)) match
+        case AddPhotoResult.AddFailed(_) => ()
+        case other                       => fail(s"expected AddFailed, got $other")
+      readOnlyStore.removePhoto(photoId) match
+        case RemovePhotoResult.RemoveFailed(_) => ()
+        case other                             => fail(s"expected RemoveFailed, got $other")
 
   test("should return read failures when the journal schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
@@ -639,6 +651,107 @@ class SqlitePlantJournalStoreSeamIntegrationTest extends FunSuite:
       store.getAttentionSamples(size = 20) match
         case GetAttentionSamplesResult.ReadFailed(_) => ()
         case other                                   => fail(s"expected ReadFailed, got $other")
+      store.getPhotos(PlantId("p1"), fullPhotoWindow) match
+        case GetPhotosResult.ReadFailed(_) => ()
+        case other                         => fail(s"expected ReadFailed, got $other")
+
+  test("should add a photo for a plant and retrieve it"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val photo = PlantPhoto(photoId, PlantId("p1"), date)
+
+      val addResult = store.addPhoto(photo)
+      val getResult = store.getPhotos(PlantId("p1"), fullPhotoWindow)
+
+      assertEquals(addResult, AddPhotoResult.Added(photo))
+      assertEquals(getResult, GetPhotosResult.Read(PhotoPage(Vector(photo), hasNextPage = false)))
+
+  test("should return PlantMissing when adding a photo for an unknown plant"):
+    Using.resource(storeResource): resource =>
+      val store = resource.store
+      val photo = PlantPhoto(photoId, PlantId("no-such-plant"), date)
+
+      assertEquals(store.addPhoto(photo), AddPhotoResult.PlantMissing)
+
+  test("should remove a photo and return the removed record"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val photo = PlantPhoto(photoId, PlantId("p1"), date)
+      assertEquals(store.addPhoto(photo), AddPhotoResult.Added(photo))
+
+      val removed   = store.removePhoto(photoId)
+      val afterList = store.getPhotos(PlantId("p1"), fullPhotoWindow)
+
+      assertEquals(removed, RemovePhotoResult.Removed(photo))
+      assertEquals(afterList, GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)))
+
+  test("should return PhotoMissing when removing an unknown photo"):
+    Using.resource(storeResource): resource =>
+      assertEquals(resource.store.removePhoto(photoId), RemovePhotoResult.PhotoMissing)
+
+  test("should page photos by captured_at descending with an id tie-breaker"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val earliest = PlantPhoto(PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000001")), PlantId("p1"), date)
+      val middle1  = PlantPhoto(PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000002")), PlantId("p1"), date.plusMillis(100))
+      val middle2  = PlantPhoto(PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000003")), PlantId("p1"), date.plusMillis(100))
+      val latest   = PlantPhoto(PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000004")), PlantId("p1"), date.plusMillis(200))
+      Vector(earliest, middle1, middle2, latest).foreach(store.addPhoto)
+
+      val firstPage  = store.getPhotos(PlantId("p1"), PhotoWindow(offset = 0, size = 3))
+      val secondPage = store.getPhotos(PlantId("p1"), PhotoWindow(offset = 3, size = 3))
+
+      // order: latest (desc time), middle2 then middle1 (same time, desc id), earliest
+      assertEquals(firstPage, GetPhotosResult.Read(PhotoPage(Vector(latest, middle2, middle1), hasNextPage = true)))
+      assertEquals(secondPage, GetPhotosResult.Read(PhotoPage(Vector(earliest), hasNextPage = false)))
+
+  test("should report corrupt stored photo data as a read failure"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val photo = PlantPhoto(photoId, PlantId("p1"), date)
+      assertEquals(store.addPhoto(photo), AddPhotoResult.Added(photo))
+      execute(dataSource, "update plant_photo set captured_at = ? where id = ?", "not-an-instant", photoId.value.toString)
+
+      store.getPhotos(PlantId("p1"), fullPhotoWindow) match
+        case GetPhotosResult.ReadFailed(DatabaseCorruption(reason)) =>
+          assertEquals(reason.getMessage, "invalid stored photo capturedAt: not-an-instant")
+        case other => fail(s"expected ReadFailed(DatabaseCorruption), got $other")
+      store.removePhoto(photoId) match
+        case RemovePhotoResult.RemoveFailed(DatabaseCorruption(reason)) =>
+          assertEquals(reason.getMessage, "invalid stored photo capturedAt: not-an-instant")
+        case other => fail(s"expected RemoveFailed(DatabaseCorruption), got $other")
+
+  test("should report a corrupt stored photo id as a read failure"):
+    Using.resource(storeResource): resource =>
+      val dataSource = resource.dataSource
+      val store      = resource.store
+      seedPlant(dataSource, id = "p1")
+      val invalidId = "z" * 36
+      execute(
+        dataSource,
+        "insert into plant_photo (id, plant_id, captured_at) values (?, ?, ?)",
+        invalidId,
+        "p1",
+        date.toString
+      )
+
+      store.getPhotos(PlantId("p1"), fullPhotoWindow) match
+        case GetPhotosResult.ReadFailed(DatabaseCorruption(reason)) =>
+          assertEquals(reason.getMessage, s"invalid stored photo id: $invalidId")
+        case other => fail(s"expected ReadFailed(DatabaseCorruption), got $other")
+
+  test("should return an empty photo list for an unknown plant"):
+    Using.resource(storeResource): resource =>
+      val result = resource.store.getPhotos(PlantId("missing"), fullPhotoWindow)
+      assertEquals(result, GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)))
 
   test("should report archived count, date-range, and plant update errors when the schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>

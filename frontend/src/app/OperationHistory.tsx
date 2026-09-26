@@ -159,6 +159,9 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                       <table>
                         <thead>
                           <tr>
+                            <th scope="col">
+                              <span class="visually-hidden">Edit</span>
+                            </th>
                             <th scope="col">Date</th>
                             <th scope="col">Type</th>
                             <th scope="col">Details</th>
@@ -171,18 +174,10 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                               <tr
                                 class={`operation-history__row operation--${operation.details.kind}`}
                               >
-                                <td>
-                                  <time dateTime={operation.date}>
-                                    {Labels.formatLocalDate(operation.date)}
-                                  </time>
-                                </td>
-                                <td>
-                                  <span class="operation__kind">
-                                    {Labels.operationKindLabel(operation.details)}
-                                  </span>
+                                <td class="operation-history__edit-cell">
                                   <button
                                     id={editOperationControlId(operation.id)}
-                                    class="operation__edit"
+                                    class="inline-icon-action inline-icon-action--edit"
                                     type="button"
                                     aria-label={Labels.operationEditLabel(
                                       operation,
@@ -192,9 +187,17 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                                     onClick={() => {
                                       props.onEdit(operation);
                                     }}
-                                  >
-                                    Edit
-                                  </button>
+                                  />
+                                </td>
+                                <td>
+                                  <time dateTime={operation.date}>
+                                    {Labels.formatLocalDate(operation.date)}
+                                  </time>
+                                </td>
+                                <td>
+                                  <span class="operation__kind">
+                                    {Labels.operationKindLabel(operation.details)}
+                                  </span>
                                 </td>
                                 <td>
                                   <For

@@ -121,21 +121,15 @@ select:disabled {
 }
 
 .inline-icon-action--edit::before {
-  content: "\1f527";
-  font-size: 0.72rem;
+  content: "\270e";
+  font-size: 0.85rem;
   line-height: 1;
 }
 
-.inline-icon-action--save-mix::before {
-  content: "\1f4be";
-  font-size: 0.72rem;
-  line-height: 1;
-}
-
-.inline-icon-action--load-mix::before {
-  content: "\1f4c2";
-  font-size: 0.72rem;
-  line-height: 1;
+.inline-icon-action--save-mix svg,
+.inline-icon-action--load-mix svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .inline-icon-action--save-mix:disabled,

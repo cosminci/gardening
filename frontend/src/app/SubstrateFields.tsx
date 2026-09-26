@@ -156,7 +156,21 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           onClick={() => {
             props.onSaveMix();
           }}
-        />
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+        </button>
         <button
           id={Controls.loadSubstrateMixControlId}
           class="inline-icon-action inline-icon-action--load-mix"
@@ -165,7 +179,19 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           onClick={() => {
             props.onLoadMix();
           }}
-        />
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+        </button>
         <button
           id={Controls.addSubstrateComponentControlId}
           class="compact-action catalog-action--define"

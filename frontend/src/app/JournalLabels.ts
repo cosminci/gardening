@@ -92,6 +92,13 @@ export const formatLocalDate = (value: string) => {
   return `${day}.${month}.${year}`;
 };
 
+export const formatLocalDateTime = (value: string) => {
+  const date = new Date(value);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${formatLocalDate(value)} ${hours}:${minutes}`;
+};
+
 export const formatRecentDate = (value: string) => {
   const date = new Date(value);
   const day = date.getDate();

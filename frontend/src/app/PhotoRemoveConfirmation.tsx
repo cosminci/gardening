@@ -1,18 +1,19 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
-import { plantDisplayName } from "./JournalLabels";
-import "./archive-confirmation.css";
+import { formatLocalDateTime } from "./JournalLabels";
+import "./photo-remove-confirmation.css";
 
-interface ArchiveConfirmationProps {
-  readonly plant: Journal.Plant;
+interface PhotoRemoveConfirmationProps {
+  readonly photo: Journal.PlantPhoto;
   readonly completed: boolean;
   readonly onConfirm: () => Promise<string | undefined>;
   readonly onCancel: () => void;
 }
 
-export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) => {
-  const name = () => plantDisplayName(props.plant);
+export const removePhotoControlId = (photoId: Journal.PhotoId) => `remove-photo-${String(photoId)}`;
+
+export const PhotoRemoveConfirmation: Component<PhotoRemoveConfirmationProps> = (props) => {
   let warning!: HTMLElement;
   let cancelButton!: HTMLButtonElement;
   let confirmButton!: HTMLButtonElement;
@@ -68,32 +69,32 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
     const target =
       !props.completed &&
       previousFocus?.isConnected === true &&
-      previousFocus.id === `archive-plant-${props.plant.id}`
+      previousFocus.id === removePhotoControlId(props.photo.id)
         ? previousFocus
-        : document.getElementById("garden-toggle");
+        : document.getElementById("photos-sheet-close");
     if (target instanceof HTMLElement) target.focus();
   });
 
   return (
-    <div class="archive-confirmation-layer">
-      <div class="archive-confirmation-layer__scrim" aria-hidden="true" />
+    <div class="photo-remove-confirmation-layer">
+      <div class="photo-remove-confirmation-layer__scrim" aria-hidden="true" />
       <section
         ref={(element) => {
           warning = element;
         }}
-        class="archive-confirmation"
+        class="photo-remove-confirmation"
         role="alertdialog"
         aria-modal="true"
-        aria-label={`Move ${name()} to cemetery`}
-        aria-describedby="archive-consequence"
+        aria-label={`Remove photo from ${formatLocalDateTime(props.photo.capturedAt)}`}
+        aria-describedby="remove-photo-consequence"
         tabIndex={-1}
       >
-        <span class="archive-confirmation__warning" aria-hidden="true">
+        <span class="photo-remove-confirmation__warning" aria-hidden="true">
           !
         </span>
-        <h2>Move {name()} to cemetery?</h2>
-        <p id="archive-consequence">
-          This moves {name()} to the cemetery permanently. It cannot be undone.
+        <h2>Remove photo?</h2>
+        <p id="remove-photo-consequence">
+          This permanently removes the photo. Removal cannot be undone.
         </p>
         <Show when={error()}>
           {(message) => (
@@ -102,7 +103,7 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
             </p>
           )}
         </Show>
-        <div class="archive-confirmation__actions">
+        <div class="photo-remove-confirmation__actions">
           <button
             ref={(element) => {
               cancelButton = element;
@@ -121,10 +122,10 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
             }}
             type="button"
             disabled={pending()}
-            class="archive-confirmation__commit"
+            class="photo-remove-confirmation__commit"
             onClick={() => void confirm()}
           >
-            Move to cemetery
+            Remove permanently
           </button>
         </div>
       </section>

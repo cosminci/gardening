@@ -14,9 +14,11 @@ import type * as Journal from "../domain/Journal";
 import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
+import type { PlantPhotoClient } from "../domain/PlantPhoto";
 import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
 import type { SubstrateClient } from "../domain/SubstrateCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
+import { PlantPhotosSheet } from "./PlantPhotosSheet";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
 import { DeleteSubstrateMixConfirmation } from "./DeleteSubstrateMixConfirmation";
 import { JournalHeader } from "./JournalHeader";
@@ -35,6 +37,7 @@ interface AppProps {
   readonly attention: PlantAttentionFeed;
   readonly substrates: SubstrateClient;
   readonly pesticideCatalog: PesticideClient;
+  readonly photos: PlantPhotoClient;
 }
 
 interface GardenHistory {
@@ -65,6 +68,7 @@ export const App: Component<AppProps> = (props) => {
   const [ready, setReady] = createSignal(false);
   const [archiveTarget, setArchiveTarget] = createSignal<Journal.Plant>();
   const [archiveCompleted, setArchiveCompleted] = createSignal(false);
+  const [photosTarget, setPhotosTarget] = createSignal<Journal.Plant>();
   const [substrateComponents, setSubstrateComponents] = createSignal<
     readonly Journal.SubstrateComponent[]
   >([]);
@@ -587,6 +591,9 @@ export const App: Component<AppProps> = (props) => {
                             props.operations.getOperations(entry().plant.id, window)
                           }
                           operationChange={operationChange()}
+                          onViewPhotos={(plant) => {
+                            setPhotosTarget(plant);
+                          }}
                           onLog={() => {
                             setSaveError(undefined);
                             setFormTarget({ kind: "log", plantId: entry().plant.id });
@@ -619,6 +626,9 @@ export const App: Component<AppProps> = (props) => {
                             props.operations.getOperations(entry().plant.id, window)
                           }
                           operationChange={operationChange()}
+                          onViewPhotos={(plant) => {
+                            setPhotosTarget(plant);
+                          }}
                           onEdit={(operation) => {
                             setSaveError(undefined);
                             setFormTarget({ kind: "edit", operation });
@@ -701,6 +711,17 @@ export const App: Component<AppProps> = (props) => {
             onConfirm={() => confirmArchive(plant)}
             onCancel={() => {
               setArchiveTarget(undefined);
+            }}
+          />
+        )}
+      </Show>
+      <Show when={photosTarget()} keyed>
+        {(plant) => (
+          <PlantPhotosSheet
+            plant={plant}
+            photos={props.photos}
+            onCancel={() => {
+              setPhotosTarget(undefined);
             }}
           />
         )}
