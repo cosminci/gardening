@@ -77,12 +77,8 @@ object Operations:
                   updatePlantIfOperationIsLatestRepot(operation)
                     .compensateWith(store.removeOperation(operation.id))
                     .tap(_.left.foreach(reason => log.error("log operation", reason)))
-                    .fold(
-                      LogOperationResult.LoggingFailed.apply,
-                      _ =>
-                        recordOperationMetrics(plant, details)
-                        res
-                    )
+                    .tap(_.foreach(_ => recordOperationMetrics(plant, details)))
+                    .fold(LogOperationResult.LoggingFailed.apply, _ => res)
                 case failure: LogOperationResult.LoggingFailed => failure.tap(_ => log.error("log operation", failure.reason))
                 case other                                     => other
 

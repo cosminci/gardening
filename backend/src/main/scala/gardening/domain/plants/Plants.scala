@@ -54,7 +54,7 @@ object Plants:
             store.addPlant(plant) match
               case AddPlantResult.Added =>
                 log.info(s"plant created id=${plant.id.value}")
-                plant.details.substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
+                substrate.parts.foreach(part => metrics.incrementSubstrateComponent(part.componentId))
                 CreatePlantResult.Created(plant)
               case AddPlantResult.AddFailed(reason) => CreatePlantResult.CreateFailed(reason).tap(_ => log.error("create plant", reason))
 

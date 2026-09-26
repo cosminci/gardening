@@ -28,9 +28,7 @@ object PlantAttentionMonitor:
       log: Logger^,
       metrics: PlantAttentionMonitorMetricsApi^
   ): Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
-    computeProjection.map: projection =>
-      recordWateringMetrics(projection)
-      new LivePlantAttentionMonitor(projection)
+    computeProjection.tap(_.foreach(recordWateringMetrics)).map(new LivePlantAttentionMonitor(_))
 
   private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using
       store: PlantAttentionStore^,
