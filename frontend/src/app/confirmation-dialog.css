@@ -1,4 +1,4 @@
-.substrate-component-archive-confirmation-layer {
+.confirmation-dialog-layer {
   position: fixed;
   z-index: 20;
   inset: 0;
@@ -7,13 +7,13 @@
   padding: 1rem;
 }
 
-.substrate-component-archive-confirmation-layer__scrim {
+.confirmation-dialog-layer__scrim {
   position: absolute;
   inset: 0;
   background: rgb(18 38 31 / 65%);
 }
 
-.substrate-component-archive-confirmation {
+.confirmation-dialog {
   position: relative;
   width: min(30rem, 100%);
   padding: 2rem;
@@ -23,7 +23,7 @@
   box-shadow: var(--shadow);
 }
 
-.substrate-component-archive-confirmation__warning {
+.confirmation-dialog__warning {
   display: grid;
   width: 3.5rem;
   height: 3.5rem;
@@ -36,14 +36,14 @@
   font-weight: 800;
 }
 
-.substrate-component-archive-confirmation__actions {
+.confirmation-dialog__actions {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-.substrate-component-archive-confirmation__actions button {
+.confirmation-dialog__actions button {
   padding: 0.6rem 1rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
@@ -51,12 +51,11 @@
   cursor: pointer;
 }
 
-.substrate-component-archive-confirmation__actions button:disabled {
+.confirmation-dialog__actions button:disabled {
   cursor: wait;
 }
 
-.substrate-component-archive-confirmation__actions
-  .substrate-component-archive-confirmation__commit {
+.confirmation-dialog__actions .confirmation-dialog__commit {
   border-color: var(--danger);
   background: var(--danger);
   color: white;

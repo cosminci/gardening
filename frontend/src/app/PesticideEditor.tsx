@@ -26,9 +26,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
   let panel!: HTMLElement;
   const initial = untrack(() => props.pesticide);
   const [name, setName] = createSignal<string>(initial?.data.name ?? "");
-  const [type, setType] = createSignal<Journal.PesticideType>(
-    initial?.data.pesticideType ?? "fungicide",
-  );
+  const [type, setType] = createSignal<Journal.PesticideType>(initial?.data.type ?? "fungicide");
   const [info, setInfo] = createSignal(initial?.data.maybeInfo ?? "");
   const [error, setError] = createSignal<string>();
 
@@ -41,7 +39,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
     const trimmedInfo = info().trim();
     const data = {
       name: Journal.pesticideName(trimmedName),
-      pesticideType: type(),
+      type: type(),
       maybeInfo: trimmedInfo === "" ? null : Journal.pesticideInfo(trimmedInfo),
     };
     const result =

@@ -1,19 +1,19 @@
 import type * as Journal from "./Journal";
 
 export interface OperationClient {
-  getOperationDates(plantId: Journal.PlantId): Promise<Journal.GetOperationDatesResult>;
+  getOperationDates(plant: Journal.PlantId): Promise<Journal.GetOperationDatesResult>;
   getOperations(
-    plantId: Journal.PlantId,
+    plant: Journal.PlantId,
     window: Journal.OperationWindow,
   ): Promise<Journal.GetOperationsResult>;
   logOperation(
-    plantId: Journal.PlantId,
+    plant: Journal.PlantId,
     date: Journal.Instant,
     details: Journal.OperationDetails,
   ): Promise<Journal.LogOperationResult>;
   editOperation(
-    operationId: Journal.OperationId,
+    operation: Journal.OperationId,
     details: Journal.OperationDetails,
   ): Promise<Journal.EditOperationResult>;
-  deleteOperation(operationId: Journal.OperationId): Promise<Journal.DeleteOperationResult>;
+  deleteOperation(operation: Journal.OperationId): Promise<Journal.DeleteOperationResult>;
 }

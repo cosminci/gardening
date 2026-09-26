@@ -12,7 +12,7 @@ const unavailableFicusAttention: Journal.AttentionProjection = {
   measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
   plants: [
     {
-      plantId: JournalFixtures.ficus().id,
+      plant: JournalFixtures.ficus().id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     },
   ],
@@ -385,7 +385,7 @@ Vitest.describe("changing the journal", () => {
     const bothPlantsAttention: Journal.AttentionProjection = {
       measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
       plants: [ficusPlant, monsteraPlant].map((plant) => ({
-        plantId: plant.id,
+        plant: plant.id,
         watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
       })),
     };
@@ -453,7 +453,7 @@ Vitest.describe("changing the journal", () => {
       const bothPlantsAttention: Journal.AttentionProjection = {
         measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
         plants: [ficusPlant, monsteraPlant].map((plant) => ({
-          plantId: plant.id,
+          plant: plant.id,
           watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
         })),
       };
@@ -461,7 +461,7 @@ Vitest.describe("changing the journal", () => {
         measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
         plants: [
           {
-            plantId: monsteraPlant.id,
+            plant: monsteraPlant.id,
             watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
           },
         ],
@@ -1223,7 +1223,7 @@ Vitest.describe("changing the journal", () => {
         id: neemId,
         data: {
           name: Journal.pesticideName("Neem oil"),
-          pesticideType: "insecticide" as const,
+          type: "insecticide" as const,
           maybeInfo: null,
         },
         status: "active" as const,
@@ -1232,7 +1232,7 @@ Vitest.describe("changing the journal", () => {
         id: Journal.pesticideId("00000000-0000-4000-8001-000000000006"),
         data: {
           name: Journal.pesticideName("Spinosad"),
-          pesticideType: "insecticide" as const,
+          type: "insecticide" as const,
           maybeInfo: null,
         },
         status: "active" as const,
@@ -1240,12 +1240,12 @@ Vitest.describe("changing the journal", () => {
     ];
     const addedPesticide: Journal.PesticideData = {
       name: Journal.pesticideName("Insecticidal soap"),
-      pesticideType: "insecticide",
+      type: "insecticide",
       maybeInfo: null,
     };
     const editedPesticide: Journal.PesticideData = {
       name: Journal.pesticideName("Neem concentrate"),
-      pesticideType: "treatment",
+      type: "treatment",
       maybeInfo: Journal.pesticideInfo("Dilute first"),
     };
     const existingOperation = JournalFixtures.care({
@@ -1370,7 +1370,7 @@ Vitest.describe("changing the journal", () => {
         id: soapId,
         data: {
           name: Journal.pesticideName("Insecticidal soap"),
-          pesticideType: "insecticide" as const,
+          type: "insecticide" as const,
           maybeInfo: null,
         },
         status: "active" as const,
@@ -1386,7 +1386,7 @@ Vitest.describe("changing the journal", () => {
               id: neemId,
               data: {
                 name: Journal.pesticideName("Neem oil"),
-                pesticideType: "insecticide",
+                type: "insecticide",
                 maybeInfo: null,
               },
               status: "active",
@@ -1400,7 +1400,7 @@ Vitest.describe("changing the journal", () => {
             id: neemId,
             data: {
               name: Journal.pesticideName("Neem oil"),
-              pesticideType: "insecticide",
+              type: "insecticide",
               maybeInfo: null,
             },
             status: "archived",
@@ -1457,7 +1457,7 @@ Vitest.describe("changing the journal", () => {
       id: neemId,
       data: {
         name: Journal.pesticideName("Neem oil"),
-        pesticideType: "insecticide" as const,
+        type: "insecticide" as const,
         maybeInfo: null,
       },
       status: "active" as const,
@@ -1521,7 +1521,7 @@ Vitest.describe("changing the journal", () => {
               id: neemId,
               data: {
                 name: Journal.pesticideName("Neem oil"),
-                pesticideType: "insecticide",
+                type: "insecticide",
                 maybeInfo: null,
               },
               status: "active",
@@ -1564,7 +1564,7 @@ Vitest.describe("changing the journal", () => {
       const ficusPlant = JournalFixtures.ficus();
       const monsteraPlant = JournalFixtures.monstera();
       const ficusUrgentAttention: Journal.AttentionSample = {
-        plantId: ficusPlant.id,
+        plant: ficusPlant.id,
         watering: {
           kind: "redAlert",
           sampleCount: 5,
@@ -1573,7 +1573,7 @@ Vitest.describe("changing the journal", () => {
         },
       };
       const monsteraCurrentAttention: Journal.AttentionSample = {
-        plantId: monsteraPlant.id,
+        plant: monsteraPlant.id,
         watering: {
           kind: "current",
           sampleCount: 5,
@@ -1586,7 +1586,7 @@ Vitest.describe("changing the journal", () => {
         plants: [ficusUrgentAttention, monsteraCurrentAttention],
       };
       const ficusCurrentAttention: Journal.AttentionSample = {
-        plantId: ficusPlant.id,
+        plant: ficusPlant.id,
         watering: {
           kind: "current",
           sampleCount: 5,
@@ -1595,7 +1595,7 @@ Vitest.describe("changing the journal", () => {
         },
       };
       const monsteraUrgentAttention: Journal.AttentionSample = {
-        plantId: monsteraPlant.id,
+        plant: monsteraPlant.id,
         watering: {
           kind: "redAlert",
           sampleCount: 5,
@@ -1775,7 +1775,7 @@ Vitest.describe("changing the journal", () => {
             id: neemId,
             data: {
               name: Journal.pesticideName("Neem oil"),
-              pesticideType: "insecticide",
+              type: "insecticide",
               maybeInfo: null,
             },
             status: "active",

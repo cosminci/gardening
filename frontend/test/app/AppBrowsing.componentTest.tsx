@@ -24,7 +24,7 @@ const unavailableFicusAttention: Journal.AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
   plants: [
     {
-      plantId: JournalFixtures.ficus().id,
+      plant: JournalFixtures.ficus().id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     },
   ],
@@ -55,7 +55,7 @@ describe("browsing the journal", () => {
         id: neemId,
         data: {
           name: pesticideName("Neem oil"),
-          pesticideType: "insecticide" as const,
+          type: "insecticide" as const,
           maybeInfo: null,
         },
         status: "active" as const,
@@ -66,11 +66,11 @@ describe("browsing the journal", () => {
       window: OperationWindow;
     }[] = [];
     const monsteraUnavailableAttention: AttentionSample = {
-      plantId: JournalFixtures.monstera().id,
+      plant: JournalFixtures.monstera().id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     };
     const ficusRedAlertAttention: AttentionSample = {
-      plantId: JournalFixtures.ficus().id,
+      plant: JournalFixtures.ficus().id,
       watering: {
         kind: "redAlert",
         sampleCount: 5,
@@ -154,7 +154,7 @@ describe("browsing the journal", () => {
       },
     };
     const unknownUnavailableAttention: AttentionSample = {
-      plantId: unknownPlant.id,
+      plant: unknownPlant.id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     };
     const urgentPlant = {
@@ -166,7 +166,7 @@ describe("browsing the journal", () => {
       },
     };
     const urgentRedAlertAttention: AttentionSample = {
-      plantId: urgentPlant.id,
+      plant: urgentPlant.id,
       watering: {
         kind: "redAlert",
         sampleCount: 5,
@@ -183,7 +183,7 @@ describe("browsing the journal", () => {
       },
     };
     const recentlyWateredCurrentAttention: AttentionSample = {
-      plantId: recentlyWateredPlant.id,
+      plant: recentlyWateredPlant.id,
       watering: {
         kind: "current",
         sampleCount: 5,
@@ -431,11 +431,11 @@ describe("browsing the journal", () => {
     };
     const firstOperation = {
       ...JournalFixtures.care({ id: "first", date: "2026-02-01T10:00:00Z", moisture: "dry" }),
-      plantId: archivedPlant.id,
+      plant: archivedPlant.id,
     };
     const latestOperation = {
       ...JournalFixtures.care({ id: "last", date: "2026-04-03T18:00:00Z", moisture: "wet" }),
-      plantId: archivedPlant.id,
+      plant: archivedPlant.id,
     };
     const base = JournalFixtures.buildJournal({
       attentionProjection: unavailableFicusAttention,
@@ -1208,7 +1208,7 @@ describe("browsing the journal", () => {
 
   it("should fail the journal load when current plants cannot be read or pushed attention is unmatched", async () => {
     const unrelatedSample = {
-      plantId: JournalFixtures.monstera().id,
+      plant: JournalFixtures.monstera().id,
       watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
     };
     const mismatchedAttention: Journal.AttentionProjection = {
@@ -1216,7 +1216,7 @@ describe("browsing the journal", () => {
       plants: [...unavailableFicusAttention.plants, unrelatedSample],
     };
     const ficusSample: Journal.AttentionSample = {
-      plantId: JournalFixtures.ficus().id,
+      plant: JournalFixtures.ficus().id,
       watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
     };
     const duplicateAttention: Journal.AttentionProjection = {
@@ -1267,7 +1267,7 @@ describe("browsing the journal", () => {
       measuredAt: Journal.instant("2026-01-01T00:00:00Z"),
       plants: [
         {
-          plantId: ficusPlant.id,
+          plant: ficusPlant.id,
           watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
         },
       ],
@@ -1293,11 +1293,11 @@ describe("browsing the journal", () => {
       measuredAt: Journal.instant("2026-01-02T00:00:00Z"),
       plants: [
         {
-          plantId: ficusPlant.id,
+          plant: ficusPlant.id,
           watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
         },
         {
-          plantId: monsteraPlant.id,
+          plant: monsteraPlant.id,
           watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
         },
       ],

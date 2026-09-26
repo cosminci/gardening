@@ -27,7 +27,7 @@ const neem: Journal.Pesticide = {
   id: neemId,
   data: {
     name: Journal.pesticideName("Neem oil"),
-    pesticideType: "insecticide",
+    type: "insecticide",
     maybeInfo: Journal.pesticideInfo("Dilute before use.\nApply weekly."),
   },
   status: "active",
@@ -36,7 +36,7 @@ const soap: Journal.Pesticide = {
   id: soapId,
   data: {
     name: Journal.pesticideName("Insecticidal soap"),
-    pesticideType: "insecticide",
+    type: "insecticide",
     maybeInfo: null,
   },
   status: "active",

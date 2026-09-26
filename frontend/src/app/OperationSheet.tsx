@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
+import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
@@ -13,12 +14,12 @@ import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
 
 export type OperationTarget =
-  | { readonly kind: "log"; readonly plantId: Journal.PlantId }
+  | { readonly kind: "log"; readonly plant: Journal.PlantId }
   | { readonly kind: "edit"; readonly operation: Journal.Operation };
 
 export const operationControlId = (target: OperationTarget) =>
   target.kind === "log"
-    ? Controls.logOperationControlId(target.plantId)
+    ? Controls.logOperationControlId(target.plant)
     : Controls.editOperationControlId(target.operation.id);
 
 interface OperationSheetProps {
@@ -101,7 +102,7 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   const [substrateArchiveCompleted, setSubstrateArchiveCompleted] = createSignal(false);
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
-  const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
+  useBackgroundBarrier();
 
   const waitForSheetTransition = () =>
     new Promise<void>((resolve) => {
@@ -274,17 +275,11 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   };
 
   onMount(() => {
-    background.forEach((element) => {
-      element.inert = true;
-    });
     window.addEventListener("keydown", closeOnEscape);
     dialog.focus();
   });
 
   onCleanup(() => {
-    background.forEach((element) => {
-      element.inert = false;
-    });
     window.removeEventListener("keydown", closeOnEscape);
     document.getElementById(returnFocusId())?.focus();
   });

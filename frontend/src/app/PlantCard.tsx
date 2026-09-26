@@ -8,7 +8,7 @@ import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
 import { editPlantControlId } from "./PlantSheet";
 
-export const plantPhotosControlId = (plantId: Journal.PlantId) => `plant-photos-${String(plantId)}`;
+export const plantPhotosControlId = (id: Journal.PlantId) => `plant-photos-${String(id)}`;
 import "./plant-card.css";
 import "./plant-history.css";
 
@@ -140,10 +140,10 @@ const WateringStatus: Component<{
   watering: Journal.WateringAttention;
   measuredAt: Journal.Instant;
   plantName: string;
-  plantId: Journal.PlantId;
+  plant: Journal.PlantId;
 }> = (props) => {
   const presentation = () => wateringPresentation(props.watering, props.measuredAt);
-  const detailsId = () => `watering-attention-${props.plantId}`;
+  const detailsId = () => `watering-attention-${props.plant}`;
 
   return (
     <aside class={`watering-attention watering-attention--${props.watering.kind}`}>
@@ -191,7 +191,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
             watering={props.watering}
             measuredAt={props.measuredAt}
             plantName={name()}
-            plantId={props.plant.id}
+            plant={props.plant.id}
           />
         ) : (
           <aside class="attention-pending" aria-label={`Attention pending for ${name()}`}>
@@ -302,7 +302,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
       </div>
       <Show when={props.operationPage.hasNextPage}>
         <OperationHistory
-          plantId={props.plant.id}
+          plant={props.plant.id}
           substrateComponents={props.substrateComponents}
           pesticides={props.pesticides}
           getOperations={props.getOperations}

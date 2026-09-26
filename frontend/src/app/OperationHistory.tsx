@@ -10,7 +10,7 @@ export type OperationHistoryChange =
   | { readonly kind: "edited"; readonly operation: Journal.Operation };
 
 interface OperationHistoryProps {
-  readonly plantId: Journal.PlantId;
+  readonly plant: Journal.PlantId;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
@@ -72,7 +72,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
 
   createEffect(
     on(
-      () => props.plantId,
+      () => props.plant,
       () => {
         latestRequest += 1;
         requestedPage = 1;
@@ -117,7 +117,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   return (
     <section class="operation-history">
       <div
-        id={`operation-history-${props.plantId}`}
+        id={`operation-history-${props.plant}`}
         class="operation-history__disclosure"
         classList={{ "operation-history__disclosure--expanded": expanded() }}
         aria-label="Operation history"
@@ -263,7 +263,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
         type="button"
         aria-label={expanded() ? "Hide operation history" : "Show operation history"}
         aria-expanded={expanded()}
-        aria-controls={`operation-history-${props.plantId}`}
+        aria-controls={`operation-history-${props.plant}`}
         onClick={toggle}
       >
         <span aria-hidden="true">

@@ -69,7 +69,7 @@ export const care = ({
   pesticides?: ReadonlySet<Journal.PesticideId>;
 }): Journal.Operation => ({
   id: Journal.operationId(id),
-  plantId: Journal.plantId("p1"),
+  plant: Journal.plantId("p1"),
   date: Journal.instant(date),
   details: {
     kind: "care",
@@ -82,7 +82,7 @@ export const care = ({
 
 export const repot = (id: string, date: string): Journal.Operation => ({
   id: Journal.operationId(id),
-  plantId: Journal.plantId("p1"),
+  plant: Journal.plantId("p1"),
   date: Journal.instant(date),
   details: {
     kind: "repot",
@@ -180,7 +180,7 @@ export const buildJournal = ({
   const defaultPlants = [ficus(), monstera()].filter(
     (plant) =>
       attentionProjection === undefined ||
-      attentionProjection.plants.some((sample) => sample.plantId === plant.id),
+      attentionProjection.plants.some((sample) => sample.plant === plant.id),
   );
   const plantResponses = getPlantsResults ?? ([{ kind: "read", plants: defaultPlants }] as const);
   const operationReads = new Map<string, number>();

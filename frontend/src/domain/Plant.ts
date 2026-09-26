@@ -4,9 +4,9 @@ export interface PlantClient {
   getPlants(status?: Journal.PlantStatus): Promise<Journal.GetPlantsResult>;
   createPlant(details: Journal.NewPlantDetails): Promise<Journal.CreatePlantResult>;
   getArchivedCount(): Promise<Journal.GetArchivedCountResult>;
-  archivePlant(plantId: Journal.PlantId): Promise<Journal.ArchivePlantResult>;
+  archivePlant(plant: Journal.PlantId): Promise<Journal.ArchivePlantResult>;
   editPlant(
-    plantId: Journal.PlantId,
+    plant: Journal.PlantId,
     details: Journal.NewPlantDetails,
   ): Promise<Journal.EditPlantResult>;
 }

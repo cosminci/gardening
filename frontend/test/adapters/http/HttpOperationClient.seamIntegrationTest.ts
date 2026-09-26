@@ -122,7 +122,7 @@ describe("HttpOperationClient", () => {
     const expectedOperations = [
       {
         id: Journal.operationId("o1"),
-        plantId: Journal.plantId("p1"),
+        plant: Journal.plantId("p1"),
         date: "2026-01-01T00:00:00Z",
         details: {
           kind: "care",
@@ -134,7 +134,7 @@ describe("HttpOperationClient", () => {
       },
       {
         id: Journal.operationId("o2"),
-        plantId: Journal.plantId("p1"),
+        plant: Journal.plantId("p1"),
         date: "2026-01-02T00:00:00Z",
         details: {
           kind: "care",

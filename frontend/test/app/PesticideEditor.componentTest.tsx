@@ -8,7 +8,7 @@ const neem = {
   id: neemId,
   data: {
     name: pesticideName("Neem oil"),
-    pesticideType: "insecticide" as const,
+    type: "insecticide" as const,
     maybeInfo: pesticideInfo("Dilute before use.\nApply weekly."),
   },
   status: "active" as const,
@@ -64,7 +64,7 @@ Vitest.describe("PesticideEditor", () => {
     });
     Vitest.expect(onAdd).toHaveBeenLastCalledWith({
       name: pesticideName("Soap"),
-      pesticideType: "insecticide",
+      type: "insecticide",
       maybeInfo: pesticideInfo("Dilute first.\nApply weekly."),
     });
   });
@@ -116,7 +116,7 @@ Vitest.describe("PesticideEditor", () => {
       });
       Vitest.expect(onEdit).toHaveBeenLastCalledWith(neemId, {
         name: pesticideName("Neem concentrate"),
-        pesticideType: "treatment",
+        type: "treatment",
         maybeInfo: pesticideInfo("Use weekly."),
       });
     },

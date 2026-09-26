@@ -74,10 +74,10 @@ export const makeHttpPlantClient = (
       }
     },
 
-    async editPlant(plantId, details): Promise<Journal.EditPlantResult> {
+    async editPlant(plant, details): Promise<Journal.EditPlantResult> {
       try {
         const { error, response } = await client.PATCH("/plants/{plantId}", {
-          params: { path: { plantId } },
+          params: { path: { plantId: plant } },
           headers: { "Content-Type": "application/json-patch+json" },
           body: [
             {
