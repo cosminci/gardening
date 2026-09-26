@@ -18,6 +18,10 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PlantsComponentTest extends munit.FunSuite with TestImplicits:
 
+  private given metrics: PlantsMetricsApi = new PlantsMetricsApi:
+    def setPlantsCount(status: PlantStatus, count: Long): Unit             = ()
+    def incrementSubstrateComponent(component: SubstrateComponentId): Unit = ()
+
   private val date       = Instant.parse("2026-01-01T00:00:00Z")
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
   private val pineBarkId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000004"))

@@ -65,7 +65,8 @@ lazy val root = (project in file("."))
     coverageMinimumBranchTotal := 100,
     coverageExcludedPackages := List(
       "gardening\\.app\\..*", // composition root; exercised by the packaged runtime, not unit tests
-      "gardening\\.adapters\\.http\\.OpenApiDocs" // build-time OpenAPI projection
+      "gardening\\.adapters\\.http\\.OpenApiDocs", // build-time OpenAPI projection
+      "gardening\\.adapters\\.prometheus\\..*" // metrics wiring; not unit-tested, same as logging
     ).mkString(";"),
     Test / fork := true,
     // Match the packaged runtime's JVM flags (see image.ts) so the forked test JVM doesn't print the

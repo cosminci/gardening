@@ -1,14 +1,16 @@
 package gardening.app
 
 import gardening.adapters.persistence.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
+import gardening.adapters.prometheus.{PrometheusOperationsMetrics, PrometheusPlantAttentionMonitorMetrics, PrometheusPlantsMetrics}
 import gardening.adapters.storage.FilePhotoContentStore
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.domain.{Logger, PlantUpdateLock}
-import gardening.domain.attention.PlantAttentionMonitor
-import gardening.domain.operations.Operations
+import gardening.domain.attention.{PlantAttentionMonitor, PlantAttentionMonitorMetricsApi}
+import gardening.domain.operations.{Operations, OperationsMetricsApi}
 import gardening.domain.pesticide.PesticideCatalog
-import gardening.domain.plants.Plants
+import gardening.domain.plants.{Plants, PlantsMetricsApi}
 import gardening.domain.substrate.SubstrateCatalog
+import io.prometheus.metrics.model.registry.PrometheusRegistry
 import ox.{Ox, discard, forkDiscard, sleep}
 
 import java.nio.file.Path
@@ -23,13 +25,19 @@ final case class Programs(
 
 object Programs:
 
-  def make(resources: AppResources, photosDir: Path)(using Ox)(using log: Logger): Either[Throwable, Programs] =
+  def make(resources: AppResources, photosDir: Path, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
     val plantStore     = SqlitePlantStore.make(resources.transactor)
     val operationStore = SqliteOperationStore.make(resources.transactor)
     val contentStore   = FilePhotoContentStore.make(photosDir)
     val substrateStore = SqliteSubstrateStore.make(resources.transactor)
     val pesticideStore = SqlitePesticideStore.make(resources.transactor)
     val plantLock      = PlantUpdateLock.make
+
+    val (plantsMetrics, substrateComponentUsageTotal) = PrometheusPlantsMetrics.make(registry)
+    given PlantsMetricsApi                            = plantsMetrics
+    given OperationsMetricsApi                        = PrometheusOperationsMetrics.make(registry, substrateComponentUsageTotal)
+    given PlantAttentionMonitorMetricsApi             = PrometheusPlantAttentionMonitorMetrics.make(registry)
+
     PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
       forkDiscard:
         Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)

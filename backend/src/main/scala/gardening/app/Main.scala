@@ -39,7 +39,7 @@ object Main:
     val outcome = Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       supervisedError(EitherMode[Throwable]()):
         val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-        Programs.make(resources, photosDir).flatMap: programs =>
+        Programs.make(resources, photosDir, registry).flatMap: programs =>
           val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics)
           log.info(s"gardening backend ready host=$host port=$port version=$version")
           NettySyncServer(serverOptions).host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
