@@ -1042,6 +1042,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });

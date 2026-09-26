@@ -7,7 +7,7 @@ import type {
   SubstrateComponentArchiveResult,
   SubstrateComponentId,
 } from "../../src/domain/Journal";
-import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
+import { buildJournal, ficus, noopPhotoClient, operationsPage } from "./JournalTestSupport";
 
 const perliteId = substrateComponentId("00000000-0000-4000-8000-000000000003");
 
@@ -45,6 +45,7 @@ const renderJournal = (componentArchiveResult: SubstrateComponentArchiveResult) 
       attention={journal}
       substrates={journal}
       pesticideCatalog={journal}
+      photos={noopPhotoClient}
     />
   ));
 };
@@ -101,6 +102,7 @@ describe("substrate component archive failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -155,6 +157,7 @@ describe("substrate component archive failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
