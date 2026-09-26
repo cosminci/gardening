@@ -4,11 +4,11 @@
 
 ## Alerts
 
-Each domain service logs its own outcome as a single line: info for a successful mutation or a per-plant watering-level transition (Unavailable/Current/Overdue/RedAlert), error for an unexpected failure (persistence, background recomputation, or startup). Reads and recomputation cycles with no level change produce no line. Read logs directly from the container's output (`docker logs`/`journalctl`); the container caps `json-file` log storage at 10MB × 5 files. There is no aggregation or alerting yet.
+Each domain service logs its own outcome as a single line: info for a successful mutation or a per-plant watering-level transition (Unavailable/Current/Overdue/RedAlert), error for an unexpected failure (persistence, background recomputation, or startup). Reads and recomputation cycles with no level change produce no line. Read logs directly from the container's output (`docker logs`/`journalctl`); the container caps `json-file` log storage at 10MB × 5 files. `GET /metrics` (see Metrics below) is a second operational signal alongside these logs; there is still no aggregation or alerting configured on either.
 
 ## Metrics
 
-`GET /metrics` exposes Prometheus text format from one process-wide registry, scraped by the NAS's Victoria Metrics and visualized by the committed Grafana dashboard.
+`GET /metrics` exposes Prometheus text format from one process-wide registry. The NAS's Victoria Metrics scrapes it directly (no push gateway), via a scrape-config addition maintained outside this repo, and visualizes it through the committed Grafana dashboard, kept in sync by `grafana/push.sh` copying the dashboard JSON into Grafana's file-provisioning directory.
 
 **Business** (domain-owned, via `using`-threaded `*MetricsApi` ports):
 
@@ -59,9 +59,7 @@ The single-household service serializes journal mutations in one process. Openin
 - Built static assets (`GARDENING_STATIC_DIR`, default `static`) share the API origin; missing assets return not found.
 - [Local development](../CONTRIBUTING.md#local-development) binds both unauthenticated services to workstation loopback. Its journal persists locally; edits never sync back to the NAS. `--refresh` pulls only the SQLite journal from the NAS; local photo content is separate and is never seeded or synced by it.
 - Optional SSH refresh uses SQLite's online backup for a consistent snapshot without stopping NAS writes. After validation, atomic replacement leaves either the old or new complete journal on failure or interruption; abandoned snapshots are removed on the next start.
-- `GET /metrics` (Prometheus exposition) is always exposed; nothing in the app depends on anything scraping it, and startup/behavior are identical whether or not a scraper exists.
-  - NAS: a separately-run Victoria Metrics scrapes it, and a separately-run Grafana backs the committed dashboard (`../grafana/`) — both visualization-only, configured outside this repo.
-  - Local: the same two containers can run standalone against the local backend's `/metrics`, no app code or config change needed.
+- `GET /metrics` (Prometheus exposition, see [Metrics](#metrics) above) is always exposed; nothing in the app depends on anything scraping it, and startup/behavior are identical whether or not a scraper exists. The same Victoria Metrics/Grafana pair can run standalone for local development, pointed at the local backend's `/metrics`, with no code or config change to the app itself.
 
 ## Deployment topology
 

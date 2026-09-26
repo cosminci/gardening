@@ -9,6 +9,12 @@
 <!-- Each alert: severity, meaning, runbook link. If there is no monitoring yet (home LAN app), say
 so in one line and omit the rest. -->
 
+## Metrics
+
+<!-- Optional. Omit if the service exposes none. What's exposed and how it's scraped/visualized,
+plus the metric inventory (name, type, labels) and any intricacies (a metric's tracking design,
+exclusions, or rename-safety) that aren't obvious from the name alone. -->
+
 ## Scaling characteristics
 
 <!-- What drives load, how it scales (single instance on the NAS), and known limits. -->

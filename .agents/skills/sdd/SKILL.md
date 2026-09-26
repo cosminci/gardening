@@ -243,6 +243,10 @@ when the checklist records why.
   assertions. Separate Arrange, Act, and Assert with mandatory blank lines.
 - [ ] Log once, at the owning domain service — never in an adapter or a pure function. Thread
   `Logger` as a capability, not a global logger. Keep every line a single line.
+- [ ] Record a business metric at the same effect boundary as domain logging, through a
+  low-level `*MetricsApi` capability port named for the owning domain trait — it only increments
+  or sets, the domain decides what, never from an adapter or a pure function. Prefer a gauge
+  re-derived from source of truth over an accumulator wherever a current total already exists.
 
 ## Phase 5 — Archive and living-doc PR
 
