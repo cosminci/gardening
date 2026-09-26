@@ -39,10 +39,10 @@ object Main:
 
   private def aggregateEndpoints(programs: Programs, version: String, staticDir: String) =
     List(HealthApi.serverEndpoint(version)) ++
-      PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
+      PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
       AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
-      OperationApi.serverEndpoints(using programs.plantJournal) ++
+      OperationApi.serverEndpoints(using programs.operations) ++
       SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
-      PhotoApi.serverEndpoints(using programs.plantJournal) ++
+      PhotoApi.serverEndpoints(using programs.plants) ++
       PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
       StaticSite.endpoint(staticDir)

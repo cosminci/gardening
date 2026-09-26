@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.attention.PlantAttentionMonitor
-import gardening.domain.journal.*
+import gardening.domain.plants.*
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder, Json}
 import sttp.model.{MediaType, StatusCode}
@@ -69,20 +69,20 @@ object PlantApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(createPlantEndpoint, getPlantsEndpoint, getArchivedCountEndpoint, patchPlantEndpoint)
 
-  def serverEndpoints(using journal: PlantJournal, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using plants: Plants, attention: PlantAttentionMonitor): List[ServerEndpoint[Any, Identity]] =
     List(
       createPlantEndpoint.handle: input =>
-        journal.createPlant(input.species, input.maybeNickname, input.location, input.substrate) match
+        plants.createPlant(input.species, input.maybeNickname, input.location, input.substrate) match
           case CreatePlantResult.Created(plant)       => plant.asRight
           case CreatePlantResult.UnknownComponent     => unknownComponent.asLeft
           case CreatePlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
           case CreatePlantResult.CreateFailed(_)      => plantCreationFailed.asLeft,
       getPlantsEndpoint.handle: status =>
-        journal.getPlants(status) match
-          case GetPlantsResult.Read(plants)  => plants.asRight
+        plants.getPlants(status) match
+          case GetPlantsResult.Read(found)   => found.asRight
           case GetPlantsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
       getArchivedCountEndpoint.handle: _ =>
-        journal.getArchivedCount match
+        plants.getArchivedCount match
           case ArchivedCountResult.Counted(count) => ArchivedPlantCount(count).asRight
           case ArchivedCountResult.ReadFailed(_)  => (StatusCode.InternalServerError, ApiError("archived count could not be read")).asLeft,
       patchPlantEndpoint.handle: (plantId, contentType, patch) =>
@@ -91,7 +91,7 @@ object PlantApi:
         else
           patch match
             case Vector(PlantPatchOperation("replace", "/details/status", value)) if value.equals(Json.fromString("archived")) =>
-              journal.editPlant(PlantId(plantId), _.copy(status = PlantStatus.Archived)) match
+              plants.editPlant(PlantId(plantId), _.copy(status = PlantStatus.Archived)) match
                 case EditPlantResult.Edited(_)     => attention.refreshAll.pipe(_ => ().asRight)
                 case EditPlantResult.PlantMissing  => plantMissing.asLeft
                 case EditPlantResult.PlantArchived => plantArchived.asLeft
@@ -100,7 +100,7 @@ object PlantApi:
               value.as[PlantCreation] match
                 case Left(_)     => unsupportedPlantPatch.asLeft
                 case Right(edit) =>
-                  journal.editPlant(PlantId(plantId), _.copy(edit.species, edit.maybeNickname, edit.location, edit.substrate)) match
+                  plants.editPlant(PlantId(plantId), _.copy(edit.species, edit.maybeNickname, edit.location, edit.substrate)) match
                     case EditPlantResult.Edited(_)            => ().asRight
                     case EditPlantResult.PlantMissing         => plantMissing.asLeft
                     case EditPlantResult.PlantArchived        => plantArchived.asLeft

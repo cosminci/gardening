@@ -5,7 +5,6 @@ import cats.syntax.either.*
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.*
 
-import java.time.Instant
 import java.util.UUID
 import scala.util.Try
 
@@ -13,31 +12,6 @@ opaque type PlantId = String
 object PlantId:
   def apply(value: String): PlantId         = value
   extension (id: PlantId) def value: String = id
-
-opaque type OperationId = String
-object OperationId:
-  def apply(value: String): OperationId         = value
-  extension (id: OperationId) def value: String = id
-
-opaque type Species = String
-object Species:
-  def apply(value: String): Species              = value
-  extension (species: Species) def value: String = species
-
-opaque type Nickname = String
-object Nickname:
-  def apply(value: String): Nickname               = value
-  extension (nickname: Nickname) def value: String = nickname
-
-opaque type Location = String
-object Location:
-  def apply(value: String): Location               = value
-  extension (location: Location) def value: String = location
-
-opaque type Note = String
-object Note:
-  def apply(value: String): Note           = value
-  extension (note: Note) def value: String = note
 
 opaque type SubstrateComponentId = UUID
 object SubstrateComponentId:
@@ -92,7 +66,7 @@ object SubstrateComponentStatus:
 
 final case class SubstrateComponentData(name: SubstrateComponentName, maybeInfo: Option[SubstrateComponentInfo])
 final case class SubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData, status: SubstrateComponentStatus)
-final case class PesticideData(name: PesticideName, pesticideType: PesticideType, maybeInfo: Option[PesticideInfo])
+final case class PesticideData(name: PesticideName, kind: PesticideType, maybeInfo: Option[PesticideInfo])
 
 enum PesticideStatus derives CanEqual:
   case Active, Archived
@@ -103,26 +77,6 @@ object PesticideStatus:
 final case class Pesticide(id: PesticideId, data: PesticideData, status: PesticideStatus)
 
 type Percentage = Int :| Interval.Closed[1, 100]
-
-enum PlantStatus derives CanEqual:
-  case Active, Archived
-
-object PlantStatus:
-  given Eq[PlantStatus] = Eq.fromUniversalEquals
-
-enum ActionType(val label: String):
-  case Watered    extends ActionType("Watered")
-  case Fertilized extends ActionType("Fertilized")
-  case Pesticide  extends ActionType("Insecticide / H2O2")
-  case Pruned     extends ActionType("Pruned")
-  case NoAction   extends ActionType("None")
-
-enum MoistureLevel(val label: String):
-  case Wet           extends MoistureLevel("Wet")
-  case ModeratePlus  extends MoistureLevel("Moderate +")
-  case ModerateMinus extends MoistureLevel("Moderate -")
-  case Dry           extends MoistureLevel("Dry")
-  case NoReading     extends MoistureLevel("N/A")
 
 final case class SubstratePart(componentId: SubstrateComponentId, share: Percentage)
 
@@ -142,30 +96,3 @@ object Substrate:
   extension (substrate: Substrate) def parts: List[SubstratePart] = substrate
 
 final case class SubstrateMix(id: UUID, name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate)
-
-final case class Plant(id: PlantId, details: PlantDetails)
-
-final case class PlantDetails(
-    species: Species,
-    maybeNickname: Option[Nickname],
-    location: Location,
-    substrate: Substrate,
-    status: PlantStatus
-)
-
-sealed trait OperationDetails:
-  def maybeNote: Option[Note]
-
-object OperationDetails:
-  final case class Care(
-      actions: Set[ActionType],
-      pesticides: Set[PesticideId],
-      moisture: MoistureLevel,
-      override val maybeNote: Option[Note]
-  ) extends OperationDetails
-  final case class Repot(
-      substrate: Substrate,
-      override val maybeNote: Option[Note]
-  ) extends OperationDetails
-
-final case class Operation(id: OperationId, plantId: PlantId, date: Instant, details: OperationDetails)

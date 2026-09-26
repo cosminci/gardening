@@ -2,7 +2,7 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
-import gardening.domain.journal.*
+import gardening.domain.operations.*
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -76,31 +76,31 @@ object OperationApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(getOperationsEndpoint, getOperationDateRangeEndpoint, logOperationEndpoint, editOperationEndpoint, deleteOperationEndpoint)
 
-  def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using operations: Operations): List[ServerEndpoint[Any, Identity]] =
     List(
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
-        journal.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
+        operations.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
           case GetOperationsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       getOperationDateRangeEndpoint.handle: plantId =>
-        journal.getOperationDateRange(PlantId(plantId)) match
+        operations.getOperationDateRange(PlantId(plantId)) match
           case GetOperationDateRangeResult.Read(range)   => range.asRight
           case GetOperationDateRangeResult.PlantMissing  => plantMissing.asLeft
           case GetOperationDateRangeResult.ReadFailed(_) => ApiError("operation dates could not be read").asLeft,
       logOperationEndpoint.handle: request =>
-        journal.logOperation(PlantId(request.plantId), request.date, request.details) match
+        operations.logOperation(PlantId(request.plantId), request.date, request.details) match
           case LogOperationResult.Logged(id)       => LoggedOperation(id.value).asRight
           case LogOperationResult.PlantMissing     => plantMissing.asLeft
           case LogOperationResult.PlantArchived    => plantArchived.asLeft
           case LogOperationResult.LoggingFailed(_) => ApiError("operation could not be logged").asLeft,
       editOperationEndpoint.handle: (operationId, details) =>
-        journal.editOperation(OperationId(operationId), details) match
-          case EditOperationResult.Edited(operation)     => operation.asRight
+        operations.editOperation(OperationId(operationId), details) match
+          case EditOperationResult.Edited(edited)        => edited.asRight
           case EditOperationResult.OperationMissing      => operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch => operationTypeMismatch.asLeft
           case EditOperationResult.EditFailed(_)         => editFailed.asLeft,
       deleteOperationEndpoint.handle: operationId =>
-        journal.deleteOperation(OperationId(operationId)) match
+        operations.deleteOperation(OperationId(operationId)) match
           case DeleteOperationResult.Deleted                 => ().asRight
           case DeleteOperationResult.OperationMissing        => operationMissing.asLeft
           case DeleteOperationResult.CannotDeleteLatestRepot => cannotDeleteLatestRepot.asLeft

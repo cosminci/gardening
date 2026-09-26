@@ -2,7 +2,7 @@ package gardening.adapters.http
 
 import cats.syntax.option.*
 import gardening.domain.*
-import gardening.domain.journal.*
+import gardening.domain.operations.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import sttp.client3.testing.SttpBackendStub
@@ -229,30 +229,20 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
       deleteOperationResult: DeleteOperationResult = DeleteOperationResult.OperationMissing
   ) =
-    val journal = new PlantJournal:
-      override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
-        fail("operation HTTP must not create plants")
-      override def getPlants(status: PlantStatus): GetPlantsResult                               = fail("operation HTTP must not read plants")
-      override def getArchivedCount: ArchivedCountResult                                         = fail("operation HTTP must not count plants")
-      override def editPlant(id: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = fail("operation HTTP must not edit plants")
-      override def getOperations(plantId: PlantId, window: OperationWindow): GetOperationsResult =
+    val operations = new Operations:
+      override def getOperations(plant: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
         getOperationsResult
-      override def getOperationDateRange(plantId: PlantId): GetOperationDateRangeResult =
-        refs.requestedDateRanges.updateAndGet(_ :+ plantId).pipe(_ => operationDateRangeResult)
-      override def logOperation(plantId: PlantId, at: Instant, details: OperationDetails): LogOperationResult =
-        refs.loggedOperations.updateAndGet(_ :+ ((plantId, at, details))).pipe(_ => logOperationResult)
-      override def editOperation(id: OperationId, details: OperationDetails): EditOperationResult =
-        refs.editedOperations.updateAndGet(_ :+ (id -> details)).pipe(_ => editOperationResult)
-      override def deleteOperation(id: OperationId): DeleteOperationResult =
-        refs.deletedOperations.updateAndGet(_ :+ id).pipe(_ => deleteOperationResult)
-      override def addPhoto(plantId: PlantId, content: gardening.domain.journal.PhotoContent): AddPhotoResult =
-        fail("operation HTTP must not add photos")
-      override def removePhoto(id: PhotoId): RemovePhotoResult                       = fail("operation HTTP must not remove photos")
-      override def getPhotos(plantId: PlantId, window: PhotoWindow): GetPhotosResult = fail("operation HTTP must not list photos")
-      override def getPhotoContent(id: PhotoId): PhotoReadResult                     = fail("operation HTTP must not read photo content")
+      override def getOperationDateRange(plant: PlantId): GetOperationDateRangeResult =
+        refs.requestedDateRanges.updateAndGet(_ :+ plant).pipe(_ => operationDateRangeResult)
+      override def logOperation(plant: PlantId, date: Instant, details: OperationDetails): LogOperationResult =
+        refs.loggedOperations.updateAndGet(_ :+ ((plant, date, details))).pipe(_ => logOperationResult)
+      override def editOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
+        refs.editedOperations.updateAndGet(_ :+ (operation -> details)).pipe(_ => editOperationResult)
+      override def deleteOperation(operation: OperationId): DeleteOperationResult =
+        refs.deletedOperations.updateAndGet(_ :+ operation).pipe(_ => deleteOperationResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(OperationApi.serverEndpoints(using journal))
+      .whenServerEndpointsRunLogic(OperationApi.serverEndpoints(using operations))
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]

@@ -3,7 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import cats.syntax.eq.*
 import gardening.domain.*
-import gardening.domain.journal.*
+import gardening.domain.plants.*
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
@@ -86,7 +86,7 @@ object PhotoApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(addPhotoEndpoint, getPhotosEndpoint, removePhotoEndpoint, photoContentEndpoint)
 
-  def serverEndpoints(using journal: PlantJournal): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using plants: Plants): List[ServerEndpoint[Any, Identity]] =
     List(
       addPhotoEndpoint.handle: (plantId, upload) =>
         val part = upload.file
@@ -97,14 +97,14 @@ object PhotoApi:
             sniffPhotoMediaType(bytes) match
               case None            => unsupportedType.asLeft
               case Some(mediaType) =>
-                journal.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType)) match
+                plants.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType)) match
                   case AddPhotoResult.Added(photo) => AddedPhoto(photo.id.value.toString, photo.capturedAt).asRight
                   case AddPhotoResult.PlantMissing => plantMissing.asLeft
                   case AddPhotoResult.AddFailed(_) => ApiError("photo could not be added").asLeft
         finally part.body.delete(): Unit
       ,
       getPhotosEndpoint.handle: (plantId, offset, pageSize) =>
-        journal.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
+        plants.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
           case GetPhotosResult.Read(page) =>
             PhotoPageResponse(
               page.photos.map(p => PhotoItem(p.id.value.toString, p.capturedAt)),
@@ -112,12 +112,12 @@ object PhotoApi:
             ).asRight
           case GetPhotosResult.ReadFailed(_) => ApiError("photos could not be read").asLeft,
       removePhotoEndpoint.handle: photoId =>
-        journal.removePhoto(PhotoId(UUID.fromString(photoId))) match
+        plants.removePhoto(PhotoId(UUID.fromString(photoId))) match
           case RemovePhotoResult.Removed(_)      => ().asRight
           case RemovePhotoResult.PhotoMissing    => photoMissing.asLeft
           case RemovePhotoResult.RemoveFailed(_) => ApiError("photo could not be removed").asLeft,
       photoContentEndpoint.handle: photoId =>
-        journal.getPhotoContent(PhotoId(UUID.fromString(photoId))) match
+        plants.getPhotoContent(PhotoId(UUID.fromString(photoId))) match
           case PhotoReadResult.Read(content) =>
             val contentType = content.mediaType match
               case PhotoMediaType.Jpeg => "image/jpeg"

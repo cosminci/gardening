@@ -46,7 +46,7 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
       assertEquals(missing, GetPesticideResult.RecordMissing)
       seeded match
         case CatalogReadResult.Read(pesticides) =>
-          val actualSeeded = pesticides.map(p => (p.data.name.value, p.data.pesticideType, p.data.maybeInfo.map(_.value), p.status))
+          val actualSeeded = pesticides.map(p => (p.data.name.value, p.data.kind, p.data.maybeInfo.map(_.value), p.status))
           assertEquals(actualSeeded, expectedSeeded)
         case other => fail(s"expected Read, got $other")
       assertEquals(added, CatalogAddResult.Added(pesticide))

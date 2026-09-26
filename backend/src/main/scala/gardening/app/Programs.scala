@@ -1,19 +1,21 @@
 package gardening.app
 
-import gardening.adapters.persistence.{SqlitePesticideStore, SqlitePlantJournalStore, SqliteSubstrateStore}
+import gardening.adapters.persistence.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
 import gardening.adapters.storage.FilePhotoContentStore
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
-import gardening.domain.Logger
+import gardening.domain.{Logger, PlantUpdateLock}
 import gardening.domain.attention.PlantAttentionMonitor
-import gardening.domain.journal.PlantJournal
+import gardening.domain.operations.Operations
 import gardening.domain.pesticide.PesticideCatalog
+import gardening.domain.plants.Plants
 import gardening.domain.substrate.SubstrateCatalog
 import ox.{Ox, discard, forkDiscard, sleep}
 
 import java.nio.file.Path
 
 final case class Programs(
-    plantJournal: PlantJournal,
+    plants: Plants,
+    operations: Operations,
     plantAttentionMonitor: PlantAttentionMonitor,
     substrateCatalog: SubstrateCatalog,
     pesticideCatalog: PesticideCatalog
@@ -22,15 +24,18 @@ final case class Programs(
 object Programs:
 
   def make(resources: AppResources, photosDir: Path)(using Ox)(using log: Logger): Either[Throwable, Programs] =
-    val store          = SqlitePlantJournalStore.make(resources.transactor)
+    val plantStore     = SqlitePlantStore.make(resources.transactor)
+    val operationStore = SqliteOperationStore.make(resources.transactor)
     val contentStore   = FilePhotoContentStore.make(photosDir)
     val substrateStore = SqliteSubstrateStore.make(resources.transactor)
     val pesticideStore = SqlitePesticideStore.make(resources.transactor)
-    PlantAttentionMonitor.make(using store, SystemClock).map: attention =>
+    val plantLock      = PlantUpdateLock.make
+    PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
       forkDiscard:
         Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
-        PlantJournal.make(using store, contentStore, substrateStore, pesticideStore, UuidIdGenerator, SystemClock),
+        Plants.make(using plantStore, contentStore, substrateStore, UuidIdGenerator, SystemClock, plantLock),
+        Operations.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),
         PesticideCatalog.make(using pesticideStore, UuidIdGenerator)
