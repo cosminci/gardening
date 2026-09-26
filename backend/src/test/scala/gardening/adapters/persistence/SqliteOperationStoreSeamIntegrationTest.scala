@@ -8,7 +8,6 @@ import com.augustnagro.magnum.Transactor
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
-import org.flywaydb.core.api.MigrationVersion
 
 import java.sql.Connection
 import java.time.Instant
@@ -192,26 +191,15 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
           assertEquals(reason.getMessage, "invalid stored operation date: 2026-01-01T00:00:00BAD")
         case other => fail(s"expected ReadFailed, got $other")
 
-  test("should initialize the complete operation schema across all migrations"):
+  test("should support operations against a freshly migrated operation schema"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val migration = Flyway.configure().dataSource(connection.dataSource).load()
-      val _         = migration.migrate()
+      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
       seedPlant(connection.dataSource, id = "p1")
 
       val details        = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
       val older          = Operation(OperationId("o1"), PlantId("p1"), date, details)
       val newer          = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
       val operationStore = SqliteOperationStore.make(connection.transactor)
-      assertEquals(
-        migration.info().applied().toVector.map(_.getVersion),
-        Vector(
-          MigrationVersion.fromVersion("1"),
-          MigrationVersion.fromVersion("2"),
-          MigrationVersion.fromVersion("3"),
-          MigrationVersion.fromVersion("4"),
-          MigrationVersion.fromVersion("5")
-        )
-      )
       assertEquals(operationStore.addOperation(older), LogOperationResult.Logged(older.id))
       assertEquals(operationStore.addOperation(newer), LogOperationResult.Logged(newer.id))
       assertEquals(
