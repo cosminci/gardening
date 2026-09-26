@@ -296,3 +296,37 @@ export type AddSubstrateMixResult =
   | { readonly kind: "added"; readonly entry: SubstrateMix }
   | { readonly kind: "duplicateSubstrate" }
   | { readonly kind: "addFailed"; readonly reason: Error };
+
+export type PhotoId = Brand<string, "PhotoId">;
+export const photoId = (value: string): PhotoId => value as PhotoId;
+
+export interface PlantPhoto {
+  readonly id: PhotoId;
+  readonly capturedAt: Instant;
+}
+
+export interface PhotoWindow {
+  readonly offset: number;
+  readonly size: number;
+}
+
+export interface PhotoPage {
+  readonly photos: readonly PlantPhoto[];
+  readonly hasNextPage: boolean;
+}
+
+export type GetPhotosResult =
+  | { readonly kind: "read"; readonly page: PhotoPage }
+  | { readonly kind: "readFailed"; readonly reason: Error };
+
+export type AddPhotoResult =
+  | { readonly kind: "added"; readonly photo: PlantPhoto }
+  | { readonly kind: "plantMissing" }
+  | { readonly kind: "unsupportedMediaType" }
+  | { readonly kind: "tooLarge" }
+  | { readonly kind: "addFailed"; readonly reason: Error };
+
+export type RemovePhotoResult =
+  | { readonly kind: "removed" }
+  | { readonly kind: "photoMissing" }
+  | { readonly kind: "removeFailed"; readonly reason: Error };

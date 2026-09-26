@@ -8,7 +8,7 @@ import type {
   PlantId,
 } from "../../src/domain/Journal";
 import { instant, operationId } from "../../src/domain/Journal";
-import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
+import { buildJournal, care, ficus, noopPhotoClient, operationsPage } from "./JournalTestSupport";
 
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
@@ -51,6 +51,7 @@ Vitest.describe("animating operation changes", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -106,6 +107,7 @@ Vitest.describe("animating operation changes", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });

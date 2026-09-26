@@ -46,6 +46,7 @@ const emptyCardProps = {
   onLog: () => undefined,
   onArchive: () => undefined,
   onEditPlant: () => undefined,
+  onViewPhotos: () => undefined,
   onEdit: () => undefined,
   operationChange: undefined,
 };
@@ -61,6 +62,7 @@ const archivedCardProps = {
   substrateComponents: emptyCardProps.substrateComponents,
   pesticides: emptyCardProps.pesticides,
   getOperations: emptyCardProps.getOperations,
+  onViewPhotos: () => undefined,
   onEdit: emptyCardProps.onEdit,
   operationChange: emptyCardProps.operationChange,
 };
@@ -110,6 +112,7 @@ describe("plant cards", () => {
         onLog={() => undefined}
         onArchive={() => undefined}
         onEditPlant={() => undefined}
+        onViewPhotos={() => undefined}
         onEdit={onEdit}
       />
     ));
@@ -162,6 +165,7 @@ describe("plant cards", () => {
       onLog: () => undefined,
       onArchive: () => undefined,
       onEditPlant: () => undefined,
+      onViewPhotos: () => undefined,
       onEdit: () => undefined,
       operationChange: undefined,
     };

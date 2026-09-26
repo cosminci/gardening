@@ -7,7 +7,14 @@ import type {
   FeedEvent,
   PlantAttentionFeed,
 } from "../../src/domain/PlantAttention";
+import type { PlantPhotoClient } from "../../src/domain/PlantPhoto";
 import type { SubstrateClient } from "../../src/domain/SubstrateCatalog";
+
+export const noopPhotoClient: PlantPhotoClient = {
+  getPhotos: () => Promise.resolve({ kind: "readFailed", reason: new Error("noop") }),
+  addPhoto: () => Promise.resolve({ kind: "addFailed", reason: new Error("noop") }),
+  removePhoto: () => Promise.resolve({ kind: "removeFailed", reason: new Error("noop") }),
+};
 
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");

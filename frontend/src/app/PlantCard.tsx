@@ -7,6 +7,8 @@ import { logOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
 import { editPlantControlId } from "./PlantSheet";
+
+export const plantPhotosControlId = (plantId: Journal.PlantId) => `plant-photos-${String(plantId)}`;
 import "./plant-card.css";
 import "./plant-history.css";
 
@@ -17,6 +19,7 @@ interface PlantCardBaseProps {
   readonly getOperations: (window: Journal.OperationWindow) => Promise<Journal.GetOperationsResult>;
   readonly operationChange: OperationHistoryChange | undefined;
   readonly onEdit: (operation: Journal.Operation) => void;
+  readonly onViewPhotos: (plant: Journal.Plant) => void;
 }
 
 type PlantCardProps = PlantCardBaseProps &
@@ -202,34 +205,48 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               <h2>{name()}</h2>
               <p class="plant-card__species">{props.plant.details.species}</p>
             </div>
-            {props.kind !== "cemetery" && (
-              <div class="plant-card__actions">
-                <button
-                  id={editPlantControlId(props.plant.id)}
-                  class="edit-plant"
-                  type="button"
-                  aria-label={`Edit ${name()}`}
-                  title={`Edit ${name()}`}
-                  onClick={() => {
-                    props.onEditPlant(props.plant);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  id={`archive-plant-${props.plant.id}`}
-                  class="archive-plant"
-                  type="button"
-                  aria-label={`Archive ${name()}`}
-                  title={`Archive ${name()}`}
-                  onClick={() => {
-                    props.onArchive();
-                  }}
-                >
-                  Archive
-                </button>
-              </div>
-            )}
+            <div class="plant-card__actions">
+              <button
+                id={plantPhotosControlId(props.plant.id)}
+                class="plant-photos"
+                type="button"
+                aria-label={`Photos for ${name()}`}
+                title={`Photos for ${name()}`}
+                onClick={() => {
+                  props.onViewPhotos(props.plant);
+                }}
+              >
+                Photos
+              </button>
+              {props.kind !== "cemetery" && (
+                <>
+                  <button
+                    id={editPlantControlId(props.plant.id)}
+                    class="edit-plant"
+                    type="button"
+                    aria-label={`Edit ${name()}`}
+                    title={`Edit ${name()}`}
+                    onClick={() => {
+                      props.onEditPlant(props.plant);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    id={`archive-plant-${props.plant.id}`}
+                    class="archive-plant"
+                    type="button"
+                    aria-label={`Archive ${name()}`}
+                    title={`Archive ${name()}`}
+                    onClick={() => {
+                      props.onArchive();
+                    }}
+                  >
+                    Archive
+                  </button>
+                </>
+              )}
+            </div>
           </header>
           <dl class="plant-facts">
             <dt>Substrate</dt>

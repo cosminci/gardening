@@ -10,7 +10,7 @@ import type {
   PlantId,
   PlantStatus,
 } from "../../src/domain/Journal";
-import { buildJournal, ficus, operationsPage } from "./JournalTestSupport";
+import { buildJournal, ficus, noopPhotoClient, operationsPage } from "./JournalTestSupport";
 
 const unavailableFicusAttention: AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
@@ -39,6 +39,7 @@ Vitest.describe("operation failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -74,6 +75,7 @@ Vitest.describe("operation failures", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("button", { name: "Log operation for Fern" });
@@ -107,6 +109,7 @@ Vitest.describe("operation failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -139,6 +142,7 @@ Vitest.describe("operation failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -189,6 +193,7 @@ Vitest.describe("operation failures", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });
@@ -256,6 +261,7 @@ Vitest.describe("operation failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await Testing.screen.findByRole("article", { name: "Fern" });
@@ -304,6 +310,7 @@ Vitest.describe("operation failures", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={noopPhotoClient}
         />
       ));
       await Testing.screen.findByRole("article", { name: "Fern" });

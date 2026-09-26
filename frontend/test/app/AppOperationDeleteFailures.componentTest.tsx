@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../../src/app/App";
 import { instant } from "../../src/domain/Journal";
 import type { AttentionProjection } from "../../src/domain/Journal";
-import { buildJournal, care, ficus, operationsPage } from "./JournalTestSupport";
+import { buildJournal, care, ficus, noopPhotoClient, operationsPage } from "./JournalTestSupport";
 
 const unavailableFicusAttention: AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
@@ -39,6 +39,7 @@ describe("operation delete failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -63,6 +64,7 @@ describe("operation delete failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -91,6 +93,7 @@ describe("operation delete failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -119,6 +122,7 @@ describe("operation delete failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");
@@ -155,6 +159,7 @@ describe("operation delete failures", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={noopPhotoClient}
       />
     ));
     await screen.findByText("3rd of March");

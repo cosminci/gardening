@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../../src/app/App";
 import {
@@ -102,6 +102,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -220,6 +221,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -245,6 +247,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -256,6 +259,61 @@ describe("browsing the journal", () => {
     expect(screen.queryByText("Care history, growing conditions, and repotting notes.")).toBeNull();
     expect(garden).toHaveAttribute("aria-pressed", "true");
     expect(cemetery).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("should open and close the photos sheet for an active plant", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+
+    const control = await screen.findByRole("button", { name: "Photos for Fern" });
+    fireEvent.click(control);
+
+    const dialog = await screen.findByRole("dialog", { name: "Photos for Fern" });
+    expect(dialog).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close photos for Fern" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Photos for Fern" })).toBeNull();
+    });
+    expect(control).toHaveFocus();
+  });
+
+  it("should open the photos sheet for an archived plant from the cemetery", async () => {
+    const journal = JournalFixtures.buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+    });
+
+    render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
+      />
+    ));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Cemetery/ }));
+    const control = await screen.findByRole("button", { name: "Photos for Fern" });
+    fireEvent.click(control);
+
+    expect(await screen.findByRole("dialog", { name: "Photos for Fern" })).toBeInTheDocument();
   });
 
   it("should select the cemetery from its focusable control", async () => {
@@ -270,6 +328,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
@@ -298,6 +357,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("region", { name: "Garden" });
@@ -315,6 +375,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const restoredCemetery = await screen.findByRole("region", { name: "Cemetery" });
@@ -353,6 +414,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -416,6 +478,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -472,6 +535,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -524,6 +588,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*1 plant/ });
@@ -560,6 +625,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     const cemetery = await screen.findByRole("button", { name: /Cemetery.*0 plants/ });
@@ -591,6 +657,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -647,6 +714,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -688,6 +756,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -713,6 +782,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -738,6 +808,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -787,6 +858,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -842,6 +914,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -897,6 +970,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -930,6 +1004,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1001,6 +1076,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1045,6 +1121,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1088,6 +1165,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1113,6 +1191,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1169,6 +1248,7 @@ describe("browsing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
 
@@ -1203,6 +1283,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1247,6 +1328,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1274,6 +1356,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -1295,6 +1378,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -1317,6 +1401,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -1339,6 +1424,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
 
@@ -1371,6 +1457,7 @@ describe("browsing the journal", () => {
         attention={journal}
         substrates={journal}
         pesticideCatalog={journal}
+        photos={JournalFixtures.noopPhotoClient}
       />
     ));
     await screen.findByRole("article", { name: "Fern" });
@@ -1415,6 +1502,7 @@ describe("browsing the journal", () => {
           attention={journal}
           substrates={journal}
           pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
         />
       ));
 
