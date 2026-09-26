@@ -22,6 +22,5 @@ object PrometheusSubstrateCatalogMetrics:
 
   private class LiveSubstrateCatalogMetrics(displayNames: AtomicReference[Vector[(SubstrateComponentId, String)]]) extends SubstrateCatalogMetricsApi:
 
-    /** Replaces the whole snapshot rather than merging per component, so a rename or archival is reflected on the very next read. */
     override def setComponentDisplayNames(components: Vector[(SubstrateComponentId, String)]): Unit =
       displayNames.set(components)

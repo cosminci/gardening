@@ -1,13 +1,7 @@
 package gardening.app
 
 import gardening.adapters.persistence.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
-import gardening.adapters.prometheus.{
-  PrometheusOperationsMetrics,
-  PrometheusPesticideCatalogMetrics,
-  PrometheusPlantAttentionMonitorMetrics,
-  PrometheusPlantsMetrics,
-  PrometheusSubstrateCatalogMetrics
-}
+import gardening.adapters.prometheus.*
 import gardening.adapters.storage.FilePhotoContentStore
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.domain.{Logger, PlantUpdateLock}

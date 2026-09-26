@@ -49,10 +49,6 @@ object PrometheusPlantsMetrics:
     override def incrementSubstrateComponent(component: SubstrateComponentId): Unit =
       substrateComponentUsageTotal.labelValues(component.value.toString).inc()
 
-    /**
-     * Replaces this status's whole slice rather than merging per-plant, so a rename or archival is reflected on the very next read — no history to
-     * drift, unlike an incremented series.
-     */
     override def setPlantsDisplayNames(status: PlantStatus, plants: Vector[(PlantId, String)]): Unit =
       displayNames.updateAndGet(_.updated(status, plants)).discard
 

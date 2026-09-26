@@ -1,9 +1,7 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{
-  AttentionApi, ConnectionHeartbeats, HealthApi, OperationApi, PesticideApi, PhotoApi, PlantApi, StaticSite, SubstrateApi
-}
+import gardening.adapters.http.*
 import gardening.adapters.persistence.SqliteLocation
 import gardening.adapters.prometheus.{PrometheusAttentionFeedMetrics, PrometheusStorageMetrics}
 import gardening.adapters.system.SystemClock
@@ -39,9 +37,7 @@ object Main:
     val registry = new PrometheusRegistry
     JvmMetrics.builder().register(registry)
     val prometheusMetrics = PrometheusMetrics.default[Identity](namespace = "gardening", registry = registry)
-    // The attention feed is a WebSocket upgrade, not an ordinary request/response: it never reaches tapir's completion hooks, so its generic
-    // request metrics (in particular "active requests") would only ever increment. `ConnectionHeartbeats` tracks it correctly instead.
-    val serverOptions =
+    val serverOptions     =
       NettySyncServerOptions.customiseInterceptors.metricsInterceptor(
         prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
       ).options

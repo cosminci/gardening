@@ -22,6 +22,5 @@ object PrometheusPesticideCatalogMetrics:
 
   private class LivePesticideCatalogMetrics(displayNames: AtomicReference[Vector[(PesticideId, String)]]) extends PesticideCatalogMetricsApi:
 
-    /** Replaces the whole snapshot rather than merging per pesticide, so a rename or archival is reflected on the very next read. */
     override def setPesticideDisplayNames(pesticides: Vector[(PesticideId, String)]): Unit =
       displayNames.set(pesticides)

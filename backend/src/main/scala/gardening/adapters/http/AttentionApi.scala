@@ -38,8 +38,6 @@ object AttentionApi:
 
   private val getAttentionEndpoint = endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
-  // Public so the composition root can exclude it from generic request metrics: a WebSocket upgrade never completes in the usual
-  // request/response sense, so tapir's active-request tracking can't observe this endpoint's real lifecycle.
   val attentionFeedEndpoint = endpoint.get
     .in("attention" / "feed")
     .out(webSocketBody[String, CodecFormat.TextPlain, AttentionProjection, CodecFormat.Json](OxStreams))

@@ -8,11 +8,6 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.FiniteDuration
 
-/**
- * Tracks how many long-lived connections (e.g. an open WebSocket) are currently live by their own periodic heartbeat, not by a paired open/close
- * event: a connection that stops touching its heartbeat simply ages out of `liveCount` within `staleness`, so a single missed close signal can't leak
- * the count forever the way an incremented-then-decremented counter would.
- */
 trait ConnectionHeartbeats:
   def touch(connection: UUID): Unit
   def liveCount: Int
