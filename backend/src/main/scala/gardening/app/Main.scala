@@ -4,10 +4,14 @@ import cats.syntax.either.*
 import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PhotoApi, PlantApi, StaticSite, SubstrateApi}
 import gardening.adapters.persistence.SqliteLocation
 import gardening.domain.Logger
+import io.prometheus.metrics.instrumentation.jvm.JvmMetrics
+import io.prometheus.metrics.model.registry.PrometheusRegistry
 import org.flywaydb.core.Flyway
 import org.slf4j.LoggerFactory
 import ox.{EitherMode, supervisedError}
-import sttp.tapir.server.netty.sync.NettySyncServer
+import sttp.shared.Identity
+import sttp.tapir.server.metrics.prometheus.PrometheusMetrics
+import sttp.tapir.server.netty.sync.{NettySyncServer, NettySyncServerOptions}
 
 import java.nio.file.Paths
 import scala.util.Using
@@ -27,18 +31,28 @@ object Main:
       def info(message: String): Unit  = underlying.info(message)
       def error(message: String): Unit = underlying.error(message)
 
+    val registry = new PrometheusRegistry
+    JvmMetrics.builder().register(registry)
+    val prometheusMetrics = PrometheusMetrics.default[Identity](namespace = "gardening", registry = registry)
+    val serverOptions     = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(prometheusMetrics.metricsInterceptor()).options
+
     val outcome = Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       supervisedError(EitherMode[Throwable]()):
         val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
         Programs.make(resources, photosDir).flatMap: programs =>
-          val endpoints = aggregateEndpoints(programs, version, staticDir)
+          val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics)
           log.info(s"gardening backend ready host=$host port=$port version=$version")
-          NettySyncServer().host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
+          NettySyncServer(serverOptions).host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
     outcome.left.foreach(log.error("startup", _))
     if outcome.isLeft then sys.exit(1)
 
-  private def aggregateEndpoints(programs: Programs, version: String, staticDir: String) =
-    List(HealthApi.serverEndpoint(version)) ++
+  private def aggregateEndpoints(
+      programs: Programs,
+      version: String,
+      staticDir: String,
+      prometheusMetrics: PrometheusMetrics[Identity]
+  ) =
+    List(HealthApi.serverEndpoint(version), prometheusMetrics.metricsEndpoint) ++
       PlantApi.serverEndpoints(using programs.plantJournal, programs.plantAttentionMonitor) ++
       AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
       OperationApi.serverEndpoints(using programs.plantJournal) ++
