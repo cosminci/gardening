@@ -60,7 +60,6 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 | `specs/` | Living design / contracts / testing / operational docs, and change specs. |
 | `ci/specs/` | The pipeline's own docs. |
 | `.agents/skills/` | Shared coding-agent skills, including spec-driven development. |
-| `plants/`, `guides/`, `shopping-list.md`, `GARDEN-GUIDE.md` | Import source for a later feature, not part of the app. |
 
 ## Documentation style
 
