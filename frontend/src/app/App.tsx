@@ -1,5 +1,4 @@
 import {
-  Index,
   Match,
   Show,
   Switch,
@@ -22,13 +21,15 @@ import { PlantPhotosSheet } from "./PlantPhotosSheet";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
 import { DeleteSubstrateMixConfirmation } from "./DeleteSubstrateMixConfirmation";
 import { JournalHeader } from "./JournalHeader";
+import { JournalList, type CemeteryHistory, type GardenHistory } from "./JournalList";
 import { displayJournalUpdate } from "./JournalTransition";
 import * as Controls from "./OperationControlIds";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
 import { orderPlantAttention } from "./PlantAttentionOrdering";
-import { PlantCard } from "./PlantCard";
+import { createPesticideCatalogController } from "./PesticideCatalogController";
 import { PlantSheet, editPlantControlId, type PlantTarget } from "./PlantSheet";
+import { createSubstrateCatalogController } from "./SubstrateCatalogController";
 import "./app.css";
 
 interface AppProps {
@@ -38,19 +39,6 @@ interface AppProps {
   readonly substrates: SubstrateClient;
   readonly pesticideCatalog: PesticideClient;
   readonly photos: PlantPhotoClient;
-}
-
-interface GardenHistory {
-  readonly kind: "garden";
-  readonly plant: Journal.Plant;
-  readonly page: Journal.OperationPage;
-}
-
-interface CemeteryHistory {
-  readonly kind: "cemetery";
-  readonly plant: Journal.Plant;
-  readonly dates: Journal.OperationDates;
-  readonly page: Journal.OperationPage;
 }
 
 type ViewState = "loading" | "failed" | "loaded";
@@ -100,7 +88,7 @@ export const App: Component<AppProps> = (props) => {
     const proj = attentionProjection();
     const histories = gardenHistories();
     if (proj === undefined) return histories;
-    const samplesById = new Map(proj.plants.map((s) => [s.plantId, s]));
+    const samplesById = new Map(proj.plants.map((s) => [s.plant, s]));
     const pending: GardenHistory[] = [];
     const knownHistories: GardenHistory[] = [];
     const plantAttentions: { plant: Journal.Plant; watering: Journal.WateringAttention }[] = [];
@@ -130,9 +118,9 @@ export const App: Component<AppProps> = (props) => {
     ids: Set<Journal.PlantId>,
   ): boolean => {
     const samples = proj.plants;
-    if (samples.length !== new Set(samples.map((s) => s.plantId)).size) return false;
-    const filtered = samples.filter((s) => !recentlyArchived.has(s.plantId));
-    return !filtered.some((s) => !ids.has(s.plantId));
+    if (samples.length !== new Set(samples.map((s) => s.plant)).size) return false;
+    const filtered = samples.filter((s) => !recentlyArchived.has(s.plant));
+    return !filtered.some((s) => !ids.has(s.plant));
   };
 
   const loadJournal = async (animate = false) => {
@@ -341,7 +329,7 @@ export const App: Component<AppProps> = (props) => {
     let editedOperation: Journal.Operation | undefined;
     try {
       if (target.kind === "log") {
-        const result = await props.operations.logOperation(target.plantId, date, details);
+        const result = await props.operations.logOperation(target.plant, date, details);
         if (result.kind !== "logged") {
           setTargetError(
             result.kind === "plantArchived"
@@ -410,39 +398,21 @@ export const App: Component<AppProps> = (props) => {
     return undefined;
   };
 
-  const addSubstrateComponent = async (data: Journal.SubstrateComponentData) => {
-    const result = await props.substrates.addSubstrateComponent(data);
-    if (result.kind === "added") setSubstrateComponents((current) => [...current, result.entry]);
-    return result;
-  };
-
-  const editSubstrateComponent: SubstrateClient["editSubstrateComponent"] = async (id, data) => {
-    const result = await props.substrates.editSubstrateComponent(id, data);
-    if (result.kind === "edited")
-      setSubstrateComponents((current) =>
-        current.map((component) => (component.id === id ? result.entry : component)),
-      );
-    return result;
-  };
-
-  const archiveSubstrateComponent: SubstrateClient["archiveSubstrateComponent"] = async (id) => {
-    const result = await props.substrates.archiveSubstrateComponent(id);
-    if (result.kind === "archived")
-      setSubstrateComponents((current) =>
-        current.map((component) => (component.id === id ? result.entry : component)),
-      );
-    return result;
-  };
-
-  const addSubstrateMix = async (
-    name: Journal.SubstrateMixName,
-    maybeNotes: Journal.SubstrateMixNotes | null,
-    substrate: Journal.Substrate,
-  ) => {
-    const result = await props.substrates.addSubstrateMix(name, maybeNotes, substrate);
-    if (result.kind === "added") setSubstrateMixes((current) => [...current, result.entry]);
-    return result;
-  };
+  const substratesClient = createMemo(() => props.substrates);
+  const pesticideCatalogClient = createMemo(() => props.pesticideCatalog);
+  const substrateCatalog = createSubstrateCatalogController(
+    substratesClient,
+    setSubstrateComponents,
+    setSubstrateMixes,
+  );
+  const {
+    addSubstrateComponent,
+    editSubstrateComponent,
+    archiveSubstrateComponent,
+    addSubstrateMix,
+  } = substrateCatalog;
+  const pesticideCatalog = createPesticideCatalogController(pesticideCatalogClient, setPesticides);
+  const { addPesticide, editPesticide, archivePesticide } = pesticideCatalog;
 
   const requestDeleteSubstrateMix = (mix: Journal.SubstrateMix) => {
     setDeleteMixCompleted(false);
@@ -450,41 +420,11 @@ export const App: Component<AppProps> = (props) => {
   };
 
   const confirmDeleteSubstrateMix = async (mix: Journal.SubstrateMix) => {
-    let result: Journal.CatalogDeleteResult;
-    try {
-      result = await props.substrates.deleteSubstrateMix(mix.id);
-    } catch {
-      return "The mix could not be deleted.";
-    }
-    if (result.kind === "deleteFailed") return "The mix could not be deleted.";
-    setSubstrateMixes((current) => current.filter((entry) => entry.id !== mix.id));
+    const message = await substrateCatalog.deleteSubstrateMix(mix);
+    if (message !== undefined) return message;
     setDeleteMixCompleted(true);
     setDeleteMixTarget(undefined);
     return undefined;
-  };
-
-  const addPesticide = async (data: Journal.PesticideData) => {
-    const result = await props.pesticideCatalog.addPesticide(data);
-    if (result.kind === "added") setPesticides((current) => [...current, result.entry]);
-    return result;
-  };
-
-  const editPesticide: PesticideClient["editPesticide"] = async (id, data) => {
-    const result = await props.pesticideCatalog.editPesticide(id, data);
-    if (result.kind === "edited")
-      setPesticides((current) =>
-        current.map((pesticide) => (pesticide.id === id ? result.entry : pesticide)),
-      );
-    return result;
-  };
-
-  const archivePesticide: PesticideClient["archivePesticide"] = async (id) => {
-    const result = await props.pesticideCatalog.archivePesticide(id);
-    if (result.kind === "archived")
-      setPesticides((current) =>
-        current.map((pesticide) => (pesticide.id === id ? result.entry : pesticide)),
-      );
-    return result;
   };
 
   createEffect(() => {
@@ -506,7 +446,7 @@ export const App: Component<AppProps> = (props) => {
       } else {
         const proj = event.projection;
         for (const id of recentlyArchived)
-          if (!proj.plants.some((s) => s.plantId === id)) recentlyArchived.delete(id);
+          if (!proj.plants.some((s) => s.plant === id)) recentlyArchived.delete(id);
         if (activePlantIdsLoaded) {
           if (!isProjectionValid(proj, activeIds)) {
             setView("failed");
@@ -561,86 +501,34 @@ export const App: Component<AppProps> = (props) => {
           </p>
         </Match>
         <Match when={view() === "loaded"}>
-          <section class="journal" aria-label={selected() === "garden" ? "Garden" : "Cemetery"}>
-            <Index each={histories()}>
-              {(history) => {
-                const garden = () => {
-                  const entry = history();
-                  return entry.kind === "garden" ? entry : undefined;
-                };
-                const cemetery = () => {
-                  const entry = history();
-                  return entry.kind === "cemetery" ? entry : undefined;
-                };
-                return (
-                  <>
-                    <Show when={garden()}>
-                      {(entry) => (
-                        <PlantCard
-                          plant={entry().plant}
-                          watering={
-                            attentionProjection()?.plants.find(
-                              (s) => s.plantId === entry().plant.id,
-                            )?.watering
-                          }
-                          measuredAt={attentionProjection()?.measuredAt}
-                          operationPage={entry().page}
-                          substrateComponents={substrateComponents()}
-                          pesticides={pesticides()}
-                          getOperations={(window) =>
-                            props.operations.getOperations(entry().plant.id, window)
-                          }
-                          operationChange={operationChange()}
-                          onViewPhotos={(plant) => {
-                            setPhotosTarget(plant);
-                          }}
-                          onLog={() => {
-                            setSaveError(undefined);
-                            setFormTarget({ kind: "log", plantId: entry().plant.id });
-                          }}
-                          onArchive={() => {
-                            setArchiveCompleted(false);
-                            setArchiveTarget(entry().plant);
-                          }}
-                          onEditPlant={(plant) => {
-                            setPlantSaveError(undefined);
-                            setPlantTarget({ kind: "edit", plant });
-                          }}
-                          onEdit={(operation) => {
-                            setSaveError(undefined);
-                            setFormTarget({ kind: "edit", operation });
-                          }}
-                        />
-                      )}
-                    </Show>
-                    <Show when={cemetery()}>
-                      {(entry) => (
-                        <PlantCard
-                          kind="cemetery"
-                          plant={entry().plant}
-                          dates={entry().dates}
-                          operationPage={entry().page}
-                          substrateComponents={substrateComponents()}
-                          pesticides={pesticides()}
-                          getOperations={(window) =>
-                            props.operations.getOperations(entry().plant.id, window)
-                          }
-                          operationChange={operationChange()}
-                          onViewPhotos={(plant) => {
-                            setPhotosTarget(plant);
-                          }}
-                          onEdit={(operation) => {
-                            setSaveError(undefined);
-                            setFormTarget({ kind: "edit", operation });
-                          }}
-                        />
-                      )}
-                    </Show>
-                  </>
-                );
-              }}
-            </Index>
-          </section>
+          <JournalList
+            view={selected()}
+            histories={histories()}
+            attentionProjection={attentionProjection()}
+            substrateComponents={substrateComponents()}
+            pesticides={pesticides()}
+            getOperations={(plant, window) => props.operations.getOperations(plant, window)}
+            operationChange={operationChange()}
+            onViewPhotos={(plant) => {
+              setPhotosTarget(plant);
+            }}
+            onLog={(plant) => {
+              setSaveError(undefined);
+              setFormTarget({ kind: "log", plant });
+            }}
+            onArchive={(plant) => {
+              setArchiveCompleted(false);
+              setArchiveTarget(plant);
+            }}
+            onEditPlant={(plant) => {
+              setPlantSaveError(undefined);
+              setPlantTarget({ kind: "edit", plant });
+            }}
+            onEdit={(operation) => {
+              setSaveError(undefined);
+              setFormTarget({ kind: "edit", operation });
+            }}
+          />
         </Match>
       </Switch>
       <Show when={plantTarget()} keyed>

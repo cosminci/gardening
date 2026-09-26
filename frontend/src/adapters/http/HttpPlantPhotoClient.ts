@@ -11,11 +11,11 @@ export const makeHttpPlantPhotoClient = (
   const client = createClient<paths>({ baseUrl: globalThis.location.origin, fetch });
 
   return {
-    async getPhotos(plantId, window): Promise<Journal.GetPhotosResult> {
+    async getPhotos(plant, window): Promise<Journal.GetPhotosResult> {
       try {
         const { data, error } = await client.GET("/plants/{plantId}/photos", {
           params: {
-            path: { plantId },
+            path: { plantId: plant },
             query: { offset: window.offset, pageSize: window.size },
           },
         });
@@ -33,12 +33,12 @@ export const makeHttpPlantPhotoClient = (
       }
     },
 
-    async addPhoto(plantId, file): Promise<Journal.AddPhotoResult> {
+    async addPhoto(plant, file): Promise<Journal.AddPhotoResult> {
       try {
         const formData = new FormData();
         formData.append("file", file);
         const { data, error, response } = await client.POST("/plants/{plantId}/photos", {
-          params: { path: { plantId } },
+          params: { path: { plantId: plant } },
           body: formData as never,
           bodySerializer: (body) => body as never,
         });
@@ -52,10 +52,10 @@ export const makeHttpPlantPhotoClient = (
       }
     },
 
-    async removePhoto(photoId): Promise<Journal.RemovePhotoResult> {
+    async removePhoto(photo): Promise<Journal.RemovePhotoResult> {
       try {
         const { error, response } = await client.DELETE("/photos/{photoId}", {
-          params: { path: { photoId } },
+          params: { path: { photoId: photo } },
         });
         if (response.status === 204) return { kind: "removed" };
         if (response.status === 404) return { kind: "photoMissing" };

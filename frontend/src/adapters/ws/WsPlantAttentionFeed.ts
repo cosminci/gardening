@@ -65,7 +65,7 @@ const toAttentionSample = (value: Wire["PlantAttention"]): Journal.AttentionSamp
   switch (watering.kind) {
     case "unavailable":
       return {
-        plantId: Journal.plantId(value.plantId),
+        plant: Journal.plantId(value.plantId),
         watering: {
           kind: "unavailable",
           sampleCount: watering.sampleCount,
@@ -77,7 +77,7 @@ const toAttentionSample = (value: Wire["PlantAttention"]): Journal.AttentionSamp
     case "overdue":
     case "redAlert":
       return {
-        plantId: Journal.plantId(value.plantId),
+        plant: Journal.plantId(value.plantId),
         watering: {
           kind: watering.kind,
           sampleCount: watering.sampleCount,

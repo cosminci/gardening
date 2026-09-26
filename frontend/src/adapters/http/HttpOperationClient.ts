@@ -107,7 +107,7 @@ export const makeHttpOperationClient = (
 
 const toOperation = (value: Wire["Operation"]): Journal.Operation => ({
   id: Journal.operationId(value.id),
-  plantId: Journal.plantId(value.plantId),
+  plant: Journal.plantId(value.plantId),
   date: Journal.instant(value.date),
   details:
     value.details.kind === "care"

@@ -72,7 +72,7 @@ const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
   id: Journal.pesticideId(value.id),
   data: {
     name: Journal.pesticideName(value.data.name),
-    pesticideType: value.data.type,
+    type: value.data.type,
     maybeInfo: value.data.info === null ? null : Journal.pesticideInfo(value.data.info),
   },
   status: value.status,
@@ -80,7 +80,7 @@ const toPesticide = (value: Wire["Pesticide"]): Journal.Pesticide => ({
 
 const toWirePesticideData = (value: Journal.PesticideData): Wire["PesticideData"] => ({
   name: value.name,
-  type: value.pesticideType,
+  type: value.type,
   info: value.maybeInfo,
 });
 

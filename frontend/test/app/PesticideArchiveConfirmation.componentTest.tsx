@@ -7,7 +7,7 @@ const neem: Journal.Pesticide = {
   id: Journal.pesticideId("00000000-0000-4000-8001-000000000003"),
   data: {
     name: Journal.pesticideName("Neem oil"),
-    pesticideType: "insecticide",
+    type: "insecticide",
     maybeInfo: null,
   },
   status: "active",

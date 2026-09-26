@@ -70,12 +70,12 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
             {(pesticide) => (
               <div class="pesticide-choice">
                 <span
-                  class={`pesticide-type pesticide-type--${pesticide.data.pesticideType}`}
+                  class={`pesticide-type pesticide-type--${pesticide.data.type}`}
                   role="img"
-                  aria-label={pesticideTypeLabels[pesticide.data.pesticideType]}
-                  title={pesticideTypeLabels[pesticide.data.pesticideType]}
+                  aria-label={pesticideTypeLabels[pesticide.data.type]}
+                  title={pesticideTypeLabels[pesticide.data.type]}
                 >
-                  {pesticideTypeLabels[pesticide.data.pesticideType].slice(0, 1)}
+                  {pesticideTypeLabels[pesticide.data.type].slice(0, 1)}
                 </span>
                 <label class="choice">
                   <input

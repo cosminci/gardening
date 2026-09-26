@@ -15,7 +15,7 @@ const unavailableFicusAttention: AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
   plants: [
     {
-      plantId: ficus().id,
+      plant: ficus().id,
       watering: { kind: "unavailable" as const, sampleCount: 0, maybeElapsed: null },
     },
   ],

@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
+import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
@@ -84,7 +85,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const [closingSheet, setClosingSheet] = createSignal<"editor" | "plant">();
   const [archiveTarget, setArchiveTarget] = createSignal<Journal.SubstrateComponent>();
   const [archiveCompleted, setArchiveCompleted] = createSignal(false);
-  const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
+  useBackgroundBarrier();
 
   const waitForSheetTransition = () =>
     new Promise<void>((resolve) => {
@@ -207,17 +208,11 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     );
 
   onMount(() => {
-    background.forEach((element) => {
-      element.inert = true;
-    });
     window.addEventListener("keydown", onKeyDown);
     dialog.focus();
   });
 
   onCleanup(() => {
-    background.forEach((element) => {
-      element.inert = false;
-    });
     window.removeEventListener("keydown", onKeyDown);
     const returnFocusId =
       props.target.kind === "edit"

@@ -34,7 +34,7 @@ Vitest.describe("operation history", () => {
     });
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -123,7 +123,7 @@ Vitest.describe("operation history", () => {
       .mockResolvedValueOnce(operationsPage());
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -156,7 +156,7 @@ Vitest.describe("operation history", () => {
       const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
       Testing.render(() => (
         <OperationHistory
-          plantId={recent.plantId}
+          plant={recent.plant}
           substrateComponents={[]}
           pesticides={[]}
           getOperations={() => pending}
@@ -199,7 +199,7 @@ Vitest.describe("operation history", () => {
     const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -219,11 +219,11 @@ Vitest.describe("operation history", () => {
   });
 
   Vitest.it("should reset history when its index slot changes plant", async () => {
-    const [plantId, setPlantId] = createSignal(Journal.plantId("p1"));
+    const [plant, setPlant] = createSignal(Journal.plantId("p1"));
     const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older)));
     Testing.render(() => (
       <OperationHistory
-        plantId={plantId()}
+        plant={plant()}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -235,7 +235,7 @@ Vitest.describe("operation history", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
     Vitest.expect(await Testing.screen.findByText("Long note")).toBeInTheDocument();
 
-    setPlantId(Journal.plantId("p2"));
+    setPlant(Journal.plantId("p2"));
 
     Vitest.expect(Testing.screen.queryByRole("table")).not.toBeInTheDocument();
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
@@ -248,7 +248,7 @@ Vitest.describe("operation history", () => {
     const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}
@@ -279,7 +279,7 @@ Vitest.describe("operation history", () => {
       .mockResolvedValueOnce(operationsPage([secondPage]));
     Testing.render(() => (
       <OperationHistory
-        plantId={recent.plantId}
+        plant={recent.plant}
         substrateComponents={[]}
         pesticides={[]}
         getOperations={getOperations}

@@ -2,6 +2,7 @@ import { For, Match, Show, Switch, createSignal, onCleanup, onMount } from "soli
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import type { PlantPhotoClient } from "../domain/PlantPhoto";
+import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { formatLocalDateTime, plantDisplayName } from "./JournalLabels";
 import { PhotoRemoveConfirmation, removePhotoControlId } from "./PhotoRemoveConfirmation";
 import { photoContentUrl } from "../adapters/http/HttpPlantPhotoClient";
@@ -40,7 +41,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
 
   let requestedPage = 1;
 
-  const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
+  useBackgroundBarrier();
 
   const waitForSheetTransition = () =>
     new Promise<void>((resolve) => {
@@ -144,18 +145,12 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
   };
 
   onMount(() => {
-    background.forEach((element) => {
-      element.inert = true;
-    });
     window.addEventListener("keydown", onKeyDown);
     dialog.focus();
     void loadPage(1);
   });
 
   onCleanup(() => {
-    background.forEach((element) => {
-      element.inert = false;
-    });
     window.removeEventListener("keydown", onKeyDown);
     document.getElementById(`plant-photos-${String(props.plant.id)}`)?.focus();
   });

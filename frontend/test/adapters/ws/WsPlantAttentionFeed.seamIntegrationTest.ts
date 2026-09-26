@@ -28,7 +28,7 @@ const sampleProjection: Journal.AttentionProjection = {
   measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
   plants: [
     {
-      plantId: Journal.plantId("p1"),
+      plant: Journal.plantId("p1"),
       watering: {
         kind: "current",
         sampleCount: 5,
@@ -213,11 +213,11 @@ describe("WsPlantAttentionFeed", () => {
       measuredAt: Journal.instant("2026-01-10T00:00:00Z"),
       plants: [
         {
-          plantId: Journal.plantId("p1"),
+          plant: Journal.plantId("p1"),
           watering: { kind: "unavailable", sampleCount: 3, maybeElapsed: null },
         },
         {
-          plantId: Journal.plantId("p2"),
+          plant: Journal.plantId("p2"),
           watering: {
             kind: "unavailable",
             sampleCount: 4,

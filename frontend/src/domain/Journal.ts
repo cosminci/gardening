@@ -83,7 +83,7 @@ export interface SubstrateComponent {
 
 export interface PesticideData {
   readonly name: PesticideName;
-  readonly pesticideType: PesticideType;
+  readonly type: PesticideType;
   readonly maybeInfo: PesticideInfo | null;
 }
 
@@ -149,7 +149,7 @@ export interface PlantAttention {
 }
 
 export interface AttentionSample {
-  readonly plantId: PlantId;
+  readonly plant: PlantId;
   readonly watering: WateringAttention;
 }
 
@@ -176,7 +176,7 @@ export type OperationDetails = CareOperationDetails | RepotOperationDetails;
 
 export interface Operation {
   readonly id: OperationId;
-  readonly plantId: PlantId;
+  readonly plant: PlantId;
   readonly date: Instant;
   readonly details: OperationDetails;
 }
