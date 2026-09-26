@@ -149,6 +149,19 @@ Vitest.describe("PlantPhotosSheet", () => {
     },
   );
 
+  Vitest.it("should show a failed state when the photos request itself rejects", async () => {
+    const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
+    client.getPhotos = () => Promise.reject(new Error("network down"));
+
+    Testing.render(() => (
+      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+    ));
+
+    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
+      "Photos could not be loaded.",
+    );
+  });
+
   Vitest.it("should show empty state when first page has no photos", async () => {
     const client = buildPhotoClient({ getPhotosResults: [photosPage([])] });
     Testing.render(() => (
@@ -402,6 +415,20 @@ Vitest.describe("PlantPhotosSheet", () => {
     Vitest.expect(closeBtn).toHaveFocus();
   });
 
+  Vitest.it("should ignore unrelated keys while the overlay is open", async () => {
+    const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
+
+    Testing.render(() => (
+      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+    ));
+
+    Testing.fireEvent.click(await Testing.screen.findByAltText(/Photo from/));
+    const overlay = Testing.screen.getByRole("dialog", { name: "Photo viewer" });
+
+    Testing.fireEvent.keyDown(window, { key: "a" });
+    Vitest.expect(overlay).toBeInTheDocument();
+  });
+
   Vitest.it("should close the overlay via backdrop click", async () => {
     const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
 
@@ -618,6 +645,31 @@ Vitest.describe("PlantPhotosSheet", () => {
     Testing.fireEvent.keyDown(window, { key: "Escape" });
 
     Vitest.expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  Vitest.it("should not close via Escape while an upload is pending", async () => {
+    const onCancel = Vitest.vi.fn();
+    let finishUpload: (result: Journal.AddPhotoResult) => void = () => undefined;
+    const client = buildPhotoClient({ getPhotosResults: [photosPage([])] });
+    client.addPhoto = () =>
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      });
+
+    Testing.render(() => <PlantPhotosSheet plant={ficus()} photos={client} onCancel={onCancel} />);
+    await Testing.screen.findByText("No photos yet.");
+
+    const fileInput = Testing.screen.getByLabelText("Choose a photo to upload");
+    const file = new File(["jpeg"], "photo.jpg", { type: "image/jpeg" });
+    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
+    Testing.fireEvent.change(fileInput);
+    await Testing.screen.findByText("Uploading…");
+
+    Testing.fireEvent.keyDown(window, { key: "Escape" });
+    Vitest.expect(onCancel).not.toHaveBeenCalled();
+
+    finishUpload({ kind: "addFailed", reason: new Error("unused") });
+    await Testing.screen.findByRole("alert");
   });
 
   Vitest.it("should ignore a second Escape while the sheet is already closing", async () => {

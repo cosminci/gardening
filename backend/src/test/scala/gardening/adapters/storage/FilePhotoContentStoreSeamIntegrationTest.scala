@@ -70,24 +70,25 @@ class FilePhotoContentStoreSeamIntegrationTest extends FunSuite:
   test("should return ReadFailed when a found file cannot be read"):
     withTempDir: dir =>
       val store = FilePhotoContentStore.make(dir)
-      val _     = Files.write(dir.resolve(s"${photoId.value}.jpeg"), Array[Byte](1, 2, 3))
-      dir.resolve(s"${photoId.value}.jpeg").toFile.setReadable(false)
+      // A directory at the expected path is unreadable as bytes regardless of file permissions or
+      // user privilege (unlike a chmod-based fault, which root ignores), so this deterministically
+      // exercises the IOException branch under any user, including CI's root.
+      Files.createDirectory(dir.resolve(s"${photoId.value}.jpeg"))
       store.get(photoId) match
         case PhotoReadResult.ReadFailed(_: IOException) => ()
-        case PhotoReadResult.Read(_)                    => () // pass if running as root or on permissive FS
-        case other                                      => fail(s"expected ReadFailed or Read, got $other")
+        case other                                      => fail(s"expected ReadFailed, got $other")
 
   test("should return WriteFailed when an existing photo cannot be deleted"):
     withTempDir: dir =>
-      val store = FilePhotoContentStore.make(dir)
-      assertEquals(store.put(photoId, jpegContent), PhotoWriteResult.Written)
-      dir.toFile.setWritable(false)
-      try
-        store.delete(photoId) match
-          case PhotoWriteResult.WriteFailed(_: IOException) => ()
-          case PhotoWriteResult.Written                     => () // pass if running as root or on permissive FS
-          case other                                        => fail(s"expected WriteFailed or Written, got $other")
-      finally dir.toFile.setWritable(true): Unit
+      val store    = FilePhotoContentStore.make(dir)
+      val photoDir = dir.resolve(s"${photoId.value}.jpeg")
+      // A non-empty directory at the expected path can never be deleted via deleteIfExists
+      // (DirectoryNotEmptyException, an IOException), regardless of user privilege.
+      Files.createDirectory(photoDir)
+      val _ = Files.write(photoDir.resolve("child"), Array[Byte](1))
+      store.delete(photoId) match
+        case PhotoWriteResult.WriteFailed(_: IOException) => ()
+        case other                                        => fail(s"expected WriteFailed, got $other")
 
   private def withTempDir(body: Path => Unit): Unit =
     val dir = Files.createTempDirectory("gardening-test-photos-")

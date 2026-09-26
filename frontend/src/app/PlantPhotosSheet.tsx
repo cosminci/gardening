@@ -379,6 +379,9 @@ const PhotoOverlay: Component<{
 
   onCleanup(() => {
     window.removeEventListener("keydown", onKeyDown);
+    // document.activeElement is always an HTMLElement (defaults to <body>) in this app, which never
+    // focuses SVG or other non-HTML elements; the false side is an unreachable domain invariant.
+    /* v8 ignore next */
     if (previousFocus instanceof HTMLElement) previousFocus.focus();
   });
 
