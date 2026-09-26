@@ -261,6 +261,7 @@ enumerate tests, fixtures, data values, or covered cases. Put general test conve
 `CONTRIBUTING.md`. Structure each living doc against `specs/templates/<name>.md`, link to
 the canonical source instead of restating it, and omit sections or Doc Sync entries with
 no distinct value. Prune obsolete or duplicated content rather than appending to it.
+Favor scannable structure over narrative paragraphs: short bullets, a directory-hierarchy listing, a mermaid diagram, or a small code/port snippet (never implementation detail) wherever one states the fact more clearly than a paragraph of prose would.
 Move the spec to `specs/changes/archive/YYYY-MM-DD-<slug>/` in this PR.
 
 The Archive + Living Docs PR links the merged Spec PR and all Implementation PRs. It contains no
