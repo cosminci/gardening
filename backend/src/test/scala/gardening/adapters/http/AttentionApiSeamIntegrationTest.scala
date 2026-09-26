@@ -1,6 +1,7 @@
 package gardening.adapters.http
 
 import cats.syntax.option.*
+import gardening.adapters.system.SystemClock
 import gardening.domain.*
 import gardening.domain.attention.*
 import io.circe.parser.parse
@@ -61,7 +62,7 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
   test("should expose the HTTP and websocket feed endpoints for the composition root to wire up"):
     val attention = buildAttention(Refs(), Vector(projection))
 
-    val endpoints = AttentionApi.serverEndpoints(using attention)
+    val endpoints = AttentionApi.serverEndpoints(using attention, buildHeartbeats)
 
     val describedEndpoints = endpoints.map: server =>
       s"${server.endpoint.method.getOrElse(fail("endpoint without a method"))} ${server.endpoint.showPathTemplate()}"
@@ -76,18 +77,19 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
     val pollInterval = 1.milli
     val pushed       = supervised:
       val stillConnected = Flow.tick(1.hour, "still connected")
-      AttentionApi.attentionFeed(attention, pollInterval)(stillConnected).take(2).runToList()
+      AttentionApi.attentionFeed(attention, pollInterval, buildHeartbeats)(stillConnected).take(2).runToList()
 
     val expectedPushed = List(initial, changed)
     assertEquals(pushed, expectedPushed)
 
   test("should push the current projection immediately to every newly connected browser"):
     val pollInterval = 1.milli
+    val heartbeats   = buildHeartbeats
 
     val (firstConnectionPushed, secondConnectionPushed) = supervised:
       val tick   = Flow.tick(1.hour, "connected")
-      val first  = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(tick).take(1).runToList()
-      val second = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval)(tick).take(1).runToList()
+      val first  = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval, heartbeats)(tick).take(1).runToList()
+      val second = AttentionApi.attentionFeed(buildAttention(Refs(), Vector(projection)), pollInterval, heartbeats)(tick).take(1).runToList()
       (first, second)
 
     assertEquals(firstConnectionPushed, List(projection))
@@ -105,6 +107,8 @@ class AttentionApiSeamIntegrationTest extends munit.FunSuite:
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(List(AttentionApi.httpServerEndpoint(using attention)))
       .backend()
+
+  private def buildHeartbeats = ConnectionHeartbeats.make(staleness = 5.seconds)(using SystemClock)
 
   private def jsonBody(response: Response[Either[String, String]]) = parse(response.body.merge).fold(error => fail(error.message), identity)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)

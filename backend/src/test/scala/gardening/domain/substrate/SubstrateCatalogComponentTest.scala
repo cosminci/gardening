@@ -11,6 +11,9 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class SubstrateCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
+  private given metrics: SubstrateCatalogMetricsApi = new SubstrateCatalogMetricsApi:
+    def setComponentDisplayNames(components: Vector[(SubstrateComponentId, String)]): Unit = ()
+
   private val componentId   = SubstrateComponentId(UUID.fromString("10000000-0000-4000-8000-000000000001"))
   private val componentData = SubstrateComponentData(SubstrateComponentName("Pumice"), SubstrateComponentInfo("porous").some)
   private val component     = SubstrateComponent(componentId, componentData, SubstrateComponentStatus.Active)

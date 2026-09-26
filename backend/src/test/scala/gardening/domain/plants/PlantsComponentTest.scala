@@ -19,8 +19,9 @@ import scala.util.chaining.scalaUtilChainingOps
 class PlantsComponentTest extends munit.FunSuite with TestImplicits:
 
   private given metrics: PlantsMetricsApi = new PlantsMetricsApi:
-    def setPlantsCount(status: PlantStatus, count: Long): Unit             = ()
-    def incrementSubstrateComponent(component: SubstrateComponentId): Unit = ()
+    def setPlantsCount(status: PlantStatus, count: Long): Unit                              = ()
+    def incrementSubstrateComponent(component: SubstrateComponentId): Unit                  = ()
+    def setPlantsDisplayNames(status: PlantStatus, plants: Vector[(PlantId, String)]): Unit = ()
 
   private val date       = Instant.parse("2026-01-01T00:00:00Z")
   private val perliteId  = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
@@ -85,15 +86,16 @@ class PlantsComponentTest extends munit.FunSuite with TestImplicits:
 
   test("should return current plants by status and surface read failures"):
     val failure = RuntimeException("plant read failed")
+    val unnamed = plant.copy(id = PlantId("p2"), details = plant.details.copy(maybeNickname = None))
     val refs    = Refs()
 
-    val active    = buildPlants(refs, getPlantsResult = GetPlantsResult.Read(Vector(plant)))
+    val active    = buildPlants(refs, getPlantsResult = GetPlantsResult.Read(Vector(plant, unnamed)))
     val failedOne = buildPlants(getPlantsResult = GetPlantsResult.ReadFailed(failure))
 
     val activeResult   = active.getPlants(PlantStatus.Active)
     val archivedResult = failedOne.getPlants(PlantStatus.Archived)
 
-    assertEquals(activeResult, GetPlantsResult.Read(Vector(plant)))
+    assertEquals(activeResult, GetPlantsResult.Read(Vector(plant, unnamed)))
     assertEquals(refs.requestedStatuses.get(), Vector(PlantStatus.Active))
     assertEquals(archivedResult, GetPlantsResult.ReadFailed(failure))
 

@@ -61,12 +61,17 @@ object Plants:
     override def getPlants(status: PlantStatus): GetPlantsResult =
       store.getPlants(status).tap:
         case GetPlantsResult.ReadFailed(reason) => log.error("get plants", reason)
-        case GetPlantsResult.Read(found)        => metrics.setPlantsCount(status, found.size.toLong)
+        case GetPlantsResult.Read(found)        =>
+          metrics.setPlantsCount(status, found.size.toLong)
+          metrics.setPlantsDisplayNames(status, found.map(displayName))
 
     override def getArchivedCount: ArchivedCountResult =
       store.getArchivedCount.tap:
         case ArchivedCountResult.ReadFailed(reason) => log.error("get archived count", reason)
         case ArchivedCountResult.Counted(count)     => metrics.setPlantsCount(PlantStatus.Archived, count)
+
+    private def displayName(plant: Plant): (PlantId, String) =
+      plant.id -> plant.details.maybeNickname.map(_.value).getOrElse(plant.details.species.value)
 
     override def editPlant(plant: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = lock.exclusively:
       val outcome =
