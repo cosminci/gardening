@@ -13,7 +13,9 @@ import language.experimental.captureChecking
 
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit.MILLISECONDS
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.CountDownLatch
 import scala.util.chaining.scalaUtilChainingOps
 
 class OperationsComponentTest extends munit.FunSuite with TestImplicits:
@@ -268,6 +270,355 @@ class OperationsComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(unreadableResult, DeleteOperationResult.DeleteFailed(readFailure))
     assertEquals(historyFailedResult, DeleteOperationResult.DeleteFailed(historyFailure))
     assertEquals(writeFailedResult, DeleteOperationResult.DeleteFailed(removeFailure))
+
+  test("should update a plant after recording the latest repot"):
+    val newSubstrate    = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newRepot        = OperationDetails.Repot(newSubstrate, maybeNote = none)
+    val loggedOperation = Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)
+    val refs            = Refs()
+    val operations      =
+      buildOperations(refs, getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedOperation), hasNextPage = false)))
+
+    assertEquals(operations.logOperation(PlantId("p1"), date, newRepot), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(refs.recordedOperations.get(), Vector(loggedOperation))
+    assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
+
+  test("should leave the plant unchanged when a recorded repot loses the ordering tie-break"):
+    val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val logged     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val refs       = Refs()
+
+    val operations = buildOperations(
+      refs,
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, logged), hasNextPage = false)),
+      addOperationResult = LogOperationResult.Logged(logged.id),
+      nextId = () => logged.id.value
+    )
+    assertEquals(operations.logOperation(plant.id, date, repot), LogOperationResult.Logged(logged.id))
+    assertEquals(refs.updatedPlants.get(), Vector.empty)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should preserve the current substrate when logging a historical repot"):
+    val newerSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val olderSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newerRepot     = Operation(OperationId("newer"), plant.id, date, OperationDetails.Repot(newerSubstrate, none))
+    val olderRepot     = OperationDetails.Repot(olderSubstrate, none)
+    val refs           = Refs()
+
+    val operations = buildOperations(refs, getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false)))
+    assertEquals(operations.logOperation(plant.id, date.minusSeconds(60), olderRepot), LogOperationResult.Logged(OperationId("id-1")))
+    assertEquals(refs.updatedPlants.get(), Vector.empty)
+
+  test("should finish concurrent repot logs in timestamp order"):
+    val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
+    val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
+    val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
+    val firstOperation  = Operation(OperationId("id-1"), PlantId("p1"), date, firstRepot)
+    val secondOperation = Operation(OperationId("id-2"), PlantId("p1"), date.plusNanos(1), secondRepot)
+    val firstIdCall     = CountDownLatch(1)
+    val releaseFirst    = CountDownLatch(1)
+    val secondIdCall    = CountDownLatch(1)
+    val idCalls         = AtomicInteger()
+    val idGen           = new IdGenerator:
+      override def nextId(): String =
+        idCalls.incrementAndGet() match
+          case 1 =>
+            firstIdCall.countDown()
+            releaseFirst.await()
+            "id-1"
+          case _ =>
+            secondIdCall.countDown()
+            "id-2"
+    val refs       = Refs()
+    val operations = buildOperations(
+      refs,
+      nextId = () => idGen.nextId(),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(firstOperation), hasNextPage = false)),
+      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(secondOperation, firstOperation), hasNextPage = false)).some
+    )
+
+    val firstThread = Thread.ofVirtual().start: () =>
+      val _ = operations.logOperation(PlantId("p1"), date, firstRepot)
+    assert(firstIdCall.await(1, java.util.concurrent.TimeUnit.SECONDS))
+    val secondThread = Thread.ofVirtual().start: () =>
+      val _ = operations.logOperation(PlantId("p1"), date.plusNanos(1), secondRepot)
+    val overtook = secondIdCall.await(100, MILLISECONDS)
+    releaseFirst.countDown()
+    firstThread.join()
+    secondThread.join()
+
+    assertEquals(overtook, false)
+    assertEquals(refs.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
+
+  test("should remove a recorded repot whenever its plant cannot reflect it"):
+    val historyFailure    = RuntimeException("history failed")
+    val readFailure       = RuntimeException("read failed")
+    val updateFailure     = RuntimeException("update failed")
+    val loggedRepot       = Operation(OperationId("id-1"), plant.id, date, repot)
+    val selfOnlyPage      = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false))
+    val unreadableHistory = Refs()
+    val missingPlant      = Refs()
+    val unreadable        = Refs()
+    val notUpdated        = Refs()
+
+    val historyResult =
+      buildOperations(unreadableHistory, getOperationsResult = GetOperationsResult.ReadFailed(historyFailure)).logOperation(plant.id, date, repot)
+    val missingResult = buildOperations(
+      missingPlant,
+      getOperationsResult = selfOnlyPage,
+      getPlantResultAfterLog = GetPlantResult.RecordMissing.some
+    ).logOperation(plant.id, date, repot)
+    val readResult = buildOperations(
+      unreadable,
+      getOperationsResult = selfOnlyPage,
+      getPlantResultAfterLog = GetPlantResult.ReadFailed(readFailure).some
+    ).logOperation(plant.id, date, repot)
+    val updateResult = buildOperations(
+      notUpdated,
+      getOperationsResult = selfOnlyPage,
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
+    ).logOperation(plant.id, date, repot)
+
+    assertEquals(historyResult, LogOperationResult.LoggingFailed(historyFailure))
+    missingResult match
+      case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(missingPlant.removedOperations.get(), Vector(OperationId("id-1")))
+    assertEquals(readResult, LogOperationResult.LoggingFailed(readFailure))
+    assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
+    assertEquals(updateResult, LogOperationResult.LoggingFailed(updateFailure))
+    assertEquals(notUpdated.removedOperations.get(), Vector(OperationId("id-1")))
+    assertEquals(unreadableHistory.removedOperations.get(), Vector(OperationId("id-1")))
+
+  test("should report both failures when removing a recorded repot also fails"):
+    val updateFailure = RuntimeException("update failed")
+    val removeFailure = RuntimeException("remove failed")
+    val loggedRepot   = Operation(OperationId("id-1"), PlantId("p1"), date, repot)
+    val operations    = buildOperations(
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false)),
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
+      removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
+    )
+
+    operations.logOperation(PlantId("p1"), date, repot) match
+      case LogOperationResult.LoggingFailed(reason) =>
+        assertEquals(reason.getCause, updateFailure)
+        assertEquals(reason.getSuppressed.toList, List(removeFailure))
+      case other => fail(s"expected LoggingFailed, got $other")
+
+  test("should leave the plant unchanged when recording a repot fails"):
+    val cause = RuntimeException("store down")
+    val refs  = Refs()
+
+    assertEquals(
+      buildOperations(refs, addOperationResult = LogOperationResult.LoggingFailed(cause)).logOperation(PlantId("p1"), date, repot),
+      LogOperationResult.LoggingFailed(cause)
+    )
+    assertEquals(refs.updatedPlants.get(), Vector.empty)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should update a plant after amending the latest repot"):
+    val existingRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val tiedRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val newSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
+    val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
+    val refs          = Refs()
+    val operations    = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot, tiedRepot), hasNextPage = false)),
+      updateOperationResult = editResult
+    )
+
+    assertEquals(operations.editOperation(existingRepot.id, amended), editResult)
+    assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
+
+  test("should allow editing an archived repot without changing its archived status"):
+    val archivedPlant    = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
+    val existing         = Operation(OperationId("o2"), plant.id, date, repot)
+    val amendedSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amended          = OperationDetails.Repot(amendedSubstrate, maybeNote = none)
+    val updated          = existing.copy(details = amended)
+
+    val refs       = Refs()
+    val operations = buildOperations(
+      refs,
+      getPlantResult = GetPlantResult.Read(archivedPlant),
+      getOperationResult = GetOperationResult.Read(existing),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existing), hasNextPage = false)),
+      updateOperationResult = EditOperationResult.Edited(updated)
+    )
+    val editResult = operations.editOperation(existing.id, amended)
+
+    val expectedPlant = archivedPlant.copy(details = archivedPlant.details.copy(substrate = amendedSubstrate))
+    assertEquals(editResult, EditOperationResult.Edited(updated))
+    assertEquals(refs.updatedPlants.get(), Vector(expectedPlant))
+
+  test("should update the plant after amending its latest repot despite newer care operations"):
+    val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val newerCare     = Vector.tabulate(10)(index =>
+      Operation(
+        OperationId(s"care-$index"),
+        PlantId("p1"),
+        date.plusSeconds(index.toLong + 1),
+        OperationDetails.Care(Set(ActionType.Watered), Set.empty, MoistureLevel.Wet, Note("dry").some)
+      )
+    )
+    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amended      = OperationDetails.Repot(newSubstrate, maybeNote = none)
+    val editResult   = EditOperationResult.Edited(existingRepot.copy(details = amended))
+    val refs         = Refs()
+    val operations   = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(newerCare, hasNextPage = true)),
+      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)).some,
+      updateOperationResult = editResult
+    )
+
+    assertEquals(operations.editOperation(existingRepot.id, amended), editResult)
+    assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
+
+  test("should amend an older repot without changing the plant"):
+    val olderRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val amended    = OperationDetails.Repot(substrate, maybeNote = none)
+    val editResult = EditOperationResult.Edited(olderRepot.copy(details = amended))
+    val refs       = Refs()
+    val operations = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(olderRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false)),
+      updateOperationResult = editResult
+    )
+
+    assertEquals(operations.editOperation(olderRepot.id, amended), editResult)
+    assertEquals(refs.updatedPlants.get(), Vector.empty)
+    assertEquals(refs.restoredOperations.get(), Vector.empty)
+
+  test("should restore an amended repot whenever plant synchronization cannot complete"):
+    val existingRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val historyFailure    = RuntimeException("history unavailable")
+    val plantFailure      = RuntimeException("plant unavailable")
+    val updateFailure     = RuntimeException("plant update failed")
+    val unreadableHistory = Refs()
+    val historyOperations = buildOperations(
+      unreadableHistory,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.ReadFailed(historyFailure),
+      updateOperationResult = EditOperationResult.Edited(existingRepot)
+    )
+    val unreadablePlant = Refs()
+    val plantOperations = buildOperations(
+      unreadablePlant,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      getPlantResult = GetPlantResult.ReadFailed(plantFailure),
+      updateOperationResult = EditOperationResult.Edited(existingRepot)
+    )
+    val plantNotUpdated  = Refs()
+    val updateOperations = buildOperations(
+      plantNotUpdated,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      updateOperationResult = EditOperationResult.Edited(existingRepot),
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
+    )
+
+    val historyResult = historyOperations.editOperation(existingRepot.id, repot)
+    val plantResult   = plantOperations.editOperation(existingRepot.id, repot)
+    val updateResult  = updateOperations.editOperation(existingRepot.id, repot)
+
+    assertEquals(historyResult, EditOperationResult.EditFailed(historyFailure))
+    assertEquals(plantResult, EditOperationResult.EditFailed(plantFailure))
+    assertEquals(updateResult, EditOperationResult.EditFailed(updateFailure))
+    List(unreadableHistory, unreadablePlant, plantNotUpdated).foreach: refs =>
+      assertEquals(refs.updatedOperations.get(), Vector(existingRepot.id -> repot))
+      assertEquals(refs.restoredOperations.get(), Vector(existingRepot))
+
+  test("should surface a failed latest repot edit without updating the plant"):
+    val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val cause         = RuntimeException("store down")
+    val refs          = Refs()
+    val operations    = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      updateOperationResult = EditOperationResult.EditFailed(cause)
+    )
+
+    assertEquals(operations.editOperation(existingRepot.id, repot), EditOperationResult.EditFailed(cause))
+    assertEquals(refs.updatedPlants.get(), Vector.empty[Plant])
+
+  test("should report both failures when restoring an amended repot also fails"):
+    val existingRepot  = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val updateFailure  = RuntimeException("update failed")
+    val restoreFailure = RuntimeException("restore failed")
+    val operations     = buildOperations(
+      getOperationResult = GetOperationResult.Read(existingRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      updateOperationResult = EditOperationResult.Edited(existingRepot),
+      updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
+      restoreOperationResult = OperationCompensationResult.CompensationFailed(restoreFailure)
+    )
+
+    operations.editOperation(existingRepot.id, repot) match
+      case EditOperationResult.EditFailed(reason) =>
+        assertEquals(reason.getCause, updateFailure)
+        assertEquals(reason.getSuppressed.toList, List(restoreFailure))
+      case other => fail(s"expected EditFailed, got $other")
+
+  test("should delete a non-latest repot"):
+    val olderRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val newerRepot = Operation(OperationId("o2"), plant.id, date.plusSeconds(60), repot)
+    val refs       = Refs()
+    val operations = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(olderRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false))
+    )
+
+    assertEquals(operations.deleteOperation(olderRepot.id), DeleteOperationResult.Deleted)
+    assertEquals(refs.removedOperations.get(), Vector(olderRepot.id))
+
+  test("should reject deleting a plant's only repot"):
+    val onlyRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs      = Refs()
+    val result    = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(onlyRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(onlyRepot), hasNextPage = false))
+    ).deleteOperation(onlyRepot.id)
+
+    assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should reject deleting the latest repot on a same-instant tie-break"):
+    val newerRepot = Operation(OperationId("o2"), plant.id, date, repot)
+    val olderRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs       = Refs()
+    val result     = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(newerRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false))
+    ).deleteOperation(newerRepot.id)
+
+    assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
+    assertEquals(refs.removedOperations.get(), Vector.empty)
+
+  test("should allow deleting a repot when its plant's history reports no repot at all"):
+    val orphanRepot = Operation(OperationId("o1"), plant.id, date, repot)
+    val refs        = Refs()
+    val operations  = buildOperations(
+      refs,
+      getOperationResult = GetOperationResult.Read(orphanRepot),
+      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
+    )
+
+    assertEquals(operations.deleteOperation(orphanRepot.id), DeleteOperationResult.Deleted)
+    assertEquals(refs.removedOperations.get(), Vector(orphanRepot.id))
 
   final private case class Refs():
     val requestedOperationWindows: AtomicReference[Vector[(PlantId, OperationWindow)]] = AtomicReference(Vector.empty)
