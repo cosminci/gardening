@@ -1,7 +1,3 @@
-.sheet--photos {
-  width: min(62rem, 100%);
-}
-
 .photos-sheet__header {
   display: flex;
   align-items: center;
@@ -10,20 +6,14 @@
   padding: 1.5rem 1.5rem 0;
 }
 
-.photos-sheet__header h2 {
-  margin: 0;
-  font-size: 1.2rem;
-}
-
 .photos-sheet__body {
   padding: 1.5rem;
 }
 
-.photos-sheet__add {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
+.photos-sheet__status {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .photos-sheet__add-label {

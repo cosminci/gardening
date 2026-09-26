@@ -50,7 +50,7 @@ Vitest.describe("operation history", () => {
     Testing.fireEvent.click(show);
 
     const table = await Testing.screen.findByRole("table");
-    Vitest.expect(Testing.within(table).getAllByRole("columnheader")).toHaveLength(4);
+    Vitest.expect(Testing.within(table).getAllByRole("columnheader")).toHaveLength(5);
     Vitest.expect(Testing.within(table).getAllByText("03.03.2026")).toHaveLength(2);
     const firstDate = Testing.within(table).getAllByText("03.03.2026")[0];
     Vitest.expect(firstDate).toHaveAttribute("datetime", "2026-03-03T00:00:00Z");

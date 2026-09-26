@@ -260,7 +260,7 @@ describe("plant cards", () => {
   it(`should render ${unknownWatering.kind} watering with an unavailable cadence`, () => {
     render(() => <PlantCard {...emptyCardProps} watering={unknownWatering} />);
 
-    expect(screen.getByLabelText("Watering cadence unavailable")).toHaveTextContent("?");
+    expect(screen.getByLabelText("Watering cadence unavailable").textContent).toBe("");
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
     const expectedDetails = "Insufficient watering operations.";
     expect(screen.getByRole("tooltip")).toHaveTextContent(expectedDetails);
@@ -271,7 +271,7 @@ describe("plant cards", () => {
     vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
     render(() => <PlantCard {...emptyCardProps} watering={currentWatering} />);
 
-    expect(screen.getByLabelText("Watering current")).toHaveTextContent("✓");
+    expect(screen.getByLabelText("Watering current").textContent).toBe("");
     expect(screen.getByText("in 12h")).toBeInTheDocument();
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
     const tooltip = screen.getByRole("tooltip");
@@ -287,7 +287,7 @@ describe("plant cards", () => {
     vi.setSystemTime(new Date("2026-01-01T00:03:00Z"));
     render(() => <PlantCard {...emptyCardProps} watering={overdueWatering} />);
 
-    expect(screen.getByLabelText("Watering overdue")).toHaveTextContent("!");
+    expect(screen.getByLabelText("Watering overdue").textContent).toBe("");
     expect(screen.getByText("late 1h")).toBeInTheDocument();
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
     expect(within(screen.getByRole("tooltip")).getByText("1 day")).toBeInTheDocument();
@@ -298,7 +298,7 @@ describe("plant cards", () => {
     vi.setSystemTime(new Date("2026-01-01T00:01:00Z"));
     render(() => <PlantCard {...emptyCardProps} watering={redAlertWatering} />);
 
-    expect(screen.getByLabelText("Watering red alert")).toHaveTextContent("×");
+    expect(screen.getByLabelText("Watering red alert").textContent).toBe("");
     expect(screen.getByText("late 2d")).toBeInTheDocument();
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
     expect(within(screen.getByRole("tooltip")).getByText("1 hour")).toBeInTheDocument();

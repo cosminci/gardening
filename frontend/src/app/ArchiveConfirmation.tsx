@@ -12,6 +12,7 @@ interface ArchiveConfirmationProps {
 }
 
 export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) => {
+  const name = () => plantDisplayName(props.plant);
   let warning!: HTMLElement;
   let cancelButton!: HTMLButtonElement;
   let confirmButton!: HTMLButtonElement;
@@ -83,16 +84,16 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
         class="archive-confirmation"
         role="alertdialog"
         aria-modal="true"
-        aria-label={`Archive ${plantDisplayName(props.plant)}`}
+        aria-label={`Move ${name()} to cemetery`}
         aria-describedby="archive-consequence"
         tabIndex={-1}
       >
         <span class="archive-confirmation__warning" aria-hidden="true">
           !
         </span>
-        <h2>Archive {plantDisplayName(props.plant)}?</h2>
+        <h2>Move {name()} to cemetery?</h2>
         <p id="archive-consequence">
-          This removes the plant from the garden permanently. Archiving cannot be undone.
+          This moves {name()} to the cemetery permanently. It cannot be undone.
         </p>
         <Show when={error()}>
           {(message) => (
@@ -123,7 +124,7 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
             class="archive-confirmation__commit"
             onClick={() => void confirm()}
           >
-            Archive permanently
+            Move to cemetery
           </button>
         </div>
       </section>

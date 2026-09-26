@@ -68,12 +68,17 @@ export const LoadSubstrateMixSheet: Component<LoadSubstrateMixSheetProps> = (pro
                     }}
                   />
                 </header>
-                <Show when={mix.maybeNotes}>
-                  {(notes) => <p class="substrate-mix-card__notes">{notes()}</p>}
-                </Show>
-                <dl class="operation__details">
+                <dl class="substrate-mix-card__facts">
                   <dt>Substrate</dt>
                   <dd>{formatSubstrate(mix.substrate, props.components)}</dd>
+                  <Show when={mix.maybeNotes}>
+                    {(notes) => (
+                      <>
+                        <dt>Notes</dt>
+                        <dd>{notes()}</dd>
+                      </>
+                    )}
+                  </Show>
                 </dl>
                 <Show when={!isAvailable(mix)}>
                   <p class="inline-alert" role="alert">

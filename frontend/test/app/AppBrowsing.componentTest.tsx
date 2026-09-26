@@ -113,9 +113,9 @@ describe("browsing the journal", () => {
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
     expect(renderedOperations.map((operation) => operation.textContent)).toEqual([
-      "2nd of FebruaryEditCareMoistureModerate +ActionsNone recorded",
-      "3rd of MarchEditRepotSubstratePerlite 100%",
-      "5th of AprilEditCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
+      "2nd of FebruaryCareMoistureModerate +ActionsNone recorded",
+      "3rd of MarchRepotSubstratePerlite 100%",
+      "5th of AprilCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
     ]);
     const recentDate = within(card).getByText("5th of April");
     expect(recentDate).toHaveAttribute("datetime", "2026-04-04T22:30:00Z");
@@ -1335,7 +1335,7 @@ describe("browsing the journal", () => {
     await screen.findByRole("article", { name: "Fern" });
 
     fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
-    fireEvent.click(screen.getByRole("button", { name: "Archive permanently" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move to cemetery" }));
     await screen.findByRole("button", { name: /Garden.*0 plants/ });
 
     journal.pushAttention({ measuredAt: Journal.instant("2026-01-02T00:00:00Z"), plants: [] });

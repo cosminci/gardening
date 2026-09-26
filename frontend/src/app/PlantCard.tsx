@@ -106,7 +106,7 @@ const wateringPresentation = (
     case "unavailable":
       return {
         label: "Watering cadence unavailable",
-        symbol: "?",
+        symbol: "",
         delta: "",
         details: (
           <p class="watering-attention__unavailable-details">Insufficient watering operations.</p>
@@ -115,21 +115,21 @@ const wateringPresentation = (
     case "current":
       return {
         label: "Watering current",
-        symbol: "✓",
+        symbol: "",
         delta: `in ${formatDuration(watering.averageInterval - watering.elapsed)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "overdue":
       return {
         label: "Watering overdue",
-        symbol: "!",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
     case "redAlert":
       return {
         label: "Watering red alert",
-        symbol: "×",
+        symbol: "",
         delta: `late ${formatDuration(watering.elapsed - watering.averageInterval)}`,
         details: details(formatAverageInterval(watering.averageInterval)),
       };
@@ -208,7 +208,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
             <div class="plant-card__actions">
               <button
                 id={plantPhotosControlId(props.plant.id)}
-                class="plant-photos"
+                class="inline-icon-action inline-icon-action--photos"
                 type="button"
                 aria-label={`Photos for ${name()}`}
                 title={`Photos for ${name()}`}
@@ -216,34 +216,42 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
                   props.onViewPhotos(props.plant);
                 }}
               >
-                Photos
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
               </button>
               {props.kind !== "cemetery" && (
                 <>
                   <button
                     id={editPlantControlId(props.plant.id)}
-                    class="edit-plant"
+                    class="inline-icon-action inline-icon-action--edit"
                     type="button"
                     aria-label={`Edit ${name()}`}
                     title={`Edit ${name()}`}
                     onClick={() => {
                       props.onEditPlant(props.plant);
                     }}
-                  >
-                    Edit
-                  </button>
+                  />
                   <button
                     id={`archive-plant-${props.plant.id}`}
-                    class="archive-plant"
+                    class="inline-icon-action inline-icon-action--archive"
                     type="button"
                     aria-label={`Archive ${name()}`}
                     title={`Archive ${name()}`}
                     onClick={() => {
                       props.onArchive();
                     }}
-                  >
-                    Archive
-                  </button>
+                  />
                 </>
               )}
             </div>

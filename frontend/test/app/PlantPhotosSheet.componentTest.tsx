@@ -62,7 +62,7 @@ Vitest.describe("PlantPhotosSheet", () => {
     Vitest.expect(dialog).toHaveFocus();
     const photos = await Testing.screen.findAllByAltText(/Photo from/);
     Vitest.expect(photos).toHaveLength(2);
-    Vitest.expect(client.getPhotosCalls).toEqual([{ offset: 0, size: 12 }]);
+    Vitest.expect(client.getPhotosCalls).toEqual([{ offset: 0, size: 6 }]);
   });
 
   Vitest.it(
@@ -145,7 +145,7 @@ Vitest.describe("PlantPhotosSheet", () => {
         Vitest.expect(pageTwo).toHaveFocus();
       });
       // Confirm retry used the same offset as the failed request (page 2)
-      Vitest.expect(client.getPhotosCalls[2]).toEqual({ offset: 12, size: 12 });
+      Vitest.expect(client.getPhotosCalls[2]).toEqual({ offset: 6, size: 6 });
     },
   );
 
@@ -179,7 +179,7 @@ Vitest.describe("PlantPhotosSheet", () => {
         capturedAt: Journal.instant("2026-09-26T12:00:00Z"),
       };
       const client = buildPhotoClient({
-        getPhotosResults: [photosPage([photo1])],
+        getPhotosResults: [photosPage([photo1]), photosPage([newPhoto, photo1])],
         addPhotoResult: { kind: "added", photo: newPhoto },
       });
 
@@ -451,7 +451,7 @@ Vitest.describe("PlantPhotosSheet", () => {
 
   Vitest.it("should open remove confirmation and remove the photo on confirm", async () => {
     const client = buildPhotoClient({
-      getPhotosResults: [photosPage([photo1, photo2])],
+      getPhotosResults: [photosPage([photo1, photo2]), photosPage([photo2])],
       removePhotoResult: { kind: "removed" },
     });
 
@@ -521,6 +521,40 @@ Vitest.describe("PlantPhotosSheet", () => {
       const photos = await Testing.screen.findAllByAltText(/Photo from/);
       Vitest.expect(photos).toHaveLength(1);
       Vitest.expect(photos[0]).toHaveAttribute("alt", Vitest.expect.stringContaining("14.05.2026"));
+    },
+  );
+
+  Vitest.it(
+    "should step back a page when removing the last photo empties the current page",
+    async () => {
+      const client = buildPhotoClient({
+        getPhotosResults: [
+          photosPage([photo1], true),
+          photosPage([photo2]),
+          photosPage([]),
+          photosPage([photo1], true),
+        ],
+        removePhotoResult: { kind: "removed" },
+      });
+
+      Testing.render(() => (
+        <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+      ));
+      await Testing.screen.findAllByAltText(/Photo from/);
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
+      await Testing.screen.findByText("Page 2");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Remove photo from 14.05.2026 11:30" }),
+      );
+      const confirmation = Testing.screen.getByRole("alertdialog", { name: /Remove photo/ });
+      Testing.fireEvent.click(
+        Testing.within(confirmation).getByRole("button", { name: "Remove permanently" }),
+      );
+
+      await Testing.screen.findByText("Page 1");
+      Vitest.expect(await Testing.screen.findAllByAltText(/Photo from/)).toHaveLength(1);
     },
   );
 

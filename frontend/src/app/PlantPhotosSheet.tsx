@@ -8,7 +8,7 @@ import { photoContentUrl } from "../adapters/http/HttpPlantPhotoClient";
 import "./sheet.css";
 import "./plant-photos-sheet.css";
 
-const photosPageSize = 12;
+const photosPageSize = 6;
 const maxUploadBytes = 20 * 1024 * 1024;
 const acceptedMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 
@@ -100,17 +100,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
     input.value = "";
 
     if (result.kind === "added") {
-      setState((current) =>
-        current.kind === "loaded"
-          ? {
-              kind: "loaded",
-              page: {
-                ...current.page,
-                photos: [result.photo, ...current.page.photos],
-              },
-            }
-          : current,
-      );
+      await loadPage(1);
     } else if (result.kind === "plantMissing") {
       setUploadError("This plant no longer exists.");
     } else if (result.kind === "unsupportedMediaType") {
@@ -125,19 +115,11 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
   const confirmRemove = async (photo: Journal.PlantPhoto): Promise<string | undefined> => {
     const result = await props.photos.removePhoto(photo.id);
     if (result.kind === "removed") {
-      setState((current) =>
-        current.kind === "loaded"
-          ? {
-              kind: "loaded",
-              page: {
-                ...current.page,
-                photos: current.page.photos.filter((p) => p.id !== photo.id),
-              },
-            }
-          : current,
-      );
       setRemoveCompleted(true);
       setRemoveTarget(undefined);
+      const current = pageNumber();
+      await loadPage(current);
+      if (current > 1 && loadedPage()?.photos.length === 0) await loadPage(current - 1);
       return undefined;
     }
     if (result.kind === "photoMissing") return "This photo no longer exists.";
@@ -201,7 +183,17 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
         inert={closing() || fullsizePhoto() !== undefined}
       >
         <header class="photos-sheet__header">
-          <h2>Photos</h2>
+          <label class="photos-sheet__add-label" aria-label="Add photo" title="Add photo">
+            <span aria-hidden="true">+</span>
+            <input
+              class="photos-sheet__add-input"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              aria-label="Choose a photo to upload"
+              disabled={uploading()}
+              onChange={(event) => void handleFileChange(event)}
+            />
+          </label>
           <button
             id="photos-sheet-close"
             class="icon-action sheet-collapse"
@@ -214,18 +206,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
           </button>
         </header>
         <div class="photos-sheet__body">
-          <div class="photos-sheet__add">
-            <label class="photos-sheet__add-label" aria-label="Add photo" title="Add photo">
-              <span aria-hidden="true">+</span>
-              <input
-                class="photos-sheet__add-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                aria-label="Choose a photo to upload"
-                disabled={uploading()}
-                onChange={(event) => void handleFileChange(event)}
-              />
-            </label>
+          <div class="photos-sheet__status">
             <Show when={uploading()}>
               <span aria-live="polite">Uploading…</span>
             </Show>
