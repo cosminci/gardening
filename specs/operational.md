@@ -33,18 +33,17 @@ Each domain service logs its own outcome as a single line: info for a successful
 | `gardening_storage_db_bytes` | Gauge |
 | `gardening_storage_photos_bytes` | Gauge |
 
-- `gardening_attention_feed_connections` is heartbeat/TTL-based (`ConnectionHeartbeats`), not incremented on open and decremented on close: the attention feed is a WebSocket upgrade, which never reaches tapir's completion hooks, so an edge-triggered counter would drift on any missed close — the same failure mode observed below in tapir's own request tracking. It's recomputed as "connections heartbeated within the last 5s" on every scrape, so a missed event self-corrects on the next heartbeat instead of leaking forever.
+- `gardening_attention_feed_connections` is heartbeat/TTL-based (`ConnectionHeartbeats`), not incremented on open and decremented on close, so a missed close can't leak it: it's recomputed as "connections heartbeated within the last 5s" on every scrape, so a missed event self-corrects on the next heartbeat instead of leaking forever. This is also the only reliable way to track the attention feed's concurrency — see below.
 - The two storage gauges walk `GARDENING_DB_PATH`'s file and `GARDENING_PHOTOS_DIR`'s tree fresh on every scrape; neither is cached or incremented.
 
-**HTTP RED** (tapir's default metric set, `PrometheusMetrics.default`, namespace `gardening`):
+**HTTP RED** (`PrometheusMetrics(...).addRequestsTotal().addRequestsDuration()`, namespace `gardening`):
 
 | Metric | Type | Labels |
 | --- | --- | --- |
 | `gardening_request_total` | Counter | `path`, `method`, `status` |
-| `gardening_request_active` | Gauge | `path`, `method` |
 | `gardening_request_duration_seconds` | Histogram | `path`, `method`, `status` |
 
-The attention feed's endpoint is excluded from this interceptor (`metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))`): a WebSocket upgrade never fires tapir's completion hooks (`onResponseBody`/`onException`/`onInterceptorResponse`/`onDecodeFailure`), so without the exclusion `gardening_request_active` only ever incremented for that endpoint and never came back down.
+`PrometheusMetrics.default` also offers a `request_active` gauge; it's deliberately not registered. tapir's `MetricsRequestInterceptor` increments it unconditionally for every request in its top-level interceptor, before `ignoreEndpoints` is even consulted, but only decrements it via completion hooks (`onResponseBody`/`onException`/`onInterceptorResponse`/`onDecodeFailure`) that `ignoreEndpoints` skips entirely for excluded endpoints. Any endpoint on that list leaks the gauge permanently — which includes the attention feed (excluded because its long-lived WebSocket connections don't belong in RED request-duration/count stats) and tapir's own metrics endpoint (excluded unconditionally by the library itself). Verified locally: a feed connection opened and closed left a permanent +1, and every single `/metrics` scrape left another, while ordinary endpoints incremented and decremented correctly. `gardening_attention_feed_connections` is the gauge that actually reflects feed concurrency.
 
 **Process/JVM USE** — `prometheus-metrics-instrumentation-jvm`'s standard series (`process_cpu_seconds_total`, `jvm_memory_used_bytes`, GC pause, thread count, etc.), registered at startup before the server accepts requests. cAdvisor remains the source for container-level CPU/memory/network, scraped independently.
 
