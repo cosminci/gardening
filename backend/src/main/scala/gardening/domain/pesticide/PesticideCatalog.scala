@@ -18,15 +18,20 @@ trait PesticideCatalog:
 
 object PesticideCatalog:
 
-  def make(using store: PesticideStore^, idGen: IdGenerator^)(using log: Logger^): PesticideCatalog^{store, idGen, log} =
+  def make(using
+      store: PesticideStore^,
+      idGen: IdGenerator^
+  )(using log: Logger^, metrics: PesticideCatalogMetricsApi^): PesticideCatalog^{store, idGen, log, metrics} =
     new LivePesticideCatalog
 
-  private class LivePesticideCatalog(using store: PesticideStore^, idGen: IdGenerator^)(using log: Logger^) extends PesticideCatalog:
+  private class LivePesticideCatalog(using store: PesticideStore^, idGen: IdGenerator^)(using log: Logger^, metrics: PesticideCatalogMetricsApi^)
+      extends PesticideCatalog:
 
     override def getPesticides: CatalogReadResult[Pesticide] =
       store.getPesticides.tap:
         case CatalogReadResult.ReadFailed(reason) => log.error("get pesticides", reason)
-        case _                                    => ()
+        case CatalogReadResult.Read(found)        =>
+          metrics.setPesticideDisplayNames(found.map(pesticide => pesticide.id -> pesticide.data.name.value))
 
     override def addPesticide(data: PesticideData): CatalogAddResult[Pesticide] =
       store.addPesticide(Pesticide(PesticideId(UUID.fromString(idGen.nextId())), data, PesticideStatus.Active)).tap:

@@ -10,6 +10,9 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PesticideCatalogComponentTest extends munit.FunSuite with TestImplicits:
 
+  private given metrics: PesticideCatalogMetricsApi = new PesticideCatalogMetricsApi:
+    def setPesticideDisplayNames(pesticides: Vector[(PesticideId, String)]): Unit = ()
+
   private val pesticideId   = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
   private val pesticideData = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, PesticideInfo("2g/L").some)
   private val pesticide     = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)

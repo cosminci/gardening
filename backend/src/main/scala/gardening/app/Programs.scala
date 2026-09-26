@@ -1,15 +1,21 @@
 package gardening.app
 
 import gardening.adapters.persistence.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
-import gardening.adapters.prometheus.{PrometheusOperationsMetrics, PrometheusPlantAttentionMonitorMetrics, PrometheusPlantsMetrics}
+import gardening.adapters.prometheus.{
+  PrometheusOperationsMetrics,
+  PrometheusPesticideCatalogMetrics,
+  PrometheusPlantAttentionMonitorMetrics,
+  PrometheusPlantsMetrics,
+  PrometheusSubstrateCatalogMetrics
+}
 import gardening.adapters.storage.FilePhotoContentStore
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.domain.{Logger, PlantUpdateLock}
 import gardening.domain.attention.{PlantAttentionMonitor, PlantAttentionMonitorMetricsApi}
 import gardening.domain.operations.{Operations, OperationsMetricsApi}
-import gardening.domain.pesticide.PesticideCatalog
+import gardening.domain.pesticide.{PesticideCatalog, PesticideCatalogMetricsApi}
 import gardening.domain.plants.{Plants, PlantsMetricsApi}
-import gardening.domain.substrate.SubstrateCatalog
+import gardening.domain.substrate.{SubstrateCatalog, SubstrateCatalogMetricsApi}
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 import ox.{Ox, discard, forkDiscard, sleep}
 
@@ -37,6 +43,8 @@ object Programs:
     given PlantsMetricsApi                            = plantsMetrics
     given OperationsMetricsApi                        = PrometheusOperationsMetrics.make(registry, substrateComponentUsageTotal)
     given PlantAttentionMonitorMetricsApi             = PrometheusPlantAttentionMonitorMetrics.make(registry)
+    given SubstrateCatalogMetricsApi                  = PrometheusSubstrateCatalogMetrics.make(registry)
+    given PesticideCatalogMetricsApi                  = PrometheusPesticideCatalogMetrics.make(registry)
 
     PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
       forkDiscard:

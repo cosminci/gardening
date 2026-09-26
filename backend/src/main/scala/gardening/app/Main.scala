@@ -1,8 +1,12 @@
 package gardening.app
 
 import cats.syntax.either.*
-import gardening.adapters.http.{AttentionApi, HealthApi, OperationApi, PesticideApi, PhotoApi, PlantApi, StaticSite, SubstrateApi}
+import gardening.adapters.http.{
+  AttentionApi, ConnectionHeartbeats, HealthApi, OperationApi, PesticideApi, PhotoApi, PlantApi, StaticSite, SubstrateApi
+}
 import gardening.adapters.persistence.SqliteLocation
+import gardening.adapters.prometheus.{PrometheusAttentionFeedMetrics, PrometheusStorageMetrics}
+import gardening.adapters.system.SystemClock
 import gardening.domain.Logger
 import io.prometheus.metrics.instrumentation.jvm.JvmMetrics
 import io.prometheus.metrics.model.registry.PrometheusRegistry
@@ -14,6 +18,7 @@ import sttp.tapir.server.metrics.prometheus.PrometheusMetrics
 import sttp.tapir.server.netty.sync.{NettySyncServer, NettySyncServerOptions}
 
 import java.nio.file.Paths
+import scala.concurrent.duration.*
 import scala.util.Using
 
 object Main:
@@ -34,13 +39,21 @@ object Main:
     val registry = new PrometheusRegistry
     JvmMetrics.builder().register(registry)
     val prometheusMetrics = PrometheusMetrics.default[Identity](namespace = "gardening", registry = registry)
-    val serverOptions     = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(prometheusMetrics.metricsInterceptor()).options
+    // The attention feed is a WebSocket upgrade, not an ordinary request/response: it never reaches tapir's completion hooks, so its generic
+    // request metrics (in particular "active requests") would only ever increment. `ConnectionHeartbeats` tracks it correctly instead.
+    val serverOptions =
+      NettySyncServerOptions.customiseInterceptors.metricsInterceptor(
+        prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
+      ).options
+    val feedHeartbeats = ConnectionHeartbeats.make(staleness = 5.seconds)(using SystemClock)
+    PrometheusAttentionFeedMetrics.register(registry, feedHeartbeats)
+    PrometheusStorageMetrics.register(registry, Paths.get(dbPath), photosDir)
 
     val outcome = Using.resource(AppResources.acquire(SqliteLocation.File(dbPath))): resources =>
       supervisedError(EitherMode[Throwable]()):
         val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
         Programs.make(resources, photosDir, registry).flatMap: programs =>
-          val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics)
+          val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics, feedHeartbeats)
           log.info(s"gardening backend ready host=$host port=$port version=$version")
           NettySyncServer(serverOptions).host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
     outcome.left.foreach(log.error("startup", _))
@@ -50,11 +63,12 @@ object Main:
       programs: Programs,
       version: String,
       staticDir: String,
-      prometheusMetrics: PrometheusMetrics[Identity]
+      prometheusMetrics: PrometheusMetrics[Identity],
+      feedHeartbeats: ConnectionHeartbeats
   ) =
     List(HealthApi.serverEndpoint(version), prometheusMetrics.metricsEndpoint) ++
       PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
-      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor) ++
+      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
       OperationApi.serverEndpoints(using programs.operations) ++
       SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
       PhotoApi.serverEndpoints(using programs.plants) ++

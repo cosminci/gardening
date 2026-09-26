@@ -29,15 +29,17 @@ object SubstrateCatalog:
   def make(using
       store: SubstrateStore^,
       idGen: IdGenerator^
-  )(using log: Logger^): SubstrateCatalog^{store, idGen, log} =
+  )(using log: Logger^, metrics: SubstrateCatalogMetricsApi^): SubstrateCatalog^{store, idGen, log, metrics} =
     new LiveSubstrateCatalog
 
-  private class LiveSubstrateCatalog(using store: SubstrateStore^, idGen: IdGenerator^)(using log: Logger^) extends SubstrateCatalog:
+  private class LiveSubstrateCatalog(using store: SubstrateStore^, idGen: IdGenerator^)(using log: Logger^, metrics: SubstrateCatalogMetricsApi^)
+      extends SubstrateCatalog:
 
     override def getSubstrateComponents: CatalogReadResult[SubstrateComponent] =
       store.getSubstrateComponents.tap:
         case CatalogReadResult.ReadFailed(reason) => log.error("get substrate components", reason)
-        case _                                    => ()
+        case CatalogReadResult.Read(found)        =>
+          metrics.setComponentDisplayNames(found.map(component => component.id -> component.data.name.value))
 
     override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
       store
