@@ -15,7 +15,7 @@ val circeV      = "0.14.16"
 val monocleV    = "3.3.0"
 val slf4jV      = "2.0.19"
 val oxV         = "1.0.8"
-val scodecV     = "1.2.1"
+val scodecV     = "1.2.5"
 val prometheusV = "1.3.1"
 
 lazy val root = (project in file("."))
