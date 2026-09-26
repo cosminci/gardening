@@ -1,4 +1,4 @@
-import { render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JournalHeader } from "../../src/app/JournalHeader";
 import type { FeedConnectionState } from "../../src/domain/PlantAttention";
@@ -10,8 +10,10 @@ const baseProps = {
   selected: "garden" as const,
   connectionState: "connected" as FeedConnectionState,
   lastUpdateAt: undefined as number | undefined,
+  searchQuery: "",
   onSelect: () => undefined,
   onAddPlant: () => undefined,
+  onSearchQuery: () => undefined,
 };
 
 describe("journal header backend indicator", () => {
@@ -77,5 +79,39 @@ describe("journal header backend indicator", () => {
     vi.advanceTimersByTime(2000);
 
     expect(screen.getByText("Updated 8s ago")).toBeInTheDocument();
+  });
+});
+
+describe("journal header search box", () => {
+  it("should place the search box between add-plant and the garden/cemetery toggle", () => {
+    render(() => <JournalHeader {...baseProps} />);
+
+    const addPlant = screen.getByRole("button", { name: "Add plant" });
+    const search = screen.getByRole("searchbox", {
+      name: "Search plants by nickname, species, or location",
+    });
+    const gardenToggle = screen.getByRole("button", { name: /Garden,/ });
+
+    expect(
+      addPlant.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      search.compareDocumentPosition(gardenToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("should hide the search box before the journal loads, like add-plant", () => {
+    render(() => <JournalHeader {...baseProps} loaded={false} />);
+
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
+  it("should report typed input through onSearchQuery", () => {
+    const onSearchQuery = vi.fn();
+    render(() => <JournalHeader {...baseProps} onSearchQuery={onSearchQuery} />);
+
+    fireEvent.input(screen.getByRole("searchbox"), { target: { value: "fern" } });
+
+    expect(onSearchQuery).toHaveBeenCalledWith("fern");
   });
 });

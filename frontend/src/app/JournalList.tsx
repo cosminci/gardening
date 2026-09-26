@@ -20,6 +20,7 @@ export interface CemeteryHistory {
 interface JournalListProps {
   readonly view: "garden" | "cemetery";
   readonly histories: readonly (GardenHistory | CemeteryHistory)[];
+  readonly emptyMessage: string | undefined;
   readonly attentionProjection: Journal.AttentionProjection | undefined;
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
@@ -37,6 +38,13 @@ interface JournalListProps {
 
 export const JournalList: Component<JournalListProps> = (props) => (
   <section class="journal" aria-label={props.view === "garden" ? "Garden" : "Cemetery"}>
+    <Show when={props.emptyMessage}>
+      {(message) => (
+        <p class="page-state" role="status">
+          {message()}
+        </p>
+      )}
+    </Show>
     <Index each={props.histories}>
       {(history) => {
         const garden = () => {
