@@ -4,7 +4,7 @@ import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.catalog.*
 import gardening.domain.pesticide.{GetPesticideResult, PesticideStore, UpdatePesticideResult}
-import gardening.domain.substrate.SubstrateStore
+import gardening.domain.substrate.{GetSubstrateComponentResult, SubstrateStore, UpdateSubstrateComponentResult}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.autoRefine
 
@@ -54,7 +54,7 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
   private val operation        = Operation(OperationId("o1"), PlantId("p1"), date, care)
   private val firstPage        = OperationWindow(offset = 0, size = 3)
   private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
-    .map(id => SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(id.value.toString), none)))
+    .map(id => SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(id.value.toString), none), SubstrateComponentStatus.Active))
 
   test("should create an active plant with initial substrate independently of operations"):
     val refs    = Refs()
@@ -265,6 +265,16 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
       case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
       case other                                    => fail(s"expected LoggingFailed, got $other")
     assertEquals(unknownComponentRefs.recordedOperations.get(), Vector.empty)
+
+    val archivedPerlite =
+      SubstrateComponent(perliteId, SubstrateComponentData(SubstrateComponentName(perliteId.value.toString), none), SubstrateComponentStatus.Archived)
+    val archivedComponents    = archivedPerlite +: seededComponents.drop(1)
+    val archivedComponentRefs = Refs()
+    val archivedComponentRead = CatalogReadResult.Read(archivedComponents)
+    buildJournal(archivedComponentRefs, componentReadResult = archivedComponentRead).logOperation(plant.id, date, repot) match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(archivedComponentRefs.recordedOperations.get(), Vector.empty)
 
     assertEquals(
       buildJournal(componentReadResult = CatalogReadResult.ReadFailed(readFailure)).logOperation(plant.id, date, repot),
@@ -791,10 +801,12 @@ class PlantJournalComponentTest extends munit.FunSuite with TestImplicits:
       override def updatePlant(plant: Plant): UpdatePlantResult =
         refs.updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
     val substrateStore = new SubstrateStore:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                              = componentReadResult
+      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                = componentReadResult
+      override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
+        fail("journal must not read a single substrate component")
       override def addSubstrateComponent(component: SubstrateComponent): CatalogAddResult[SubstrateComponent] =
         fail("journal must not write substrate components")
-      override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): CatalogEditResult[SubstrateComponent] =
+      override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
         fail("journal must not edit substrate components")
       override def getSubstrateMixes: CatalogReadResult[SubstrateMix] =
         fail("journal must not read substrate mixes")

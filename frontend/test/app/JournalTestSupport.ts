@@ -12,8 +12,16 @@ import type { SubstrateClient } from "../../src/domain/SubstrateCatalog";
 const perliteId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000003");
 const pineBarkId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000004");
 const substrateComponents: readonly Journal.SubstrateComponent[] = [
-  { id: perliteId, data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null } },
-  { id: pineBarkId, data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null } },
+  {
+    id: perliteId,
+    data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
+    status: "active",
+  },
+  {
+    id: pineBarkId,
+    data: { name: Journal.substrateComponentName("Pine bark"), maybeInfo: null },
+    status: "active",
+  },
 ];
 
 export const ficus = (): Journal.Plant => ({
@@ -94,6 +102,7 @@ export const buildJournal = ({
   getSubstrateComponentsResult = { kind: "read", entries: substrateComponents },
   componentAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   componentEditResult = { kind: "editFailed", reason: new Error("unexpected write") },
+  componentArchiveResult = { kind: "archiveFailed", reason: new Error("unexpected write") },
   getSubstrateMixesResult = { kind: "read", entries: [] },
   mixAddResult = { kind: "addFailed", reason: new Error("unexpected write") },
   mixDeleteResult = { kind: "deleteFailed", reason: new Error("unexpected write") },
@@ -106,6 +115,7 @@ export const buildJournal = ({
   deleted = [],
   addedComponents = [],
   editedComponents = [],
+  archivedComponents = [],
   addedMixes = [],
   deletedMixes = [],
   addedPesticides = [],
@@ -123,7 +133,8 @@ export const buildJournal = ({
   deleteOperationResult?: Journal.DeleteOperationResult;
   getSubstrateComponentsResult?: Journal.CatalogReadResult<Journal.SubstrateComponent>;
   componentAddResult?: Journal.CatalogAddResult<Journal.SubstrateComponent>;
-  componentEditResult?: Journal.CatalogEditResult<Journal.SubstrateComponent>;
+  componentEditResult?: Journal.SubstrateComponentEditResult;
+  componentArchiveResult?: Journal.SubstrateComponentArchiveResult;
   getSubstrateMixesResult?: Journal.CatalogReadResult<Journal.SubstrateMix>;
   mixAddResult?: Journal.AddSubstrateMixResult;
   mixDeleteResult?: Journal.CatalogDeleteResult;
@@ -139,6 +150,7 @@ export const buildJournal = ({
     id: Journal.SubstrateComponentId;
     data: Journal.SubstrateComponentData;
   }[];
+  archivedComponents?: Journal.SubstrateComponentId[];
   addedMixes?: {
     name: Journal.SubstrateMixName;
     maybeNotes: Journal.SubstrateMixNotes | null;
@@ -233,6 +245,10 @@ export const buildJournal = ({
     editSubstrateComponent: (id, data) => {
       editedComponents.push({ id, data });
       return Promise.resolve(componentEditResult);
+    },
+    archiveSubstrateComponent: (id) => {
+      archivedComponents.push(id);
+      return Promise.resolve(componentArchiveResult);
     },
     getSubstrateMixes: () => Promise.resolve(getSubstrateMixesResult),
     addSubstrateMix: (name, maybeNotes, substrate) => {

@@ -8,7 +8,10 @@ export interface SubstrateClient {
   editSubstrateComponent(
     id: Journal.SubstrateComponentId,
     data: Journal.SubstrateComponentData,
-  ): Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  ): Promise<Journal.SubstrateComponentEditResult>;
+  archiveSubstrateComponent(
+    id: Journal.SubstrateComponentId,
+  ): Promise<Journal.SubstrateComponentArchiveResult>;
   getSubstrateMixes(): Promise<Journal.CatalogReadResult<Journal.SubstrateMix>>;
   addSubstrateMix(
     name: Journal.SubstrateMixName,

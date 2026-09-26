@@ -1,6 +1,7 @@
 import { Show, createSignal, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
+import type { ArchiveAction } from "./PesticideEditor";
 import "./catalog-editor.css";
 
 interface SubstrateComponentEditorProps {
@@ -11,7 +12,8 @@ interface SubstrateComponentEditorProps {
   readonly onEdit: (
     id: Journal.SubstrateComponent["id"],
     data: Journal.SubstrateComponentData,
-  ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  ) => Promise<Journal.SubstrateComponentEditResult>;
+  readonly onArchive?: ArchiveAction | undefined;
   readonly onClose: () => void;
 }
 
@@ -46,12 +48,15 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
       return;
     }
     const errors = {
-      recordMissing: "This substrate component no longer exists.",
+      componentMissing: "This substrate component no longer exists.",
+      componentArchived: "This substrate component is archived and can no longer be edited.",
       addFailed: "The substrate component could not be saved.",
       editFailed: "The substrate component could not be saved.",
     } satisfies Record<typeof result.kind, string>;
     setError(errors[result.kind]);
   };
+
+  const archived = () => props.component?.status === "archived";
 
   onMount(() => {
     panel.focus();
@@ -103,6 +108,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
             aria-label="Name"
             type="text"
             value={name()}
+            disabled={archived()}
             onInput={(event) => {
               setName(event.currentTarget.value);
             }}
@@ -114,17 +120,34 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
             aria-label="Info"
             rows="10"
             value={info()}
+            disabled={archived()}
             onInput={(event) => {
               setInfo(event.currentTarget.value);
             }}
           />
         </label>
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
-        <footer class="catalog-editor__actions">
-          <button class="primary-action" type="submit">
-            Save
-          </button>
-        </footer>
+        <Show when={!archived()} fallback={<p class="catalog-editor__archived-status">Archived</p>}>
+          <footer class="catalog-editor__actions">
+            <Show when={props.onArchive}>
+              {(onArchive) => (
+                <button
+                  id={onArchive().controlId}
+                  class="catalog-editor__archive"
+                  type="button"
+                  onClick={() => {
+                    onArchive().onClick();
+                  }}
+                >
+                  Archive
+                </button>
+              )}
+            </Show>
+            <button class="primary-action" type="submit">
+              Save
+            </button>
+          </footer>
+        </Show>
       </form>
     </section>
   );

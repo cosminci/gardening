@@ -8,6 +8,7 @@ import type { DeleteAction } from "./OperationForm";
 import { PesticideArchiveConfirmation } from "./PesticideArchiveConfirmation";
 import { PesticideEditor } from "./PesticideEditor";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
+import { SubstrateComponentArchiveConfirmation } from "./SubstrateComponentArchiveConfirmation";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
 
@@ -33,7 +34,10 @@ interface OperationSheetProps {
   readonly onEditSubstrateComponent: (
     id: Journal.SubstrateComponentId,
     data: Journal.SubstrateComponentData,
-  ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  ) => Promise<Journal.SubstrateComponentEditResult>;
+  readonly onArchiveSubstrateComponent: (
+    id: Journal.SubstrateComponentId,
+  ) => Promise<Journal.SubstrateComponentArchiveResult>;
   readonly onAddSubstrateMix: (
     name: Journal.SubstrateMixName,
     maybeNotes: Journal.SubstrateMixNotes | null,
@@ -92,6 +96,9 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   const [closingSheet, setClosingSheet] = createSignal<Sheet>();
   const [pesticideArchiveTarget, setPesticideArchiveTarget] = createSignal<Journal.Pesticide>();
   const [pesticideArchiveCompleted, setPesticideArchiveCompleted] = createSignal(false);
+  const [substrateArchiveTarget, setSubstrateArchiveTarget] =
+    createSignal<Journal.SubstrateComponent>();
+  const [substrateArchiveCompleted, setSubstrateArchiveCompleted] = createSignal(false);
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
@@ -138,7 +145,8 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     if (
       event.key !== "Escape" ||
       props.deleteConfirming === true ||
-      pesticideArchiveTarget() !== undefined
+      pesticideArchiveTarget() !== undefined ||
+      substrateArchiveTarget() !== undefined
     )
       return;
     const currentEditor = editor();
@@ -168,6 +176,28 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     return undefined;
   };
 
+  const confirmArchiveSubstrateComponent = async (
+    component: Journal.SubstrateComponent,
+  ): Promise<string | undefined> => {
+    let result: Journal.SubstrateComponentArchiveResult;
+    try {
+      result = await props.onArchiveSubstrateComponent(component.id);
+    } catch {
+      return "The substrate component could not be archived.";
+    }
+    if (result.kind === "componentMissing") return "This substrate component no longer exists.";
+    if (result.kind === "alreadyArchived") return "This substrate component was already archived.";
+    if (result.kind === "archiveFailed") return "The substrate component could not be archived.";
+    setSubstrateArchiveCompleted(true);
+    setSubstrateArchiveTarget(undefined);
+    const currentEditor = editor();
+    // The archive action is only reachable from within this component's own open editor, so the
+    // editor is always still open here; the false side is unreachable at runtime.
+    /* v8 ignore next */
+    if (currentEditor !== undefined) closeEditor(currentEditor);
+    return undefined;
+  };
+
   const editorContent = (current: SecondarySheet) => {
     switch (current.kind) {
       case "substrate":
@@ -176,6 +206,17 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
             component={current.component}
             onAdd={props.onAddSubstrateComponent}
             onEdit={props.onEditSubstrateComponent}
+            onArchive={
+              current.component === undefined
+                ? undefined
+                : {
+                    controlId: Controls.archiveSubstrateComponentControlId(current.component.id),
+                    onClick: () => {
+                      setSubstrateArchiveCompleted(false);
+                      setSubstrateArchiveTarget(current.component);
+                    },
+                  }
+            }
             onClose={() => {
               closeEditor(current);
             }}
@@ -344,6 +385,18 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
             onConfirm={() => confirmArchivePesticide(pesticide)}
             onCancel={() => {
               setPesticideArchiveTarget(undefined);
+            }}
+          />
+        )}
+      </Show>
+      <Show when={substrateArchiveTarget()} keyed>
+        {(component) => (
+          <SubstrateComponentArchiveConfirmation
+            component={component}
+            completed={substrateArchiveCompleted()}
+            onConfirm={() => confirmArchiveSubstrateComponent(component)}
+            onCancel={() => {
+              setSubstrateArchiveTarget(undefined);
             }}
           />
         )}

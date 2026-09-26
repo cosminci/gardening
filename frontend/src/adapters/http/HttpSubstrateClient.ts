@@ -38,20 +38,33 @@ export const makeHttpSubstrateClient = (
       }
     },
 
-    async editSubstrateComponent(
-      id,
-      value,
-    ): Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>> {
+    async editSubstrateComponent(id, value): Promise<Journal.SubstrateComponentEditResult> {
       try {
         const { data, error, response } = await client.PUT("/substrates/components/{componentId}", {
           params: { path: { componentId: id } },
           body: toWireSubstrateComponentData(value),
         });
         if (data !== undefined) return { kind: "edited", entry: toSubstrateComponent(data) };
-        if (response.status === 404) return { kind: "recordMissing" };
+        if (response.status === 404) return { kind: "componentMissing" };
+        if (response.status === 409) return { kind: "componentArchived" };
         return { kind: "editFailed", reason: requestFailure(error) };
       } catch (error) {
         return { kind: "editFailed", reason: requestFailure(error) };
+      }
+    },
+
+    async archiveSubstrateComponent(id): Promise<Journal.SubstrateComponentArchiveResult> {
+      try {
+        const { data, error, response } = await client.POST(
+          "/substrates/components/{componentId}/archive",
+          { params: { path: { componentId: id } } },
+        );
+        if (data !== undefined) return { kind: "archived", entry: toSubstrateComponent(data) };
+        if (response.status === 404) return { kind: "componentMissing" };
+        if (response.status === 409) return { kind: "alreadyArchived" };
+        return { kind: "archiveFailed", reason: requestFailure(error) };
+      } catch (error) {
+        return { kind: "archiveFailed", reason: requestFailure(error) };
       }
     },
 
@@ -100,6 +113,7 @@ const toSubstrateComponent = (value: Wire["SubstrateComponent"]): Journal.Substr
     name: Journal.substrateComponentName(value.data.name),
     maybeInfo: value.data.info === null ? null : Journal.substrateComponentInfo(value.data.info),
   },
+  status: value.status,
 });
 
 const toWireSubstrateComponentData = (

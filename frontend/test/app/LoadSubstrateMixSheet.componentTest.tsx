@@ -9,6 +9,7 @@ const pumiceId = Journal.substrateComponentId("00000000-0000-4000-8000-000000000
 const perlite: Journal.SubstrateComponent = {
   id: perliteId,
   data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
+  status: "active",
 };
 
 const availableMix: Journal.SubstrateMix = {

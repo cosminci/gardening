@@ -4,6 +4,7 @@ import * as Journal from "../domain/Journal";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
+import { SubstrateComponentArchiveConfirmation } from "./SubstrateComponentArchiveConfirmation";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
 import type { SubstratePartInput } from "./SubstrateFields";
@@ -29,7 +30,10 @@ interface PlantSheetProps {
   readonly onEditComponent: (
     id: Journal.SubstrateComponentId,
     data: Journal.SubstrateComponentData,
-  ) => Promise<Journal.CatalogEditResult<Journal.SubstrateComponent>>;
+  ) => Promise<Journal.SubstrateComponentEditResult>;
+  readonly onArchiveComponent: (
+    id: Journal.SubstrateComponentId,
+  ) => Promise<Journal.SubstrateComponentArchiveResult>;
   readonly onAddSubstrateMix: (
     name: Journal.SubstrateMixName,
     maybeNotes: Journal.SubstrateMixNotes | null,
@@ -78,6 +82,8 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const [submitting, setSubmitting] = createSignal(false);
   const [editor, setEditor] = createSignal<SecondarySheet>();
   const [closingSheet, setClosingSheet] = createSignal<"editor" | "plant">();
+  const [archiveTarget, setArchiveTarget] = createSignal<Journal.SubstrateComponent>();
+  const [archiveCompleted, setArchiveCompleted] = createSignal(false);
   const background = [...document.querySelectorAll<HTMLElement>(".masthead, .journal")];
 
   const waitForSheetTransition = () =>
@@ -104,7 +110,12 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !submitting() && props.deleteMixConfirming !== true) {
+    if (
+      event.key === "Escape" &&
+      !submitting() &&
+      props.deleteMixConfirming !== true &&
+      archiveTarget() === undefined
+    ) {
       event.preventDefault();
       void closeSheets(editor() === undefined ? "plant" : "editor");
     }
@@ -168,6 +179,28 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const editComponent = (id: Journal.SubstrateComponentId, data: Journal.SubstrateComponentData) =>
     props.onEditComponent(id, data);
 
+  const confirmArchiveComponent = async (
+    component: Journal.SubstrateComponent,
+  ): Promise<string | undefined> => {
+    let result: Journal.SubstrateComponentArchiveResult;
+    try {
+      result = await props.onArchiveComponent(component.id);
+    } catch {
+      return "The substrate component could not be archived.";
+    }
+    if (result.kind === "componentMissing") return "This substrate component no longer exists.";
+    if (result.kind === "alreadyArchived") return "This substrate component was already archived.";
+    if (result.kind === "archiveFailed") return "The substrate component could not be archived.";
+    setArchiveCompleted(true);
+    setArchiveTarget(undefined);
+    const currentEditor = editor();
+    // The archive action is only reachable from within this component's own open editor, so the
+    // editor is always still open here; the false side is unreachable at runtime.
+    /* v8 ignore next */
+    if (currentEditor !== undefined) void closeSheets("editor");
+    return undefined;
+  };
+
   const currentSubstrate = () =>
     Journal.substrate(
       parts().map((part) => ({ component: part.component, share: Journal.percentage(part.share) })),
@@ -203,6 +236,17 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
             component={current.component}
             onAdd={addComponent}
             onEdit={editComponent}
+            onArchive={
+              current.component === undefined
+                ? undefined
+                : {
+                    controlId: Controls.archiveSubstrateComponentControlId(current.component.id),
+                    onClick: () => {
+                      setArchiveCompleted(false);
+                      setArchiveTarget(current.component);
+                    },
+                  }
+            }
             onClose={() => void closeSheets("editor")}
           />
         );
@@ -357,6 +401,18 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
           >
             {editorContent(current)}
           </aside>
+        )}
+      </Show>
+      <Show when={archiveTarget()} keyed>
+        {(component) => (
+          <SubstrateComponentArchiveConfirmation
+            component={component}
+            completed={archiveCompleted()}
+            onConfirm={() => confirmArchiveComponent(component)}
+            onCancel={() => {
+              setArchiveTarget(undefined);
+            }}
+          />
         )}
       </Show>
     </div>

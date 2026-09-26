@@ -52,7 +52,7 @@ object PlantJournal:
       substrateStore.getSubstrateComponents match
         case CatalogReadResult.ReadFailed(reason) => CreatePlantResult.CatalogReadFailed(reason).tap(_ => log.error("create plant", reason))
         case CatalogReadResult.Read(components)   =>
-          val known = components.map(_.id).toSet
+          val known = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           if !substrate.parts.forall(part => known.contains(part.componentId)) then CreatePlantResult.UnknownComponent
           else
             val plant = Plant(PlantId(idGen.nextId()), PlantDetails(species, maybeNickname, location, substrate, PlantStatus.Active))
@@ -93,7 +93,7 @@ object PlantJournal:
         case CatalogReadResult.ReadFailed(reason) =>
           EditPlantResult.CatalogReadFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
         case CatalogReadResult.Read(components) =>
-          val known = components.map(_.id).toSet
+          val known = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           Either.cond(substrate.parts.forall(part => known.contains(part.componentId)), (), EditPlantResult.UnknownComponent)
 
     private def persistEdit(plant: Plant): Either[EditPlantResult, Plant] =
@@ -207,7 +207,7 @@ object PlantJournal:
     private def validateSubstrateComponents(substrate: Substrate) =
       substrateStore.getSubstrateComponents match
         case CatalogReadResult.Read(components) =>
-          val known   = components.map(_.id).toSet
+          val known   = components.filter(_.status === SubstrateComponentStatus.Active).map(_.id).toSet
           val missing = substrate.parts.map(_.componentId).toSet.diff(known)
           Either.cond(missing.isEmpty, (), unknownSubstrateComponents(missing))
         case CatalogReadResult.ReadFailed(reason) => reason.asLeft

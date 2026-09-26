@@ -230,6 +230,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/substrates/components/{componentId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a substrate component */
+        post: operations["postSubstratesComponentsComponentidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/substrates/mixes": {
         parameters: {
             query?: never;
@@ -433,12 +450,18 @@ export interface components {
             /** Format: uuid */
             id: string;
             data: components["schemas"]["SubstrateComponentData"];
+            status: components["schemas"]["SubstrateComponentStatus"];
         };
         /** SubstrateComponentData */
         SubstrateComponentData: {
             name: string;
             info: string | null;
         };
+        /**
+         * SubstrateComponentStatus
+         * @enum {string}
+         */
+        SubstrateComponentStatus: "active" | "archived";
         /** SubstrateMix */
         SubstrateMix: {
             /** Format: uuid */
@@ -1275,6 +1298,67 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    postSubstratesComponentsComponentidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                componentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
