@@ -8,3 +8,5 @@ A journal of the household's house plants and their dated care, built for the ho
 - [.agents/skills/](.agents/skills/) — shared coding-agent skills, including the spec-driven development skill every change runs through.
 - [GLOSSARY.md](GLOSSARY.md) — domain terms.
 - [specs/](specs/) — the service's living design / contracts / testing / operational docs (templates in [specs/templates/](specs/templates/)); [ci/specs/](ci/specs/) — the pipeline's.
+- [LICENSE](LICENSE) — MIT.
+- [SECURITY.md](SECURITY.md) — intended deployment and vulnerability reporting.
