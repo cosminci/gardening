@@ -100,11 +100,31 @@ object SqliteOperationStore:
         Logged(operation.id)
       catch case e: SqlException => LoggingFailed(e)
 
+    override def logRepot(id: OperationId, plant: PlantId, date: Instant, details: OperationDetails.Repot): AddOperationResult =
+      try
+        transact(transactor):
+          val _ = insertOperationRow(Operation(id, plant, date, details)).update.run()
+          val _ = syncPlantSubstrateIfLatestRepot(plant, id.value, operationDateFormatter.format(date), details.substrate).update.run()
+          Logged(id)
+      catch case error: SqlException => LoggingFailed(error)
+
     private def insertOperationRow(operation: Operation) =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
       val storedDate               = operationDateFormatter.format(operation.date)
       sql"""insert into operation (id, plant_id, date, kind, payload)
             values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"""
+
+    // A repot only overwrites the plant's stored substrate when no other recorded repot outranks it
+    // by (date, id); this makes "sync the plant if this is the latest repot" a single atomic statement
+    // instead of a read-then-write race between this store and PlantStore.
+    private def syncPlantSubstrateIfLatestRepot(plant: PlantId, operationId: String, storedDate: String, substrate: Substrate) =
+      sql"""update plant set substrate = ${substrate.asJson.noSpaces}
+            where id = ${plant.value}
+              and not exists (
+                select 1 from operation
+                where plant_id = ${plant.value} and kind = 'Repot'
+                  and (date > $storedDate or (date = $storedDate and id > $operationId))
+              )"""
 
     override def updateOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
       try
@@ -114,17 +134,19 @@ object SqliteOperationStore:
             Edited(trust(toOperation(row)))
       catch case e: SqlException => EditFailed(e)
 
+    override def editRepot(operation: OperationId, details: OperationDetails.Repot): EditOperationResult =
+      try
+        transact(transactor):
+          updateOperationRow(operation.value, details).query[OperationRow].run().headOption match
+            case None      => OperationMissing
+            case Some(row) =>
+              val _ = syncPlantSubstrateIfLatestRepot(PlantId(row.plantId), row.id, row.date, details.substrate).update.run()
+              Edited(trust(toOperation(row)))
+      catch case error: SqlException => EditFailed(error)
+
     override def removeOperation(operation: OperationId): OperationCompensationResult =
       try
         transact(transactor)(sql"delete from operation where id = ${operation.value}".update.run()).pipe(_ => OperationCompensationResult.Compensated)
-      catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
-
-    override def restoreOperation(operation: Operation): OperationCompensationResult =
-      try
-        val (operationKind, payload) = encodeOperationDetails(operation.details)
-        transact(transactor)(sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()) match
-          case 1 => OperationCompensationResult.Compensated
-          case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
 
     private def updateOperationRow(operationId: String, details: OperationDetails) =

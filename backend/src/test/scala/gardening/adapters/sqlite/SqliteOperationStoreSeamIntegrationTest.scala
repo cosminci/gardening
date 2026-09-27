@@ -301,28 +301,96 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       assertEquals(operationStore.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
       assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
-  test("should remove and restore operations for compensation"):
+  test("should remove an operation, idempotently"):
     Using.resource(storeResource): resource =>
       val dataSource     = resource.dataSource
       val operationStore = resource.operationStore
       seedPlant(dataSource, id = "p1")
       val original = Operation(OperationId("o1"), PlantId("p1"), date, care)
-      val amended  = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Dry, none)
       assertEquals(operationStore.addOperation(original), AddOperationResult.Logged(original.id))
-      assertEquals(operationStore.updateOperation(original.id, amended), EditOperationResult.Edited(original.copy(details = amended)))
 
-      assertEquals(operationStore.restoreOperation(original), OperationCompensationResult.Compensated)
-      assertEquals(operationStore.getOperation(original.id), GetOperationResult.Read(original))
       assertEquals(operationStore.removeOperation(original.id), OperationCompensationResult.Compensated)
       assertEquals(operationStore.getOperation(original.id), GetOperationResult.RecordMissing)
       assertEquals(operationStore.removeOperation(original.id), OperationCompensationResult.Compensated)
 
-  test("should report a missing operation when restoring for compensation"):
+  test("should sync the plant's substrate when logging the latest repot, atomically with the write"):
     Using.resource(storeResource): resource =>
-      val missing = Operation(OperationId("missing"), PlantId("p1"), date, care)
-      resource.operationStore.restoreOperation(missing) match
-        case OperationCompensationResult.CompensationFailed(reason) => assertEquals(reason.getMessage, "operation not found while restoring: missing")
-        case other                                                  => fail(s"expected CompensationFailed, got $other")
+      val dataSource     = resource.dataSource
+      val plantStore     = resource.plantStore
+      val operationStore = resource.operationStore
+      seedPlant(dataSource, id = "p1")
+      val repot = OperationDetails.Repot(sand3to5Substrate, none)
+
+      val result = operationStore.logRepot(OperationId("o1"), PlantId("p1"), date, repot)
+
+      assertEquals(result, AddOperationResult.Logged(OperationId("o1")))
+      assertEquals(
+        plantStore.getPlant(PlantId("p1")),
+        GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails.copy(substrate = sand3to5Substrate)))
+      )
+
+  test("should leave the plant's substrate unchanged when logging a repot that is not the latest"):
+    Using.resource(storeResource): resource =>
+      val dataSource     = resource.dataSource
+      val plantStore     = resource.plantStore
+      val operationStore = resource.operationStore
+      seedPlant(dataSource, id = "p1")
+      val laterRepot   = OperationDetails.Repot(lecaSubstrate, none)
+      val earlierRepot = OperationDetails.Repot(sand3to5Substrate, none)
+      assertEquals(
+        operationStore.logRepot(OperationId("o1"), PlantId("p1"), date.plusSeconds(60), laterRepot),
+        AddOperationResult.Logged(OperationId("o1"))
+      )
+
+      val result = operationStore.logRepot(OperationId("o2"), PlantId("p1"), date, earlierRepot)
+
+      assertEquals(result, AddOperationResult.Logged(OperationId("o2")))
+      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails.copy(substrate = lecaSubstrate))))
+
+  test("should report a logging failure when logRepot's referenced plant is unknown"):
+    Using.resource(storeResource): resource =>
+      resource.operationStore.logRepot(OperationId("o1"), PlantId("no-such-plant"), date, OperationDetails.Repot(sand3to5Substrate, none)) match
+        case AddOperationResult.LoggingFailed(_) => ()
+        case other                               => fail(s"expected LoggingFailed, got $other")
+
+  test("should sync the plant's substrate when editing a repot into being the latest"):
+    Using.resource(storeResource): resource =>
+      val dataSource     = resource.dataSource
+      val plantStore     = resource.plantStore
+      val operationStore = resource.operationStore
+      seedPlant(dataSource, id = "p1")
+      val original = Operation(OperationId("o1"), PlantId("p1"), date, OperationDetails.Repot(sand3to5Substrate, none))
+      val amended  = OperationDetails.Repot(lecaSubstrate, none)
+      assertEquals(operationStore.addOperation(original), AddOperationResult.Logged(original.id))
+
+      val result = operationStore.editRepot(original.id, amended)
+
+      assertEquals(result, EditOperationResult.Edited(original.copy(details = amended)))
+      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails.copy(substrate = lecaSubstrate))))
+
+  test("should leave the plant's substrate unchanged when editing a repot that stays behind the latest"):
+    Using.resource(storeResource): resource =>
+      val dataSource     = resource.dataSource
+      val plantStore     = resource.plantStore
+      val operationStore = resource.operationStore
+      seedPlant(dataSource, id = "p1")
+      val older   = Operation(OperationId("o1"), PlantId("p1"), date, OperationDetails.Repot(sand3to5Substrate, none))
+      val latest  = Operation(OperationId("o2"), PlantId("p1"), date.plusSeconds(60), OperationDetails.Repot(lecaSubstrate, none))
+      val amended = OperationDetails.Repot(lecaSubstrate, none)
+      assertEquals(operationStore.addOperation(older), AddOperationResult.Logged(older.id))
+      assertEquals(operationStore.addOperation(latest), AddOperationResult.Logged(latest.id))
+
+      val result = operationStore.editRepot(older.id, amended)
+
+      assertEquals(result, EditOperationResult.Edited(older.copy(details = amended)))
+      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+
+  test("should report a missing operation when editRepot targets an unknown id"):
+    Using.resource(storeResource): resource =>
+      assertEquals(
+        resource.operationStore.editRepot(OperationId("nope"), OperationDetails.Repot(sand3to5Substrate, none)),
+        EditOperationResult.OperationMissing
+      )
 
   test("should fail when edited operation metadata is corrupt"):
     Using.resource(storeResource): resource =>
@@ -387,7 +455,13 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       readOnlyStore.updateOperation(operation.id, care) match
         case EditOperationResult.EditFailed(_) => ()
         case other                             => fail(s"expected EditFailed, got $other")
-      List(readOnlyStore.removeOperation(operation.id), readOnlyStore.restoreOperation(operation)).foreach:
+      readOnlyStore.editRepot(operation.id, OperationDetails.Repot(sand3to5Substrate, none)) match
+        case EditOperationResult.EditFailed(_) => ()
+        case other                             => fail(s"expected EditFailed, got $other")
+      readOnlyStore.logRepot(OperationId("o2"), operation.plantId, date, OperationDetails.Repot(sand3to5Substrate, none)) match
+        case AddOperationResult.LoggingFailed(_) => ()
+        case other                               => fail(s"expected LoggingFailed, got $other")
+      readOnlyStore.removeOperation(operation.id) match
         case OperationCompensationResult.CompensationFailed(_) => ()
         case other                                             => fail(s"expected CompensationFailed, got $other")
 
@@ -403,6 +477,12 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       operationStore.getLatestRepot(PlantId("p1")) match
         case GetLatestRepotResult.ReadFailed(_) => ()
         case other                              => fail(s"expected ReadFailed, got $other")
+      operationStore.logRepot(OperationId("o1"), PlantId("p1"), date, OperationDetails.Repot(sand3to5Substrate, none)) match
+        case AddOperationResult.LoggingFailed(_) => ()
+        case other                               => fail(s"expected LoggingFailed, got $other")
+      operationStore.editRepot(OperationId("o1"), OperationDetails.Repot(sand3to5Substrate, none)) match
+        case EditOperationResult.EditFailed(_) => ()
+        case other                             => fail(s"expected EditFailed, got $other")
 
   test("should report a date-range read failure when the schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>

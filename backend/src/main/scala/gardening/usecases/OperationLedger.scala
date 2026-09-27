@@ -9,7 +9,6 @@ import gardening.capabilities.{IdGenerator, PlantUpdateLock, Logger}
 import gardening.domain.plants.*
 import gardening.domain.pesticide.GetPesticidesResult
 import gardening.domain.substrate.GetSubstrateComponentsResult
-import monocle.syntax.all.*
 
 import language.experimental.captureChecking
 
@@ -68,16 +67,18 @@ object OperationLedger:
           validateOperationDetails(details) match
             case Left(reason) => LogOperationResult.LoggingFailed(reason)
             case Right(_)     =>
-              store.addOperation(operation) match
+              recordOperation(operation) match
                 case AddOperationResult.Logged(id) =>
                   log.info(s"operation logged $operation")
-                  updatePlantIfOperationIsLatestRepot(operation)
-                    .compensateWith(store.removeOperation(operation.id))
-                    .tap(_.left.foreach(reason => log.error("log operation", reason)))
-                    .tap(_.foreach(_ => recordOperationMetrics(plant, details)))
-                    .fold(LogOperationResult.LoggingFailed.apply, _ => LogOperationResult.Logged(id))
+                  recordOperationMetrics(plant, details)
+                  LogOperationResult.Logged(id)
                 case AddOperationResult.LoggingFailed(reason) =>
                   LogOperationResult.LoggingFailed(reason).tap(_ => log.error("log operation", reason))
+
+    private def recordOperation(operation: Operation): AddOperationResult =
+      operation.details match
+        case _: OperationDetails.Care      => store.addOperation(operation)
+        case repot: OperationDetails.Repot => store.logRepot(operation.id, operation.plantId, operation.date, repot)
 
     override def editOperation(operation: OperationId, details: OperationDetails): EditOperationResult = lock.exclusively:
       store.getOperation(operation) match
@@ -85,19 +86,21 @@ object OperationLedger:
         case GetOperationResult.RecordMissing      => EditOperationResult.OperationMissing
         case GetOperationResult.Read(found) if !sameType(found.details, details) =>
           EditOperationResult.OperationTypeMismatch
-        case GetOperationResult.Read(found) =>
+        case GetOperationResult.Read(_) =>
           validateOperationDetails(details) match
             case Left(reason) => EditOperationResult.EditFailed(reason)
             case Right(_)     =>
-              store.updateOperation(operation, details) match
+              amendOperation(operation, details) match
                 case res @ EditOperationResult.Edited(edited) =>
                   log.info(s"operation edited $edited")
-                  updatePlantIfOperationIsLatestRepot(edited)
-                    .compensateWith(store.restoreOperation(found))
-                    .tap(_.left.foreach(reason => log.error("edit operation", reason)))
-                    .fold(EditOperationResult.EditFailed.apply, _ => res)
+                  res
                 case failure: EditOperationResult.EditFailed => failure.tap(_ => log.error("edit operation", failure.reason))
                 case other                                   => other
+
+    private def amendOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
+      details match
+        case care: OperationDetails.Care   => store.updateOperation(operation, care)
+        case repot: OperationDetails.Repot => store.editRepot(operation, repot)
 
     override def deleteOperation(operation: OperationId): DeleteOperationResult = lock.exclusively:
       val outcome =
@@ -129,10 +132,6 @@ object OperationLedger:
         case OperationCompensationResult.Compensated                => DeleteOperationResult.Deleted.asRight
         case OperationCompensationResult.CompensationFailed(reason) =>
           DeleteOperationResult.DeleteFailed(reason).asLeft.tap(_ => log.error("delete operation", reason))
-
-    private enum PlantUpdateInterruption:
-      case NotLatestRepot
-      case Failed(reason: Throwable)
 
     private def recordOperationMetrics(plant: PlantId, details: OperationDetails): Unit =
       details match
@@ -173,46 +172,10 @@ object OperationLedger:
     private def unknownSubstrateComponents(ids: Set[SubstrateComponentId]) =
       RuntimeException(s"unknown substrate component ids: ${ids.toVector.map(_.value).sorted.mkString(", ")}")
 
-    private def updatePlantIfOperationIsLatestRepot(operation: Operation) =
-      operation.details match
-        case _: OperationDetails.Care      => ().asRight
-        case repot: OperationDetails.Repot =>
-          for
-            isLatest <- isLatestRepot(operation).leftMap(PlantUpdateInterruption.Failed.apply)
-            _        <- isLatest.orSkip
-            plant    <- readPlant(operation.plantId)
-            updated  <- updatePlant(plant.focus(_.details.substrate).replace(repot.substrate))
-          yield updated
-
     private def isLatestRepot(operation: Operation): Either[Throwable, Boolean] =
       store.getLatestRepot(operation.plantId) match
         case GetLatestRepotResult.Read(found)        => found.exists(_.id.value.equals(operation.id.value)).asRight
         case GetLatestRepotResult.ReadFailed(reason) => reason.asLeft
-
-    private def readPlant(plant: PlantId) =
-      plantStore.getPlant(plant) match
-        case GetPlantResult.Read(found)        => found.asRight
-        case GetPlantResult.ReadFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
-        case GetPlantResult.RecordMissing      => PlantUpdateInterruption.Failed(RuntimeException("cannot read plant after repot")).asLeft
-
-    private def updatePlant(plant: Plant) =
-      plantStore.updatePlant(plant) match
-        case UpdatePlantResult.Updated              => ().asRight
-        case UpdatePlantResult.UpdateFailed(reason) => PlantUpdateInterruption.Failed(reason).asLeft
-
-    extension (result: Either[PlantUpdateInterruption, Unit])
-      private def compensateWith(compensationResult: => OperationCompensationResult): Either[Throwable, Unit] =
-        result match
-          case Right(_) | Left(PlantUpdateInterruption.NotLatestRepot) => ().asRight
-          case Left(PlantUpdateInterruption.Failed(primary))           =>
-            compensationResult match
-              case OperationCompensationResult.Compensated                      => primary.asLeft
-              case OperationCompensationResult.CompensationFailed(compensation) =>
-                RuntimeException("repot persistence and compensation failed", primary).tap(_.addSuppressed(compensation)).asLeft
-
-    extension (condition: Boolean)
-      private def orSkip =
-        Either.cond(condition, (), PlantUpdateInterruption.NotLatestRepot)
 
     private def sameType(first: OperationDetails, second: OperationDetails) =
       (first, second) match
