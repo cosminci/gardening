@@ -6,8 +6,8 @@ import com.augustnagro.magnum.*
 import gardening.domain.*
 import gardening.domain.operations.*
 import gardening.ports.OperationStore
+import gardening.domain.operations.AddOperationResult.*
 import gardening.domain.operations.EditOperationResult.*
-import gardening.domain.operations.LogOperationResult.*
 import io.circe.{Codec, Decoder, DecodingFailure, Encoder}
 import io.circe.parser.decode
 import io.circe.syntax.*
@@ -39,17 +39,18 @@ object SqliteOperationStore:
           sql"""select operation.date from plant
                 left join operation on operation.plant_id = plant.id
                 where plant.id = ${plant.value}""".query[OperationDateRow].run()
-        rows.headOption match
-          case None    => GetOperationDateRangeResult.PlantMissing
-          case Some(_) =>
-            val dates = rows.flatMap(_.date).traverse(parseOperationDate).map: parsed =>
-              parsed.headOption match
-                case None        => OperationDateRange.Empty
-                case Some(first) =>
-                  val earliest = parsed.foldLeft(first)((previous, current) => if current.isBefore(previous) then current else previous)
-                  val latest   = parsed.foldLeft(first)((previous, current) => if current.isAfter(previous) then current else previous)
-                  OperationDateRange.Recorded(earliest, latest)
-            dates.fold(GetOperationDateRangeResult.ReadFailed.apply, GetOperationDateRangeResult.Read.apply)
+
+        val result =
+          for
+            _      <- rows.headOption.toRight(GetOperationDateRangeResult.PlantMissing)
+            parsed <- rows.flatMap(_.date).traverse(parseOperationDate).left.map(GetOperationDateRangeResult.ReadFailed.apply)
+            first  <- parsed.headOption.toRight(GetOperationDateRangeResult.Read(OperationDateRange.Empty))
+          yield
+            val earliest = parsed.foldLeft(first)((previous, current) => if current.isBefore(previous) then current else previous)
+            val latest   = parsed.foldLeft(first)((previous, current) => if current.isAfter(previous) then current else previous)
+            GetOperationDateRangeResult.Read(OperationDateRange.Recorded(earliest, latest))
+        result.merge
+
       catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     private def selectOperationsForPlant(plantId: String, window: OperationWindow) =
@@ -60,6 +61,19 @@ object SqliteOperationStore:
             where plant_id = $plantId
             order by date desc, id desc
             limit $readSize offset $offset"""
+
+    override def getLatestRepot(plant: PlantId): GetLatestRepotResult =
+      try
+        val row = connect(transactor)(selectLatestRepot(plant.value).query[OperationRow].run().headOption)
+        GetLatestRepotResult.Read(row.map(r => trust(toOperation(r))))
+      catch case error: SqlException => GetLatestRepotResult.ReadFailed(error)
+
+    private def selectLatestRepot(plantId: String) =
+      sql"""select id, plant_id, date, kind, payload
+            from operation
+            where plant_id = $plantId and kind = 'Repot'
+            order by date desc, id desc
+            limit 1"""
 
     override def getOperation(operation: OperationId): GetOperationResult =
       try
@@ -80,31 +94,22 @@ object SqliteOperationStore:
     private def parseOperationDate(value: String) =
       Try(Instant.parse(value)).toEither.left.map(_ => RuntimeException(s"invalid stored operation date: $value"))
 
-    override def addOperation(operation: Operation): LogOperationResult =
+    override def addOperation(operation: Operation): AddOperationResult =
       try
-        transact(transactor):
-          insertOperationRow(operation).update.run() match
-            case 1 => Logged(operation.id)
-            case _ =>
-              sql"select status from plant where id = ${operation.plantId.value}".query[String].run().headOption match
-                case Some(_) => LogOperationResult.PlantArchived
-                case None    => LogOperationResult.PlantMissing
+        transact(transactor)(insertOperationRow(operation).update.run())
+        Logged(operation.id)
       catch case e: SqlException => LoggingFailed(e)
 
     private def insertOperationRow(operation: Operation) =
       val (operationKind, payload) = encodeOperationDetails(operation.details)
       val storedDate               = operationDateFormatter.format(operation.date)
       sql"""insert into operation (id, plant_id, date, kind, payload)
-           select ${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload
-           where exists (select 1 from plant where id = ${operation.plantId.value} and status = 'Active')"""
+            values (${operation.id.value}, ${operation.plantId.value}, $storedDate, $operationKind, $payload)"""
 
     override def updateOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
       try
         transact(transactor):
-          val queryResult = updateOperationRow(operation.value, details)
-            .query[OperationRow]
-            .run()
-            .headOption
+          val queryResult = updateOperationRow(operation.value, details).query[OperationRow].run().headOption
           queryResult.fold[EditOperationResult](OperationMissing): row =>
             Edited(trust(toOperation(row)))
       catch case e: SqlException => EditFailed(e)
@@ -117,17 +122,10 @@ object SqliteOperationStore:
     override def restoreOperation(operation: Operation): OperationCompensationResult =
       try
         val (operationKind, payload) = encodeOperationDetails(operation.details)
-        transact(transactor)(
-          sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()
-        ) match
+        transact(transactor)(sql"update operation set kind = $operationKind, payload = $payload where id = ${operation.id.value}".update.run()) match
           case 1 => OperationCompensationResult.Compensated
           case _ => OperationCompensationResult.CompensationFailed(RuntimeException(s"operation not found while restoring: ${operation.id.value}"))
       catch case error: SqlException => OperationCompensationResult.CompensationFailed(error)
-
-    @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
-    private def trust[A](decoded: Either[Throwable, A]) =
-      // Writes are validated before persistence; a decode failure is an invariant violation.
-      decoded.left.map(DatabaseCorruption.apply).toTry.get
 
     private def updateOperationRow(operationId: String, details: OperationDetails) =
       val (operationKind, payload) = encodeOperationDetails(details)
@@ -177,12 +175,7 @@ object SqliteOperationStore:
 
     private given Encoder[OperationDetails.Care] =
       Encoder.forProduct4("actions", "pesticides", "moisture", "note"): care =>
-        (
-          care.actions.toList.sortBy(_.toString),
-          care.pesticides.toList.sortBy(_.value.toString),
-          care.moisture,
-          care.maybeNote
-        )
+        (care.actions.toList.sortBy(_.toString), care.pesticides.toList.sortBy(_.value.toString), care.moisture, care.maybeNote)
 
     private given Decoder[OperationDetails.Repot] =
       Decoder.forProduct2("substrate", "note")(OperationDetails.Repot.apply)

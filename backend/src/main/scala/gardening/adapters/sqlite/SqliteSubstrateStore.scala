@@ -37,8 +37,8 @@ object SqliteSubstrateStore:
 
     override def addSubstrateComponent(component: SubstrateComponent): AddSubstrateComponentResult =
       try
-        val row =
-          ComponentRow(component.id.value.toString, component.data.name.value, component.data.maybeInfo.map(_.value), component.status.toString)
+        val info = component.data.maybeInfo.map(_.value)
+        val row  = ComponentRow(component.id.value.toString, component.data.name.value, info, component.status.toString)
         transact(transactor):
           sql"insert into substrate_component (id, name, info, status) values (${row.id}, ${row.name}, ${row.info}, ${row.status})".update.run()
         AddSubstrateComponentResult.Added(component)
@@ -62,15 +62,8 @@ object SqliteSubstrateStore:
 
     private def toComponent(row: ComponentRow) =
       for
-        id <- SubstrateComponentId
-          .parse(row.id)
-          .toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
-        status <- Try(SubstrateComponentStatus.valueOf(row.status)).toEither.left.map:
-          error =>
-            // The schema check mirrors SubstrateComponentStatus; extending it requires a migration first.
-            // $COVERAGE-OFF$
-            RuntimeException(s"invalid substrate component status: ${row.status}", error)
-            // $COVERAGE-ON$
+        id <- SubstrateComponentId.parse(row.id).toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
+        status = trust(Try(SubstrateComponentStatus.valueOf(row.status)).toEither)
       yield SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(row.name), row.info.map(SubstrateComponentInfo.apply)), status)
 
     override def getSubstrateMixes: GetSubstrateMixesResult =
@@ -102,10 +95,6 @@ object SqliteSubstrateStore:
 
     private def invalidSubstrate(reason: io.circe.Error) =
       RuntimeException(s"invalid stored substrate mix substrate: ${reason.getMessage}", reason)
-
-    @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
-    private def trust[A](decoded: Either[Throwable, A]) =
-      decoded.left.map(DatabaseCorruption.apply).toTry.get
 
     private given Decoder[SubstrateComponentId] =
       Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value"))

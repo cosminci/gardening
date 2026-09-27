@@ -14,10 +14,18 @@ enum GetOperationsResult:
   case Read(page: OperationPage)
   case ReadFailed(reason: Throwable)
 
+enum GetLatestRepotResult:
+  case Read(operation: Option[Operation])
+  case ReadFailed(reason: Throwable)
+
 enum LogOperationResult:
   case Logged(id: OperationId)
   case PlantMissing
   case PlantArchived
+  case LoggingFailed(reason: Throwable)
+
+enum AddOperationResult:
+  case Logged(id: OperationId)
   case LoggingFailed(reason: Throwable)
 
 enum EditOperationResult:

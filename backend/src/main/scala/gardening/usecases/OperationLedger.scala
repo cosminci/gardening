@@ -2,7 +2,6 @@ package gardening.usecases
 
 import cats.syntax.either.*
 import cats.syntax.eq.*
-import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.operations.*
 import gardening.ports.{OperationStore, PlantStore, SubstrateStore, PesticideStore, OperationLedgerMetricsApi}
@@ -10,15 +9,11 @@ import gardening.capabilities.{IdGenerator, PlantUpdateLock, Logger}
 import gardening.domain.plants.*
 import gardening.domain.pesticide.GetPesticidesResult
 import gardening.domain.substrate.GetSubstrateComponentsResult
-import io.github.iltotore.iron.*
-import io.github.iltotore.iron.autoRefine
-import io.github.iltotore.iron.constraint.numeric.GreaterEqual
 import monocle.syntax.all.*
 
 import language.experimental.captureChecking
 
 import java.time.Instant
-import scala.annotation.tailrec
 import scala.util.chaining.scalaUtilChainingOps
 
 trait OperationLedger:
@@ -74,15 +69,15 @@ object OperationLedger:
             case Left(reason) => LogOperationResult.LoggingFailed(reason)
             case Right(_)     =>
               store.addOperation(operation) match
-                case res: LogOperationResult.Logged =>
+                case AddOperationResult.Logged(id) =>
                   log.info(s"operation logged $operation")
                   updatePlantIfOperationIsLatestRepot(operation)
                     .compensateWith(store.removeOperation(operation.id))
                     .tap(_.left.foreach(reason => log.error("log operation", reason)))
                     .tap(_.foreach(_ => recordOperationMetrics(plant, details)))
-                    .fold(LogOperationResult.LoggingFailed.apply, _ => res)
-                case failure: LogOperationResult.LoggingFailed => failure.tap(_ => log.error("log operation", failure.reason))
-                case other                                     => other
+                    .fold(LogOperationResult.LoggingFailed.apply, _ => LogOperationResult.Logged(id))
+                case AddOperationResult.LoggingFailed(reason) =>
+                  LogOperationResult.LoggingFailed(reason).tap(_ => log.error("log operation", reason))
 
     override def editOperation(operation: OperationId, details: OperationDetails): EditOperationResult = lock.exclusively:
       store.getOperation(operation) match
@@ -190,27 +185,9 @@ object OperationLedger:
           yield updated
 
     private def isLatestRepot(operation: Operation): Either[Throwable, Boolean] =
-      readLatestRepot(operation.plantId).map(_.exists(_.id.value.equals(operation.id.value)))
-
-    private def readLatestRepot(plant: PlantId): Either[Throwable, Option[Operation]] =
-      @tailrec
-      def read(window: OperationWindow): Either[Throwable, Option[Operation]] =
-        store.getOperations(plant, window) match
-          case GetOperationsResult.Read(page) =>
-            page.operations.find(isRepot) match
-              case found @ Some(_)          => found.asRight
-              case None if page.hasNextPage =>
-                val nextOffset = (window.offset + window.size).refineUnsafe[GreaterEqual[0]]
-                read(OperationWindow(nextOffset, window.size))
-              case None => none[Operation].asRight
-          case GetOperationsResult.ReadFailed(reason) => reason.asLeft
-
-      read(OperationWindow(offset = 0, size = 10))
-
-    private def isRepot(operation: Operation) =
-      operation.details match
-        case _: OperationDetails.Repot => true
-        case _: OperationDetails.Care  => false
+      store.getLatestRepot(operation.plantId) match
+        case GetLatestRepotResult.Read(found)        => found.exists(_.id.value.equals(operation.id.value)).asRight
+        case GetLatestRepotResult.ReadFailed(reason) => reason.asLeft
 
     private def readPlant(plant: PlantId) =
       plantStore.getPlant(plant) match

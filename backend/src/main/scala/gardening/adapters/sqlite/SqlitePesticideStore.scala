@@ -55,25 +55,9 @@ object SqlitePesticideStore:
 
     private def toPesticide(row: PesticideRow) =
       for
-        id <- PesticideId
-          .parse(row.id)
-          .toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
-        kind <- Try(PesticideType.valueOf(row.kind)).toEither.left.map:
-          error =>
-            // The schema check mirrors PesticideType; extending it requires a migration first.
-            // $COVERAGE-OFF$
-            RuntimeException(s"invalid pesticide type: ${row.kind}", error)
-            // $COVERAGE-ON$
-        status <- Try(PesticideStatus.valueOf(row.status)).toEither.left.map:
-          error =>
-            // The schema check mirrors PesticideStatus; extending it requires a migration first.
-            // $COVERAGE-OFF$
-            RuntimeException(s"invalid pesticide status: ${row.status}", error)
-            // $COVERAGE-ON$
+        id <- PesticideId.parse(row.id).toRight(RuntimeException(s"invalid pesticide id: ${row.id}"))
+        kind   = trust(Try(PesticideType.valueOf(row.kind)).toEither)
+        status = trust(Try(PesticideStatus.valueOf(row.status)).toEither)
       yield Pesticide(id, PesticideData(PesticideName(row.name), kind, row.info.map(PesticideInfo.apply)), status)
-
-    @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
-    private def trust[A](decoded: Either[Throwable, A]) =
-      decoded.left.map(DatabaseCorruption.apply).toTry.get
 
   private case class PesticideRow(id: String, name: String, kind: String, info: Option[String], status: String) derives DbCodec

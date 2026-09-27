@@ -38,9 +38,9 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
   private val vertabId   = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000003"))
   private val neemOilId  = PesticideId(UUID.fromString("00000000-0000-4000-8001-000000000007"))
 
-  private val substrate = Substrate
-    .of(List(SubstratePart(perliteId, share = 100)))
-    .getOrElse(fail("invalid test substrate"))
+  private def substrateOf(parts: SubstratePart*) = Substrate.of(parts.toList).getOrElse(fail("invalid test substrate"))
+
+  private val substrate = substrateOf(SubstratePart(perliteId, share = 100))
 
   private val plant = Plant(
     id = PlantId("p1"),
@@ -107,7 +107,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(recordedRefs.requestedDateRanges.get(), Vector(plant.id))
     assertEquals(recordedRefs.requestedOperationWindows.get(), Vector.empty)
 
-  test("should validate catalog references before writing operations"):
+  test("should log a care operation once its referenced pesticides are all active"):
     val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
     val vertabData   = PesticideData(PesticideName("VERTAB"), PesticideType.Insecticide, PesticideInfo("0.8ml/L").some)
     val neemOilData  = PesticideData(PesticideName("Neem oil"), PesticideType.Insecticide, none)
@@ -115,64 +115,77 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       Pesticide(vertabId, vertabData, status = PesticideStatus.Active),
       Pesticide(neemOilId, neemOilData, status = PesticideStatus.Active)
     )
+
     assertEquals(
       buildOperations(pesticideReadResult = GetPesticidesResult.Read(pesticides)).logOperation(plant.id, date, selectedCare),
       LogOperationResult.Logged(OperationId("id-1"))
     )
 
-    val unknownPesticideRefs = Refs()
-    buildOperations(unknownPesticideRefs).logOperation(plant.id, date, selectedCare) match
-      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
-      case other                                    => fail(s"expected LoggingFailed, got $other")
-    assertEquals(unknownPesticideRefs.recordedOperations.get(), Vector.empty)
-
-    val archivedPesticides    = pesticides.map(_.copy(status = PesticideStatus.Archived))
-    val archivedPesticideRefs = Refs()
-    val archivedRead          = GetPesticidesResult.Read(archivedPesticides)
-    buildOperations(archivedPesticideRefs, pesticideReadResult = archivedRead).logOperation(plant.id, date, selectedCare) match
-      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
-      case other                                    => fail(s"expected LoggingFailed, got $other")
-    assertEquals(archivedPesticideRefs.recordedOperations.get(), Vector.empty)
-
-    val readFailure      = RuntimeException("catalog unavailable")
-    val unreadableResult =
-      buildOperations(pesticideReadResult = GetPesticidesResult.ReadFailed(readFailure)).logOperation(plant.id, date, selectedCare)
-    assertEquals(unreadableResult, LogOperationResult.LoggingFailed(readFailure))
-
-    val unknownComponents = Substrate
-      .of(List(SubstratePart(perliteId, 50), SubstratePart(lecaId, 50)))
-      .getOrElse(fail("invalid test substrate"))
-    val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
-    val unknownComponentRefs       = Refs()
-    buildOperations(
-      unknownComponentRefs,
-      componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
-    ).logOperation(plant.id, date, repotWithUnknownComponents) match
-      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
-      case other                                    => fail(s"expected LoggingFailed, got $other")
-    assertEquals(unknownComponentRefs.recordedOperations.get(), Vector.empty)
-
-    val archivedPerlite =
-      SubstrateComponent(perliteId, SubstrateComponentData(SubstrateComponentName(perliteId.value.toString), none), SubstrateComponentStatus.Archived)
-    val archivedComponents    = archivedPerlite +: seededComponents.drop(1)
-    val archivedComponentRefs = Refs()
-    val archivedComponentRead = GetSubstrateComponentsResult.Read(archivedComponents)
-    buildOperations(archivedComponentRefs, componentReadResult = archivedComponentRead).logOperation(plant.id, date, repot) match
-      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
-      case other                                    => fail(s"expected LoggingFailed, got $other")
-    assertEquals(archivedComponentRefs.recordedOperations.get(), Vector.empty)
-
-    assertEquals(
-      buildOperations(componentReadResult = GetSubstrateComponentsResult.ReadFailed(readFailure)).logOperation(plant.id, date, repot),
-      LogOperationResult.LoggingFailed(readFailure)
+  test("should reject logging a care operation that references unknown or archived pesticides, without recording it"):
+    val selectedCare       = care.copy(pesticides = Set(vertabId, neemOilId))
+    val archivedPesticides = Vector(
+      Pesticide(vertabId, PesticideData(PesticideName("VERTAB"), PesticideType.Insecticide, none), PesticideStatus.Archived),
+      Pesticide(neemOilId, PesticideData(PesticideName("Neem oil"), PesticideType.Insecticide, none), PesticideStatus.Archived)
     )
+    val refs = Refs()
 
-    buildOperations(unknownPesticideRefs).editOperation(operation.id, selectedCare) match
+    val unknownResult  = buildOperations(refs).logOperation(plant.id, date, selectedCare)
+    val archivedResult =
+      buildOperations(refs, pesticideReadResult = GetPesticidesResult.Read(archivedPesticides)).logOperation(plant.id, date, selectedCare)
+
+    unknownResult match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    archivedResult match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown pesticide ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
+
+  test("should reject logging a repot operation that references unknown or archived substrate components, without recording it"):
+    val unknownComponents          = substrateOf(SubstratePart(perliteId, 50), SubstratePart(lecaId, 50))
+    val repotWithUnknownComponents = OperationDetails.Repot(unknownComponents, none)
+    val archivedPerlite            =
+      SubstrateComponent(perliteId, SubstrateComponentData(SubstrateComponentName(perliteId.value.toString), none), SubstrateComponentStatus.Archived)
+    val archivedComponents = archivedPerlite +: seededComponents.drop(1)
+    val refs               = Refs()
+
+    val unknownResult =
+      buildOperations(
+        refs,
+        componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
+      ).logOperation(plant.id, date, repotWithUnknownComponents)
+    val archivedResult =
+      buildOperations(refs, componentReadResult = GetSubstrateComponentsResult.Read(archivedComponents)).logOperation(plant.id, date, repot)
+
+    unknownResult match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    archivedResult match
+      case LogOperationResult.LoggingFailed(reason) => assert(reason.getMessage.contains("unknown substrate component ids"))
+      case other                                    => fail(s"expected LoggingFailed, got $other")
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
+
+  test("should preserve pesticide and substrate catalog read failures when validating an operation"):
+    val readFailure  = RuntimeException("catalog unavailable")
+    val selectedCare = care.copy(pesticides = Set(vertabId))
+
+    val careResult =
+      buildOperations(pesticideReadResult = GetPesticidesResult.ReadFailed(readFailure)).logOperation(plant.id, date, selectedCare)
+    val repotResult = buildOperations(componentReadResult = GetSubstrateComponentsResult.ReadFailed(readFailure)).logOperation(plant.id, date, repot)
+
+    assertEquals(careResult, LogOperationResult.LoggingFailed(readFailure))
+    assertEquals(repotResult, LogOperationResult.LoggingFailed(readFailure))
+
+  test("should reject editing an operation to reference unknown pesticides, without writing"):
+    val selectedCare = care.copy(pesticides = Set(vertabId, neemOilId))
+    val refs         = Refs()
+
+    buildOperations(refs).editOperation(operation.id, selectedCare) match
       case EditOperationResult.EditFailed(reason) =>
         assert(reason.getMessage.contains(vertabId.value.toString))
         assert(reason.getMessage.contains(neemOilId.value.toString))
       case other => fail(s"expected EditFailed, got $other")
-    assertEquals(unknownPesticideRefs.updatedOperations.get(), Vector.empty)
+    assertEquals(refs.updatedOperations.get(), Vector.empty)
 
   test("should record the caller's operation instant"):
     val refs         = Refs()
@@ -195,24 +208,16 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.recordedOperations.get(), Vector.empty)
     assertEquals(refs.updatedPlants.get(), Vector.empty)
 
-  test("should preserve an unexpected addOperation outcome when logging"):
-    assertEquals(
-      buildOperations(addOperationResult = LogOperationResult.PlantMissing).logOperation(plant.id, date, care),
-      LogOperationResult.PlantMissing
-    )
-
   test("should preserve missing and unreadable plant failures when logging"):
     val readFailure = RuntimeException("plant unavailable")
+    val refs        = Refs()
 
-    val missingRefs = Refs()
-    val failedRefs  = Refs()
-    val missing     = buildOperations(missingRefs, getPlantResult = GetPlantResult.RecordMissing).logOperation(plant.id, date, care)
-    val failed      = buildOperations(failedRefs, getPlantResult = GetPlantResult.ReadFailed(readFailure)).logOperation(plant.id, date, care)
+    val missing = buildOperations(refs, getPlantResult = GetPlantResult.RecordMissing).logOperation(plant.id, date, care)
+    val failed  = buildOperations(refs, getPlantResult = GetPlantResult.ReadFailed(readFailure)).logOperation(plant.id, date, care)
 
     assertEquals(missing, LogOperationResult.PlantMissing)
     assertEquals(failed, LogOperationResult.LoggingFailed(readFailure))
-    assertEquals(missingRefs.recordedOperations.get(), Vector.empty)
-    assertEquals(failedRefs.recordedOperations.get(), Vector.empty)
+    assertEquals(refs.recordedOperations.get(), Vector.empty)
 
   test("should amend care without changing the plant"):
     val refs = Refs()
@@ -222,22 +227,18 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.updatedPlants.get(), Vector.empty)
 
   test("should reject invalid edit requests before writing"):
-    val readFailure  = RuntimeException("store down")
-    val typeMismatch = Refs()
-    val missing      = Refs()
-    val unreadable   = Refs()
+    val readFailure = RuntimeException("store down")
+    val refs        = Refs()
 
-    assertEquals(buildOperations(typeMismatch).editOperation(operation.id, repot), EditOperationResult.OperationTypeMismatch)
-    assertEquals(
-      buildOperations(missing, getOperationResult = GetOperationResult.RecordMissing).editOperation(OperationId("nope"), care),
-      EditOperationResult.OperationMissing
-    )
-    assertEquals(
-      buildOperations(unreadable, getOperationResult = GetOperationResult.ReadFailed(readFailure)).editOperation(operation.id, care),
-      EditOperationResult.EditFailed(readFailure)
-    )
-    List(typeMismatch, missing, unreadable).foreach: refs =>
-      assertEquals(refs.updatedOperations.get(), Vector.empty)
+    val typeMismatchResult = buildOperations(refs).editOperation(operation.id, repot)
+    val missingResult      = buildOperations(refs, getOperationResult = GetOperationResult.RecordMissing).editOperation(OperationId("nope"), care)
+    val unreadableResult   =
+      buildOperations(refs, getOperationResult = GetOperationResult.ReadFailed(readFailure)).editOperation(operation.id, care)
+
+    assertEquals(typeMismatchResult, EditOperationResult.OperationTypeMismatch)
+    assertEquals(missingResult, EditOperationResult.OperationMissing)
+    assertEquals(unreadableResult, EditOperationResult.EditFailed(readFailure))
+    assertEquals(refs.updatedOperations.get(), Vector.empty)
 
   test("should preserve an unexpected updateOperation outcome when editing"):
     assertEquals(
@@ -260,17 +261,17 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.removedOperations.get(), Vector(operation.id))
 
   test("should preserve missing, unreadable, and write-failed outcomes when deleting"):
-    val readFailure    = RuntimeException("store down")
-    val historyFailure = RuntimeException("history unavailable")
-    val removeFailure  = RuntimeException("remove failed")
-    val existingRepot  = Operation(OperationId("o1"), plant.id, date, repot)
+    val readFailure        = RuntimeException("store down")
+    val latestRepotFailure = RuntimeException("latest repot unavailable")
+    val removeFailure      = RuntimeException("remove failed")
+    val existingRepot      = Operation(OperationId("o1"), plant.id, date, repot)
 
     val missingResult    = buildOperations(getOperationResult = GetOperationResult.RecordMissing).deleteOperation(OperationId("nope"))
     val unreadableResult =
       buildOperations(getOperationResult = GetOperationResult.ReadFailed(readFailure)).deleteOperation(operation.id)
-    val historyFailedResult = buildOperations(
+    val latestRepotFailedResult = buildOperations(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.ReadFailed(historyFailure)
+      getLatestRepotResult = () => GetLatestRepotResult.ReadFailed(latestRepotFailure)
     ).deleteOperation(existingRepot.id)
     val writeFailedResult = buildOperations(
       getOperationResult = GetOperationResult.Read(operation),
@@ -279,50 +280,38 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(missingResult, DeleteOperationResult.OperationMissing)
     assertEquals(unreadableResult, DeleteOperationResult.DeleteFailed(readFailure))
-    assertEquals(historyFailedResult, DeleteOperationResult.DeleteFailed(historyFailure))
+    assertEquals(latestRepotFailedResult, DeleteOperationResult.DeleteFailed(latestRepotFailure))
     assertEquals(writeFailedResult, DeleteOperationResult.DeleteFailed(removeFailure))
 
   test("should update a plant after recording the latest repot"):
-    val newSubstrate    = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate    = substrateOf(SubstratePart(lecaId, share = 100))
     val newRepot        = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val loggedOperation = Operation(OperationId("id-1"), PlantId("p1"), date, newRepot)
     val refs            = Refs()
-    val operations      =
-      buildOperations(refs, getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedOperation), hasNextPage = false)))
+    val operations      = buildOperations(refs, getLatestRepotResult = () => GetLatestRepotResult.Read(loggedOperation.some))
 
     assertEquals(operations.logOperation(PlantId("p1"), date, newRepot), LogOperationResult.Logged(OperationId("id-1")))
     assertEquals(refs.recordedOperations.get(), Vector(loggedOperation))
     assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
-  test("should leave the plant unchanged when a recorded repot loses the ordering tie-break"):
-    val newerRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
-    val logged     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val refs       = Refs()
+  test("should leave the plant unchanged when the newly logged repot is not the latest"):
+    val latestRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
+    val logged      = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val refs        = Refs()
 
     val operations = buildOperations(
       refs,
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, logged), hasNextPage = false)),
-      addOperationResult = LogOperationResult.Logged(logged.id),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(latestRepot.some),
+      addOperationResult = AddOperationResult.Logged(logged.id),
       nextId = () => logged.id.value
     )
     assertEquals(operations.logOperation(plant.id, date, repot), LogOperationResult.Logged(logged.id))
     assertEquals(refs.updatedPlants.get(), Vector.empty)
     assertEquals(refs.removedOperations.get(), Vector.empty)
 
-  test("should preserve the current substrate when logging a historical repot"):
-    val newerSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
-    val olderSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
-    val newerRepot     = Operation(OperationId("newer"), plant.id, date, OperationDetails.Repot(newerSubstrate, none))
-    val olderRepot     = OperationDetails.Repot(olderSubstrate, none)
-    val refs           = Refs()
-
-    val operations = buildOperations(refs, getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false)))
-    assertEquals(operations.logOperation(plant.id, date.minusSeconds(60), olderRepot), LogOperationResult.Logged(OperationId("id-1")))
-    assertEquals(refs.updatedPlants.get(), Vector.empty)
-
   test("should finish concurrent repot logs in timestamp order"):
-    val firstSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
-    val secondSubstrate = Substrate.of(List(SubstratePart(sand3to5Id, share = 100))).getOrElse(fail("invalid test substrate"))
+    val firstSubstrate  = substrateOf(SubstratePart(lecaId, share = 100))
+    val secondSubstrate = substrateOf(SubstratePart(sand3to5Id, share = 100))
     val firstRepot      = OperationDetails.Repot(firstSubstrate, maybeNote = none)
     val secondRepot     = OperationDetails.Repot(secondSubstrate, maybeNote = none)
     val firstOperation  = Operation(OperationId("id-1"), PlantId("p1"), date, firstRepot)
@@ -341,13 +330,12 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
           case _ =>
             secondIdCall.countDown()
             "id-2"
+    val repotChecks = AtomicInteger()
+    val latestRepot = () =>
+      if repotChecks.incrementAndGet().equals(1) then GetLatestRepotResult.Read(firstOperation.some)
+      else GetLatestRepotResult.Read(secondOperation.some)
     val refs       = Refs()
-    val operations = buildOperations(
-      refs,
-      nextId = () => idGen.nextId(),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(firstOperation), hasNextPage = false)),
-      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(secondOperation, firstOperation), hasNextPage = false)).some
-    )
+    val operations = buildOperations(refs, nextId = () => idGen.nextId(), getLatestRepotResult = latestRepot)
 
     val firstThread = Thread.ofVirtual().start: () =>
       val _ = operations.logOperation(PlantId("p1"), date, firstRepot)
@@ -363,51 +351,45 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.updatedPlants.get().map(_.details.substrate), Vector(firstSubstrate, secondSubstrate))
 
   test("should remove a recorded repot whenever its plant cannot reflect it"):
-    val historyFailure    = RuntimeException("history failed")
-    val readFailure       = RuntimeException("read failed")
-    val updateFailure     = RuntimeException("update failed")
-    val loggedRepot       = Operation(OperationId("id-1"), plant.id, date, repot)
-    val selfOnlyPage      = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false))
-    val unreadableHistory = Refs()
-    val missingPlant      = Refs()
-    val unreadable        = Refs()
-    val notUpdated        = Refs()
+    val latestRepotFailure = RuntimeException("latest repot unavailable")
+    val readFailure        = RuntimeException("read failed")
+    val updateFailure      = RuntimeException("update failed")
+    val loggedRepot        = Operation(OperationId("id-1"), plant.id, date, repot)
+    val isLatest           = () => GetLatestRepotResult.Read(loggedRepot.some)
+    val refs               = Refs()
 
     val historyResult =
-      buildOperations(unreadableHistory, getOperationsResult = GetOperationsResult.ReadFailed(historyFailure)).logOperation(plant.id, date, repot)
+      buildOperations(refs, getLatestRepotResult = () => GetLatestRepotResult.ReadFailed(latestRepotFailure)).logOperation(plant.id, date, repot)
     val missingResult = buildOperations(
-      missingPlant,
-      getOperationsResult = selfOnlyPage,
+      refs,
+      getLatestRepotResult = isLatest,
       getPlantResultAfterLog = GetPlantResult.RecordMissing.some
     ).logOperation(plant.id, date, repot)
     val readResult = buildOperations(
-      unreadable,
-      getOperationsResult = selfOnlyPage,
+      refs,
+      getLatestRepotResult = isLatest,
       getPlantResultAfterLog = GetPlantResult.ReadFailed(readFailure).some
     ).logOperation(plant.id, date, repot)
     val updateResult = buildOperations(
-      notUpdated,
-      getOperationsResult = selfOnlyPage,
+      refs,
+      getLatestRepotResult = isLatest,
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
     ).logOperation(plant.id, date, repot)
 
-    assertEquals(historyResult, LogOperationResult.LoggingFailed(historyFailure))
+    assertEquals(historyResult, LogOperationResult.LoggingFailed(latestRepotFailure))
     missingResult match
       case LogOperationResult.LoggingFailed(reason) => assertEquals(reason.getMessage, "cannot read plant after repot")
       case other                                    => fail(s"expected LoggingFailed, got $other")
-    assertEquals(missingPlant.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(readResult, LogOperationResult.LoggingFailed(readFailure))
-    assertEquals(unreadable.removedOperations.get(), Vector(OperationId("id-1")))
     assertEquals(updateResult, LogOperationResult.LoggingFailed(updateFailure))
-    assertEquals(notUpdated.removedOperations.get(), Vector(OperationId("id-1")))
-    assertEquals(unreadableHistory.removedOperations.get(), Vector(OperationId("id-1")))
+    assertEquals(refs.removedOperations.get(), Vector.fill(4)(OperationId("id-1")))
 
   test("should report both failures when removing a recorded repot also fails"):
     val updateFailure = RuntimeException("update failed")
     val removeFailure = RuntimeException("remove failed")
     val loggedRepot   = Operation(OperationId("id-1"), PlantId("p1"), date, repot)
     val operations    = buildOperations(
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(loggedRepot), hasNextPage = false)),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(loggedRepot.some),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
       removeOperationResult = OperationCompensationResult.CompensationFailed(removeFailure)
     )
@@ -423,7 +405,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val refs  = Refs()
 
     assertEquals(
-      buildOperations(refs, addOperationResult = LogOperationResult.LoggingFailed(cause)).logOperation(PlantId("p1"), date, repot),
+      buildOperations(refs, addOperationResult = AddOperationResult.LoggingFailed(cause)).logOperation(PlantId("p1"), date, repot),
       LogOperationResult.LoggingFailed(cause)
     )
     assertEquals(refs.updatedPlants.get(), Vector.empty)
@@ -431,15 +413,14 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
 
   test("should update a plant after amending the latest repot"):
     val existingRepot = Operation(OperationId("o2"), PlantId("p1"), date, repot)
-    val tiedRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val newSubstrate  = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val newSubstrate  = substrateOf(SubstratePart(lecaId, share = 100))
     val amended       = OperationDetails.Repot(newSubstrate, maybeNote = none)
     val editResult    = EditOperationResult.Edited(existingRepot.copy(details = amended))
     val refs          = Refs()
     val operations    = buildOperations(
       refs,
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot, tiedRepot), hasNextPage = false)),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(existingRepot.some),
       updateOperationResult = editResult
     )
 
@@ -449,7 +430,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
   test("should allow editing an archived repot without changing its archived status"):
     val archivedPlant    = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
     val existing         = Operation(OperationId("o2"), plant.id, date, repot)
-    val amendedSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
+    val amendedSubstrate = substrateOf(SubstratePart(lecaId, share = 100))
     val amended          = OperationDetails.Repot(amendedSubstrate, maybeNote = none)
     val updated          = existing.copy(details = amended)
 
@@ -458,7 +439,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       refs,
       getPlantResult = GetPlantResult.Read(archivedPlant),
       getOperationResult = GetOperationResult.Read(existing),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existing), hasNextPage = false)),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(existing.some),
       updateOperationResult = EditOperationResult.Edited(updated)
     )
     val editResult = operations.editOperation(existing.id, amended)
@@ -466,31 +447,6 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val expectedPlant = archivedPlant.copy(details = archivedPlant.details.copy(substrate = amendedSubstrate))
     assertEquals(editResult, EditOperationResult.Edited(updated))
     assertEquals(refs.updatedPlants.get(), Vector(expectedPlant))
-
-  test("should update the plant after amending its latest repot despite newer care operations"):
-    val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val newerCare     = Vector.tabulate(10)(index =>
-      Operation(
-        OperationId(s"care-$index"),
-        PlantId("p1"),
-        date.plusSeconds(index.toLong + 1),
-        OperationDetails.Care(Set(ActionType.Watered), Set.empty, MoistureLevel.Wet, Note("dry").some)
-      )
-    )
-    val newSubstrate = Substrate.of(List(SubstratePart(lecaId, share = 100))).getOrElse(fail("invalid test substrate"))
-    val amended      = OperationDetails.Repot(newSubstrate, maybeNote = none)
-    val editResult   = EditOperationResult.Edited(existingRepot.copy(details = amended))
-    val refs         = Refs()
-    val operations   = buildOperations(
-      refs,
-      getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(newerCare, hasNextPage = true)),
-      nextOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)).some,
-      updateOperationResult = editResult
-    )
-
-    assertEquals(operations.editOperation(existingRepot.id, amended), editResult)
-    assertEquals(refs.updatedPlants.get(), Vector(plant.copy(details = plant.details.copy(substrate = newSubstrate))))
 
   test("should amend an older repot without changing the plant"):
     val olderRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
@@ -501,7 +457,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val operations = buildOperations(
       refs,
       getOperationResult = GetOperationResult.Read(olderRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false)),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(newerRepot.some),
       updateOperationResult = editResult
     )
 
@@ -510,44 +466,39 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.restoredOperations.get(), Vector.empty)
 
   test("should restore an amended repot whenever plant synchronization cannot complete"):
-    val existingRepot     = Operation(OperationId("o1"), PlantId("p1"), date, repot)
-    val historyFailure    = RuntimeException("history unavailable")
-    val plantFailure      = RuntimeException("plant unavailable")
-    val updateFailure     = RuntimeException("plant update failed")
-    val unreadableHistory = Refs()
-    val historyOperations = buildOperations(
-      unreadableHistory,
+    val existingRepot      = Operation(OperationId("o1"), PlantId("p1"), date, repot)
+    val latestRepotFailure = RuntimeException("latest repot unavailable")
+    val plantFailure       = RuntimeException("plant unavailable")
+    val updateFailure      = RuntimeException("plant update failed")
+    val isLatest           = () => GetLatestRepotResult.Read(existingRepot.some)
+    val refs               = Refs()
+
+    val historyResult = buildOperations(
+      refs,
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.ReadFailed(historyFailure),
+      getLatestRepotResult = () => GetLatestRepotResult.ReadFailed(latestRepotFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
-    )
-    val unreadablePlant = Refs()
-    val plantOperations = buildOperations(
-      unreadablePlant,
+    ).editOperation(existingRepot.id, repot)
+    val plantResult = buildOperations(
+      refs,
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      getLatestRepotResult = isLatest,
       getPlantResult = GetPlantResult.ReadFailed(plantFailure),
       updateOperationResult = EditOperationResult.Edited(existingRepot)
-    )
-    val plantNotUpdated  = Refs()
-    val updateOperations = buildOperations(
-      plantNotUpdated,
+    ).editOperation(existingRepot.id, repot)
+    val updateResult = buildOperations(
+      refs,
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      getLatestRepotResult = isLatest,
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure)
-    )
+    ).editOperation(existingRepot.id, repot)
 
-    val historyResult = historyOperations.editOperation(existingRepot.id, repot)
-    val plantResult   = plantOperations.editOperation(existingRepot.id, repot)
-    val updateResult  = updateOperations.editOperation(existingRepot.id, repot)
-
-    assertEquals(historyResult, EditOperationResult.EditFailed(historyFailure))
+    assertEquals(historyResult, EditOperationResult.EditFailed(latestRepotFailure))
     assertEquals(plantResult, EditOperationResult.EditFailed(plantFailure))
     assertEquals(updateResult, EditOperationResult.EditFailed(updateFailure))
-    List(unreadableHistory, unreadablePlant, plantNotUpdated).foreach: refs =>
-      assertEquals(refs.updatedOperations.get(), Vector(existingRepot.id -> repot))
-      assertEquals(refs.restoredOperations.get(), Vector(existingRepot))
+    assertEquals(refs.updatedOperations.get(), Vector.fill(3)(existingRepot.id -> repot))
+    assertEquals(refs.restoredOperations.get(), Vector.fill(3)(existingRepot))
 
   test("should surface a failed latest repot edit without updating the plant"):
     val existingRepot = Operation(OperationId("o1"), PlantId("p1"), date, repot)
@@ -556,7 +507,6 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val operations    = buildOperations(
       refs,
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
       updateOperationResult = EditOperationResult.EditFailed(cause)
     )
 
@@ -569,7 +519,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val restoreFailure = RuntimeException("restore failed")
     val operations     = buildOperations(
       getOperationResult = GetOperationResult.Read(existingRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(existingRepot), hasNextPage = false)),
+      getLatestRepotResult = () => GetLatestRepotResult.Read(existingRepot.some),
       updateOperationResult = EditOperationResult.Edited(existingRepot),
       updatePlantResult = UpdatePlantResult.UpdateFailed(updateFailure),
       restoreOperationResult = OperationCompensationResult.CompensationFailed(restoreFailure)
@@ -588,45 +538,28 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     val operations = buildOperations(
       refs,
       getOperationResult = GetOperationResult.Read(olderRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot), hasNextPage = false))
+      getLatestRepotResult = () => GetLatestRepotResult.Read(newerRepot.some)
     )
 
     assertEquals(operations.deleteOperation(olderRepot.id), DeleteOperationResult.Deleted)
     assertEquals(refs.removedOperations.get(), Vector(olderRepot.id))
 
-  test("should reject deleting a plant's only repot"):
+  test("should reject deleting a plant's latest repot"):
     val onlyRepot = Operation(OperationId("o1"), plant.id, date, repot)
     val refs      = Refs()
     val result    = buildOperations(
       refs,
       getOperationResult = GetOperationResult.Read(onlyRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(onlyRepot), hasNextPage = false))
+      getLatestRepotResult = () => GetLatestRepotResult.Read(onlyRepot.some)
     ).deleteOperation(onlyRepot.id)
 
     assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
     assertEquals(refs.removedOperations.get(), Vector.empty)
 
-  test("should reject deleting the latest repot on a same-instant tie-break"):
-    val newerRepot = Operation(OperationId("o2"), plant.id, date, repot)
-    val olderRepot = Operation(OperationId("o1"), plant.id, date, repot)
-    val refs       = Refs()
-    val result     = buildOperations(
-      refs,
-      getOperationResult = GetOperationResult.Read(newerRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(newerRepot, olderRepot), hasNextPage = false))
-    ).deleteOperation(newerRepot.id)
-
-    assertEquals(result, DeleteOperationResult.CannotDeleteLatestRepot)
-    assertEquals(refs.removedOperations.get(), Vector.empty)
-
-  test("should allow deleting a repot when its plant's history reports no repot at all"):
+  test("should allow deleting a repot when its plant has no latest repot on record"):
     val orphanRepot = Operation(OperationId("o1"), plant.id, date, repot)
     val refs        = Refs()
-    val operations  = buildOperations(
-      refs,
-      getOperationResult = GetOperationResult.Read(orphanRepot),
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
-    )
+    val operations  = buildOperations(refs, getOperationResult = GetOperationResult.Read(orphanRepot))
 
     assertEquals(operations.deleteOperation(orphanRepot.id), DeleteOperationResult.Deleted)
     assertEquals(refs.removedOperations.get(), Vector(orphanRepot.id))
@@ -646,9 +579,9 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       getPlantResultAfterLog: Option[GetPlantResult] = none,
       getOperationsResult: GetOperationsResult = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)),
       operationDateRangeResult: GetOperationDateRangeResult = GetOperationDateRangeResult.Read(OperationDateRange.Empty),
-      nextOperationsResult: Option[GetOperationsResult] = none,
+      getLatestRepotResult: () => GetLatestRepotResult = () => GetLatestRepotResult.Read(none),
       getOperationResult: GetOperationResult = GetOperationResult.Read(operation),
-      addOperationResult: LogOperationResult = LogOperationResult.Logged(OperationId("id-1")),
+      addOperationResult: AddOperationResult = AddOperationResult.Logged(OperationId("id-1")),
       updateOperationResult: EditOperationResult = EditOperationResult.Edited(operation),
       removeOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
       restoreOperationResult: OperationCompensationResult = OperationCompensationResult.Compensated,
@@ -657,9 +590,8 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       pesticideReadResult: GetPesticidesResult = GetPesticidesResult.Read(Vector.empty),
       nextId: () => String = () => "id-1"
   ) =
-    val plantReads     = AtomicInteger(0)
-    val operationReads = AtomicInteger(0)
-    val plantStore     = new PlantStore:
+    val plantReads = AtomicInteger(0)
+    val plantStore = new PlantStore:
       override def addPlant(plant: Plant): AddPlantResult          = fail("operations must not add plants")
       override def getPlants(status: PlantStatus): GetPlantsResult = fail("operations must not list plants")
       override def getArchivedCount: ArchivedCountResult           = fail("operations must not count plants")
@@ -673,13 +605,12 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult = fail("operations must not list photos")
     val store = new OperationStore:
       override def getOperations(plant: PlantId, window: OperationWindow): GetOperationsResult =
-        refs.requestedOperationWindows.updateAndGet(_ :+ (plant -> window))
-        if operationReads.getAndIncrement().equals(0) then getOperationsResult
-        else nextOperationsResult.getOrElse(getOperationsResult)
+        refs.requestedOperationWindows.updateAndGet(_ :+ (plant -> window)).pipe(_ => getOperationsResult)
       override def getOperationDateRange(plant: PlantId): GetOperationDateRangeResult =
         refs.requestedDateRanges.updateAndGet(_ :+ plant).pipe(_ => operationDateRangeResult)
+      override def getLatestRepot(plant: PlantId): GetLatestRepotResult     = getLatestRepotResult()
       override def getOperation(operation: OperationId): GetOperationResult = getOperationResult
-      override def addOperation(operation: Operation): LogOperationResult   =
+      override def addOperation(operation: Operation): AddOperationResult   =
         refs.recordedOperations.updateAndGet(_ :+ operation).pipe(_ => addOperationResult)
       override def updateOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
         refs.updatedOperations.updateAndGet(_ :+ (operation -> details)).pipe(_ => updateOperationResult)
