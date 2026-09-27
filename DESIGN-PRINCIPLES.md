@@ -2,7 +2,14 @@
 
 How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise. They are adapted from the UPS RO Application Design Guidelines (Ports & Adapters, DDD, Fractal Design, Anti-Corruption Layers, Indirection Layers, Strict Build Guardrails), which are language-agnostic; this document grounds them in the choices this repo actually makes.
 
-The aims are constant: keep cognitive load low and even across the codebase, make the code cheap to extend and to change intentionally, keep long-term maintenance and dependency health under control, and favour reuse and modularity. The one thing we do **not** chase is gold-plating — polishing an implementation past the point where the business or the team benefits.
+The aims:
+
+- Low, even cognitive load across the codebase.
+- Cheap to extend, and cheap to change on purpose.
+- Maintenance and dependencies that stay healthy over the long run.
+- Reuse and modularity, favoured over one-off solutions.
+
+What we don't chase: gold-plating — polish past the point where it benefits the business or the team.
 
 ## 1. Ports & Adapters
 

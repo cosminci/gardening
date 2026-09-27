@@ -51,7 +51,7 @@ flowchart LR
 
 ## Architecture constraints
 
-- The backend splits into four sibling packages: `domain` (pure types only — no use-case or port code), `usecases` (orchestration services, one per entity + role: `PlantManager`, `OperationLedger`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`), `ports` (business-external dependencies with a real adapter — every `*Store`, every `*MetricsApi`), and `capabilities` (generic infrastructure any service could need regardless of business logic — `Clock`, `IdGenerator`, `Logger`, `PlantUpdateLock`). Whether something has a swappable adapter isn't the test for port vs. capability — `Clock`/`IdGenerator` have one and are still capabilities.
+- The backend splits into four sibling packages: `domain` (pure types only — no use-case or port code); `usecases` (one orchestration service per subdomain: plant management, operation ledger, attention monitoring, substrate management, pesticide management); `ports` (business-external dependencies with a real adapter — every `*Store`, every `*MetricsApi`); and `capabilities` (generic infrastructure any service could need regardless of business logic — see [DESIGN-PRINCIPLES.md §1](../DESIGN-PRINCIPLES.md#1-ports--adapters) for the port/capability distinction).
 - Dependency direction, mechanically enforced by `ArchitectureComponentTest`: `domain` has no outgoing dependency at all; `capabilities` has no outgoing dependency either, not even on `domain`; `ports` depends only on `domain`; `usecases` never depends on `adapters` or `app`; no adapter depends on another adapter.
   ```mermaid
   flowchart TB

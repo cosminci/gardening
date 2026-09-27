@@ -41,11 +41,11 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 | Task | Command |
 | --- | --- |
-| Backend gate | `cd backend && sbt scalafmtCheckAll coverage test coverageReport "scalafixAll --check"` |
+| Backend gate | `dagger call backend-check` |
 | Run the backend | `cd backend && sbt run` |
-| Frontend gate | `cd frontend && npm run verify` |
+| Frontend gate | `dagger call frontend-check` |
 | Frontend dev server | `cd frontend && npm run dev` |
-| Pipeline gate | `cd .dagger && npm run verify` |
+| Pipeline gate | `dagger call pipeline-check` |
 | Regenerate the contract | `cd backend && sbt "runMain gardening.app.GenerateOpenApi ../contract/openapi.yaml" && cd ../contract && npm run generate` |
 | Affected checks (local / pre-push) | `dagger call verify` |
 | All checks | `dagger call verify --all` |
@@ -96,7 +96,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 ## Logging
 
-- Only the five use-case services (`PlantManager`, `OperationLedger`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`) log; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract.
+- Only use-case services log; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract.
 - `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
 - Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
 - Every line is a single line — never a raw stack trace.
