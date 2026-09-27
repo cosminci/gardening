@@ -12,26 +12,26 @@ Each domain service logs its own outcome as a single line: info for a successful
 
 **Business** (domain-owned, via `using`-threaded `*MetricsApi` ports):
 
-| Metric | Type | Labels |
-| --- | --- | --- |
-| `gardening_journal_plants` | Gauge | `status` |
-| `gardening_attention_urgency_ratio` | Gauge | `plant` |
-| `gardening_attention_watering_cadence_seconds` | Gauge | `plant` |
-| `gardening_journal_operations_total` | Counter | `action` |
-| `gardening_journal_moisture_readings_total` | Counter | `level` |
-| `gardening_journal_repots_total` | Counter | `plant` |
+| Metric                                              | Type    | Labels      |
+| --------------------------------------------------- | ------- | ----------- |
+| `gardening_journal_plants`                          | Gauge   | `status`    |
+| `gardening_attention_urgency_ratio`                 | Gauge   | `plant`     |
+| `gardening_attention_watering_cadence_seconds`      | Gauge   | `plant`     |
+| `gardening_journal_operations_total`                | Counter | `action`    |
+| `gardening_journal_moisture_readings_total`         | Counter | `level`     |
+| `gardening_journal_repots_total`                    | Counter | `plant`     |
 | `gardening_journal_substrate_component_usage_total` | Counter | `component` |
-| `gardening_journal_pesticide_applications_total` | Counter | `pesticide` |
+| `gardening_journal_pesticide_applications_total`    | Counter | `pesticide` |
 
 `gardening_journal_plant_info`, `gardening_journal_substrate_component_info`, and `gardening_journal_pesticide_info` (Gauge, always `1`, labeled `<entity>` + `name`) each join a display name onto the id-labeled series above. Every one is rebuilt wholesale from the latest catalog read, not incremented per rename — a Grafana `group_left` join always sees the current name for an id, whereas a `{id, name}` counter/gauge would accumulate one ambiguous stale series per past name.
 
 **Connections and storage:**
 
-| Metric | Type |
-| --- | --- |
+| Metric                                 | Type  |
+| -------------------------------------- | ----- |
 | `gardening_attention_feed_connections` | Gauge |
-| `gardening_storage_db_bytes` | Gauge |
-| `gardening_storage_photos_bytes` | Gauge |
+| `gardening_storage_db_bytes`           | Gauge |
+| `gardening_storage_photos_bytes`       | Gauge |
 
 - `gardening_attention_feed_connections` is heartbeat/TTL-based (`ConnectionHeartbeats`), not incremented on open and decremented on close, so a missed close can't leak it: it's recomputed as "connections heartbeated within the last 5s" on every scrape, so a missed event self-corrects on the next heartbeat instead of leaking forever. This is also the only reliable way to track the attention feed's concurrency — see below.
 - The two storage gauges walk `GARDENING_DB_PATH`'s file and `GARDENING_PHOTOS_DIR`'s tree fresh on every scrape; neither is cached or incremented.
@@ -64,7 +64,7 @@ The single-household service serializes journal mutations in one process. Openin
 
 Single Docker container on the household NAS (Unraid) — no orchestration, no replicas — installed from the committed [Unraid template](../unraid/plant-journal.xml).
 
-- **Image** — private `ghcr.io/cosminci/plant-journal`; restarts unless stopped; `json-file` logs capped at 10MB × 5 files.
+- **Image** — public `ghcr.io/cosminci/plant-journal`; restarts unless stopped; `json-file` logs capped at 10MB × 5 files.
 - **Network** — the configured WebUI port maps to the container's `8080`; LAN and Tailscale only, never the public router (see [Exposure](../CONTRIBUTING.md#working-in-the-repo)).
 - **Data** — the SQLite journal lives under the bind-mounted `/data` (default `/mnt/user/appdata/plant-journal`), owned by UID/GID `1000:1000` and included in Unraid's periodic Appdata Backup.
 
