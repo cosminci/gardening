@@ -27,12 +27,11 @@ object PlantApi:
   private val unknownComponent    = ApiError("unknown substrate component")
   private val catalogReadFailed   = ApiError("substrate catalog could not be read")
   private val plantCreationFailed = ApiError("plant could not be created")
-  private val plantCreationErrors =
-    oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.UnprocessableEntity, jsonBody[ApiError])(unknownComponent),
-      oneOfVariantExactMatcher(StatusCode.ServiceUnavailable, jsonBody[ApiError])(catalogReadFailed),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
+  private val plantCreationErrors = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.UnprocessableEntity, jsonBody[ApiError])(unknownComponent),
+    oneOfVariantExactMatcher(StatusCode.ServiceUnavailable, jsonBody[ApiError])(catalogReadFailed),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
   private val plantMissing              = ApiError("plant not found")
   private val plantArchived             = ApiError("plant already archived")
   private val unsupportedPlantPatch     = "unsupported plant patch"

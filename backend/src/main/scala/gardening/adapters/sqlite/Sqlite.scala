@@ -18,8 +18,7 @@ final class SqliteConnection(
     maybeKeepAlive: Option[Connection]
 ) extends AutoCloseable:
 
-  override def close(): Unit =
-    maybeKeepAlive.foreach(_.close())
+  override def close(): Unit = maybeKeepAlive.foreach(_.close())
 
 trait Sqlite:
   def connect(location: SqliteLocation): SqliteConnection

@@ -28,87 +28,70 @@ object SubstrateApi:
   private val componentArchived    = ApiError("substrate component is archived")
   private val alreadyArchived      = ApiError("substrate component is already archived")
   private val archiveFailed        = ApiError("substrate component could not be archived")
-  private val componentEditErrors  =
-    oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
-      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
-      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(componentArchived),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
-  private val componentArchiveErrors =
-    oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
-      oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
-      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(alreadyArchived),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
+  private val componentEditErrors  = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(componentArchived),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
+  private val componentArchiveErrors = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidComponentId),
+    oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(componentMissing),
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(alreadyArchived),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
 
   private val mixesReadFailed    = ApiError("substrate mixes could not be read")
   private val mixWriteFailed     = ApiError("substrate mix could not be saved")
   private val duplicateSubstrate = ApiError("a substrate mix with these components already exists")
   private val invalidMixId       = ApiError("invalid substrate mix id")
   private val mixDeleteFailed    = ApiError("substrate mix could not be deleted")
-  private val addMixErrors       =
-    oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(duplicateSubstrate),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
-  private val deleteMixErrors =
-    oneOf[ApiError](
-      oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidMixId),
-      oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
-    )
+  private val addMixErrors       = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.Conflict, jsonBody[ApiError])(duplicateSubstrate),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
+  private val deleteMixErrors = oneOf[ApiError](
+    oneOfVariantExactMatcher(StatusCode.BadRequest, jsonBody[ApiError])(invalidMixId),
+    oneOfDefaultVariant(statusCode(StatusCode.InternalServerError).and(jsonBody[ApiError]))
+  )
 
-  private val catalogEndpoint       = endpoint.errorOut(ApiError.generic)
-  private val getComponentsEndpoint =
-    catalogEndpoint.get.in("substrates" / "components").out(jsonBody[Vector[SubstrateComponent]]).summary("List substrate components")
-  private val addComponentEndpoint =
-    catalogEndpoint.post.in("substrates" / "components").in(jsonBody[SubstrateComponentData])
-      .out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateComponent]).summary("Add a substrate component")
-  private val editComponentEndpoint =
-    endpoint.put.in("substrates" / "components" / path[String]("componentId")).in(jsonBody[SubstrateComponentData])
-      .errorOut(componentEditErrors).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
-  private val archiveComponentEndpoint = endpoint.post.in("substrates" / "components" / path[String]("componentId") / "archive")
+  private val catalogEndpoint = endpoint.errorOut(ApiError.generic)
+  private val getCompEndpoint = catalogEndpoint.get.in("substrates" / "components")
+    .out(jsonBody[Vector[SubstrateComponent]]).summary("List substrate components")
+  private val addCompEndpoint = catalogEndpoint.post.in("substrates" / "components").in(jsonBody[SubstrateComponentData])
+    .out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateComponent]).summary("Add a substrate component")
+  private val editCompEndpoint = endpoint.put.in("substrates" / "components" / path[String]("componentId")).in(jsonBody[SubstrateComponentData])
+    .errorOut(componentEditErrors).out(jsonBody[SubstrateComponent]).summary("Edit a substrate component")
+  private val archiveCompEndpoint = endpoint.post.in("substrates" / "components" / path[String]("componentId") / "archive")
     .errorOut(componentArchiveErrors).out(jsonBody[SubstrateComponent]).summary("Archive a substrate component")
 
-  private val getMixesEndpoint =
-    catalogEndpoint.get.in("substrates" / "mixes").out(jsonBody[Vector[SubstrateMix]]).summary("List substrate mixes")
-  private val addMixEndpoint =
-    endpoint.post.in("substrates" / "mixes").in(jsonBody[SubstrateMixData])
-      .errorOut(addMixErrors).out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateMix]).summary("Save a substrate mix")
-  private val deleteMixEndpoint =
-    endpoint.delete.in("substrates" / "mixes" / path[String]("mixId"))
-      .errorOut(deleteMixErrors).out(statusCode(StatusCode.NoContent)).summary("Delete a substrate mix")
+  private val getMixesEndpoint = catalogEndpoint.get.in("substrates" / "mixes").out(jsonBody[Vector[SubstrateMix]]).summary("List substrate mixes")
+  private val addMixEndpoint   = endpoint.post.in("substrates" / "mixes").in(jsonBody[SubstrateMixData])
+    .errorOut(addMixErrors).out(statusCode(StatusCode.Created)).out(jsonBody[SubstrateMix]).summary("Save a substrate mix")
+  private val deleteMixEndpoint = endpoint.delete.in("substrates" / "mixes" / path[String]("mixId"))
+    .errorOut(deleteMixErrors).out(statusCode(StatusCode.NoContent)).summary("Delete a substrate mix")
 
   private[http] val publicEndpoints: List[AnyEndpoint] =
-    List(
-      getComponentsEndpoint,
-      addComponentEndpoint,
-      editComponentEndpoint,
-      archiveComponentEndpoint,
-      getMixesEndpoint,
-      addMixEndpoint,
-      deleteMixEndpoint
-    )
+    List(getCompEndpoint, addCompEndpoint, editCompEndpoint, archiveCompEndpoint, getMixesEndpoint, addMixEndpoint, deleteMixEndpoint)
 
   def serverEndpoints(using catalog: SubstrateCatalog): List[ServerEndpoint[Any, Identity]] =
     List(
-      getComponentsEndpoint.handle: _ =>
+      getCompEndpoint.handle: _ =>
         catalog.getSubstrateComponents match
           case GetSubstrateComponentsResult.Read(components) => components.asRight
           case GetSubstrateComponentsResult.ReadFailed(_)    => (StatusCode.InternalServerError, componentsReadFailed).asLeft,
-      addComponentEndpoint.handle: data =>
+      addCompEndpoint.handle: data =>
         catalog.addSubstrateComponent(data) match
           case AddSubstrateComponentResult.Added(component) => component.asRight
           case AddSubstrateComponentResult.AddFailed(_)     => (StatusCode.InternalServerError, componentWriteFailed).asLeft,
-      editComponentEndpoint.handle: (encodedId, data) =>
+      editCompEndpoint.handle: (encodedId, data) =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
             case SubstrateComponentUpdateResult.Updated(component) => component.asRight
             case SubstrateComponentUpdateResult.ComponentMissing   => componentMissing.asLeft
             case SubstrateComponentUpdateResult.ComponentArchived  => componentArchived.asLeft
             case SubstrateComponentUpdateResult.UpdateFailed(_)    => componentWriteFailed.asLeft,
-      archiveComponentEndpoint.handle: encodedId =>
+      archiveCompEndpoint.handle: encodedId =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.archiveSubstrateComponent(id) match
             case SubstrateComponentUpdateResult.Updated(component) => component.asRight

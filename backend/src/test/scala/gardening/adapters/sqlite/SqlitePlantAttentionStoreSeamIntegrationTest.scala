@@ -60,7 +60,7 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
         PlantAttentionSample(secondPlantId, secondWateringHistory),
         PlantAttentionSample(PlantId("no-waterings"), emptyWateringHistory)
       )
-      assertEquals(logged, operations.map(operation => LogOperationResult.Logged(operation.id)))
+      assertEquals(logged, operations.map(operation => AddOperationResult.Logged(operation.id)))
       assertEquals(archived, UpdatePlantResult.Updated)
       assertEquals(actual, GetAttentionSamplesResult.Read(expectedSamples))
 
@@ -71,7 +71,7 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
       val operationStore = resource.operationStore
       seedPlant(dataSource, id = "p1")
       val watering = Operation(OperationId("watering"), PlantId("p1"), date, care)
-      assertEquals(operationStore.addOperation(watering), LogOperationResult.Logged(watering.id))
+      assertEquals(operationStore.addOperation(watering), AddOperationResult.Logged(watering.id))
       execute(dataSource, "update operation set date = 'today' where id = ?", watering.id.value)
 
       plantStore.getAttentionSamples(size = 20) match

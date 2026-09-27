@@ -122,7 +122,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       val activePlants  = plantStore.getPlants(PlantStatus.Active)
 
       val expectedHistory = GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false))
-      assertEquals(firstLog, LogOperationResult.Logged(operation.id))
+      assertEquals(firstLog, AddOperationResult.Logged(operation.id))
       assertEquals(archived, UpdatePlantResult.Updated)
       missing match
         case UpdatePlantResult.UpdateFailed(_) => ()

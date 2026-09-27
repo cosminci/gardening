@@ -16,11 +16,7 @@ private[sqlite] object Codecs:
   )
 
   given Codec[Percentage] = Codec.from(
-    Decoder.decodeInt.emap(value =>
-      value
-        .refineOption[Interval.Closed[1, 100]]
-        .toRight(s"invalid share: $value")
-    ),
+    Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value")),
     Encoder.encodeInt.contramap(value => value: Int)
   )
 
