@@ -2,8 +2,8 @@ package gardening.adapters.http
 
 import cats.syntax.either.*
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.pesticide.{PesticideCatalog, PesticideUpdateResult}
+import gardening.domain.pesticide.{AddPesticideResult, GetPesticidesResult, PesticideUpdateResult}
+import gardening.usecases.PesticideCatalog
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import sttp.model.StatusCode
@@ -52,12 +52,12 @@ object PesticideApi:
     List(
       getPesticidesEndpoint.handle: _ =>
         catalog.getPesticides match
-          case CatalogReadResult.Read(pesticides) => pesticides.asRight
-          case CatalogReadResult.ReadFailed(_)    => (StatusCode.InternalServerError, readFailed).asLeft,
+          case GetPesticidesResult.Read(pesticides) => pesticides.asRight
+          case GetPesticidesResult.ReadFailed(_)    => (StatusCode.InternalServerError, readFailed).asLeft,
       addPesticideEndpoint.handle: data =>
         catalog.addPesticide(data) match
-          case CatalogAddResult.Added(pesticide) => pesticide.asRight
-          case CatalogAddResult.AddFailed(_)     => (StatusCode.InternalServerError, writeFailed).asLeft,
+          case AddPesticideResult.Added(pesticide) => pesticide.asRight
+          case AddPesticideResult.AddFailed(_)     => (StatusCode.InternalServerError, writeFailed).asLeft,
       editPesticideEndpoint.handle: (encodedId, data) =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editPesticide(id, data) match

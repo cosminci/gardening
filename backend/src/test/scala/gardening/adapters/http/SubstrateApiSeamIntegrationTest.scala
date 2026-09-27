@@ -3,8 +3,8 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import io.github.iltotore.iron.autoRefine
 import gardening.domain.*
-import gardening.domain.catalog.*
-import gardening.domain.substrate.{AddSubstrateMixResult, SubstrateCatalog, SubstrateComponentUpdateResult}
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SubstrateComponentUpdateResult}
+import gardening.usecases.{AddSubstrateMixResult, SubstrateCatalog}
 import io.circe.parser.parse
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{Response, SttpBackend, basicRequest}
@@ -94,8 +94,8 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
   test("should hide substrate component catalog storage failures"):
     val failure = RuntimeException("private details")
     val server  = buildServer(
-      readResult = CatalogReadResult.ReadFailed(failure),
-      addResult = CatalogAddResult.AddFailed(failure),
+      readResult = GetSubstrateComponentsResult.ReadFailed(failure),
+      addResult = AddSubstrateComponentResult.AddFailed(failure),
       editResult = SubstrateComponentUpdateResult.UpdateFailed(failure),
       archiveResult = SubstrateComponentUpdateResult.UpdateFailed(failure)
     )
@@ -147,9 +147,9 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
   test("should hide substrate mix catalog storage failures"):
     val failure = RuntimeException("private details")
     val server  = buildServer(
-      mixReadResult = CatalogReadResult.ReadFailed(failure),
+      mixReadResult = GetSubstrateMixesResult.ReadFailed(failure),
       mixAddResult = AddSubstrateMixResult.AddFailed(failure),
-      mixDeleteResult = CatalogDeleteResult.DeleteFailed(failure)
+      mixDeleteResult = DeleteSubstrateMixResult.DeleteFailed(failure)
     )
 
     val listed  = get("/substrates/mixes", server)
@@ -169,26 +169,26 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
 
   private def buildServer(
       refs: Refs = Refs(),
-      readResult: CatalogReadResult[SubstrateComponent] = CatalogReadResult.Read(Vector(component)),
-      addResult: CatalogAddResult[SubstrateComponent] = CatalogAddResult.Added(component),
+      readResult: GetSubstrateComponentsResult = GetSubstrateComponentsResult.Read(Vector(component)),
+      addResult: AddSubstrateComponentResult = AddSubstrateComponentResult.Added(component),
       editResult: SubstrateComponentUpdateResult = SubstrateComponentUpdateResult.ComponentMissing,
       archiveResult: SubstrateComponentUpdateResult = SubstrateComponentUpdateResult.ComponentMissing,
-      mixReadResult: CatalogReadResult[SubstrateMix] = CatalogReadResult.Read(Vector(mix)),
+      mixReadResult: GetSubstrateMixesResult = GetSubstrateMixesResult.Read(Vector(mix)),
       mixAddResult: AddSubstrateMixResult = AddSubstrateMixResult.Added(mix),
-      mixDeleteResult: CatalogDeleteResult = CatalogDeleteResult.Deleted
+      mixDeleteResult: DeleteSubstrateMixResult = DeleteSubstrateMixResult.Deleted
   ) =
     val catalog = new SubstrateCatalog:
-      override def getSubstrateComponents: CatalogReadResult[SubstrateComponent]                             = readResult
-      override def addSubstrateComponent(data: SubstrateComponentData): CatalogAddResult[SubstrateComponent] =
+      override def getSubstrateComponents: GetSubstrateComponentsResult                             = readResult
+      override def addSubstrateComponent(data: SubstrateComponentData): AddSubstrateComponentResult =
         refs.addedComponents.updateAndGet(_ :+ data).pipe(_ => addResult)
       override def editSubstrateComponent(id: SubstrateComponentId, data: SubstrateComponentData): SubstrateComponentUpdateResult =
         refs.editedComponents.updateAndGet(_ :+ (id -> data)).pipe(_ => editResult)
       override def archiveSubstrateComponent(id: SubstrateComponentId): SubstrateComponentUpdateResult =
         refs.archivedComponents.updateAndGet(_ :+ id).pipe(_ => archiveResult)
-      override def getSubstrateMixes: CatalogReadResult[SubstrateMix] = mixReadResult
-      override def addSubstrateMix(name: SubstrateMixName, notes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
+      override def getSubstrateMixes: GetSubstrateMixesResult = mixReadResult
+      override def addSubstrateMix(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate): AddSubstrateMixResult =
         mixAddResult
-      override def deleteSubstrateMix(id: UUID): CatalogDeleteResult =
+      override def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult =
         refs.deletedMixes.updateAndGet(_ :+ id).pipe(_ => mixDeleteResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
       .whenServerEndpointsRunLogic(SubstrateApi.serverEndpoints(using catalog))

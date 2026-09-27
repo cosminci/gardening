@@ -1,7 +1,7 @@
 package gardening.adapters.prometheus
 
 import gardening.domain.PesticideId
-import gardening.domain.pesticide.PesticideCatalogMetricsApi
+import gardening.ports.PesticideCatalogMetricsApi
 import io.prometheus.metrics.core.metrics.GaugeWithCallback
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 

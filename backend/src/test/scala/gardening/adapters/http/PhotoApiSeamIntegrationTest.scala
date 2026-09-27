@@ -2,6 +2,7 @@ package gardening.adapters.http
 
 import gardening.domain.*
 import gardening.domain.plants.*
+import gardening.usecases.PlantManager
 import gardening.domain.plants.PhotoMediaType.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
@@ -163,8 +164,8 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       removePhotoResult: RemovePhotoResult,
       getPhotosResult: GetPhotosResult,
       getContentResult: PhotoReadResult
-  ): Plants =
-    new Plants:
+  ): PlantManager =
+    new PlantManager:
       override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
         fail("photo HTTP must not create plants")
       override def getPlants(status: PlantStatus): GetPlantsResult                                  = fail("photo HTTP must not read plants")

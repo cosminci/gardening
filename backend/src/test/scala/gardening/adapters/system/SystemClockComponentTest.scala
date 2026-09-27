@@ -1,6 +1,6 @@
 package gardening.adapters.system
 
-import gardening.domain.Clock
+import gardening.capabilities.Clock
 
 class SystemClockComponentTest extends munit.FunSuite:
 

@@ -2,10 +2,10 @@ package gardening.app
 
 import cats.syntax.either.*
 import gardening.adapters.http.*
-import gardening.adapters.persistence.SqliteLocation
+import gardening.adapters.sqlite.SqliteLocation
 import gardening.adapters.prometheus.{PrometheusAttentionFeedMetrics, PrometheusStorageMetrics}
 import gardening.adapters.system.SystemClock
-import gardening.domain.Logger
+import gardening.capabilities.Logger
 import io.prometheus.metrics.instrumentation.jvm.JvmMetrics
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 import org.flywaydb.core.Flyway
@@ -18,6 +18,7 @@ import sttp.tapir.server.netty.sync.{NettySyncServer, NettySyncServerOptions}
 import java.nio.file.Paths
 import scala.concurrent.duration.*
 import scala.util.Using
+import scala.util.chaining.scalaUtilChainingOps
 
 object Main:
 
@@ -34,21 +35,9 @@ object Main:
       def info(message: String): Unit  = underlying.info(message)
       def error(message: String): Unit = underlying.error(message)
 
-    val registry = new PrometheusRegistry
-    JvmMetrics.builder().register(registry)
-    // `.default` also registers `request_active`: tapir increments that gauge for every request in
-    // its top-level interceptor, before `ignoreEndpoints` is even checked, but only decrements it via
-    // completion hooks that `ignoreEndpoints` skips — so any excluded endpoint (the feed, and tapir's
-    // own metrics endpoint below) leaks it permanently. Verified live: a closed feed connection and a
-    // /metrics scrape each leave a permanent +1. `gardening_attention_feed_connections` is the gauge
-    // that actually tracks feed concurrency, so request_active isn't registered at all.
-    val prometheusMetrics =
-      PrometheusMetrics[Identity](namespace = "gardening", registry = registry).addRequestsTotal().addRequestsDuration()
-    val serverOptions =
-      NettySyncServerOptions.customiseInterceptors.metricsInterceptor(
-        prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
-      ).options
-    val feedHeartbeats = ConnectionHeartbeats.make(staleness = 5.seconds)(using SystemClock)
+    val registry          = (new PrometheusRegistry).tap(JvmMetrics.builder().register(_))
+    val prometheusMetrics = PrometheusMetrics[Identity](namespace = "gardening", registry = registry).addRequestsTotal().addRequestsDuration()
+    val feedHeartbeats    = ConnectionHeartbeats.make(staleness = 5.seconds)(using SystemClock)
     PrometheusAttentionFeedMetrics.register(registry, feedHeartbeats)
     PrometheusStorageMetrics.register(registry, Paths.get(dbPath), photosDir)
 
@@ -56,24 +45,19 @@ object Main:
       supervisedError(EitherMode[Throwable]()):
         val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
         Programs.make(resources, photosDir, registry).flatMap: programs =>
-          val endpoints = aggregateEndpoints(programs, version, staticDir, prometheusMetrics, feedHeartbeats)
-          log.info(s"gardening backend ready host=$host port=$port version=$version")
+          val endpoints = List(HealthApi.serverEndpoint(version), prometheusMetrics.metricsEndpoint) ++
+            PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
+            AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
+            OperationApi.serverEndpoints(using programs.operations) ++
+            SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
+            PhotoApi.serverEndpoints(using programs.plants) ++
+            PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
+            StaticSite.endpoint(staticDir)
+
+          val metricsInterceptor = prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
+          val serverOptions      = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(metricsInterceptor).options
+          log.info(s"gardening backend starting on host=$host port=$port version=$version")
           NettySyncServer(serverOptions).host(host).port(port).addEndpoints(endpoints).startAndWait().asRight
+
     outcome.left.foreach(log.error("startup", _))
     if outcome.isLeft then sys.exit(1)
-
-  private def aggregateEndpoints(
-      programs: Programs,
-      version: String,
-      staticDir: String,
-      prometheusMetrics: PrometheusMetrics[Identity],
-      feedHeartbeats: ConnectionHeartbeats
-  ) =
-    List(HealthApi.serverEndpoint(version), prometheusMetrics.metricsEndpoint) ++
-      PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
-      AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
-      OperationApi.serverEndpoints(using programs.operations) ++
-      SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
-      PhotoApi.serverEndpoints(using programs.plants) ++
-      PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
-      StaticSite.endpoint(staticDir)

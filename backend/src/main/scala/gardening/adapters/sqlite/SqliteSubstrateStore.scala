@@ -1,0 +1,113 @@
+package gardening.adapters.sqlite
+
+import cats.syntax.either.*
+import cats.syntax.traverse.*
+import com.augustnagro.magnum.*
+import gardening.domain.*
+import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
+import gardening.ports.SubstrateStore
+import io.circe.parser.decode
+import io.circe.syntax.*
+import io.circe.{Decoder, Encoder}
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.Interval
+
+import java.util.UUID
+import scala.util.Try
+
+object SqliteSubstrateStore:
+
+  def make(transactor: Transactor): SubstrateStore = LiveSqliteSubstrateStore(transactor)
+
+  private class LiveSqliteSubstrateStore(transactor: Transactor) extends SubstrateStore:
+
+    override def getSubstrateComponents: GetSubstrateComponentsResult =
+      try
+        val query      = sql"select id, name, info, status from substrate_component order by rowid"
+        val components = trust(connect(transactor)(query.query[ComponentRow].run()).traverse(toComponent))
+        GetSubstrateComponentsResult.Read(components)
+      catch case error: SqlException => GetSubstrateComponentsResult.ReadFailed(error)
+
+    override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
+      try
+        connect(transactor)(selectComponent(id.value.toString).query[ComponentRow].run().headOption) match
+          case None      => GetSubstrateComponentResult.RecordMissing
+          case Some(row) => GetSubstrateComponentResult.Read(trust(toComponent(row)))
+      catch case error: SqlException => GetSubstrateComponentResult.ReadFailed(error)
+
+    override def addSubstrateComponent(component: SubstrateComponent): AddSubstrateComponentResult =
+      try
+        val info = component.data.maybeInfo.map(_.value)
+        val row  = ComponentRow(component.id.value.toString, component.data.name.value, info, component.status.toString)
+        transact(transactor):
+          sql"insert into substrate_component (id, name, info, status) values (${row.id}, ${row.name}, ${row.info}, ${row.status})".update.run()
+        AddSubstrateComponentResult.Added(component)
+      catch case error: SqlException => AddSubstrateComponentResult.AddFailed(error)
+
+    override def updateSubstrateComponent(component: SubstrateComponent): UpdateSubstrateComponentResult =
+      try
+        transact(transactor)(updateComponentRow(component).update.run()) match
+          case 1 => UpdateSubstrateComponentResult.Updated
+          case _ =>
+            UpdateSubstrateComponentResult.UpdateFailed(RuntimeException(s"substrate component not found while updating: ${component.id.value}"))
+      catch case error: SqlException => UpdateSubstrateComponentResult.UpdateFailed(error)
+
+    private def selectComponent(id: String) =
+      sql"select id, name, info, status from substrate_component where id = $id"
+
+    private def updateComponentRow(component: SubstrateComponent) =
+      val data = component.data
+      sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)},
+           status = ${component.status.toString} where id = ${component.id.value.toString}"""
+
+    private def toComponent(row: ComponentRow) =
+      for
+        id <- SubstrateComponentId.parse(row.id).toRight(RuntimeException(s"invalid substrate component id: ${row.id}"))
+        status = trust(Try(SubstrateComponentStatus.valueOf(row.status)).toEither)
+      yield SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(row.name), row.info.map(SubstrateComponentInfo.apply)), status)
+
+    override def getSubstrateMixes: GetSubstrateMixesResult =
+      try
+        val query = sql"select id, name, notes, substrate from substrate_mix order by rowid"
+        val mixes = trust(connect(transactor)(query.query[MixRow].run()).traverse(toMix))
+        GetSubstrateMixesResult.Read(mixes)
+      catch case error: SqlException => GetSubstrateMixesResult.ReadFailed(error)
+
+    override def saveSubstrateMix(mix: SubstrateMix): SaveSubstrateMixResult =
+      try
+        val row = MixRow(mix.id.toString, mix.name.value, mix.maybeNotes.map(_.value), mix.substrate.asJson.noSpaces)
+        transact(transactor):
+          sql"insert into substrate_mix (id, name, notes, substrate) values (${row.id}, ${row.name}, ${row.notes}, ${row.substrate})".update.run()
+        SaveSubstrateMixResult.Saved(mix)
+      catch case error: SqlException => SaveSubstrateMixResult.SaveFailed(error)
+
+    override def deleteSubstrateMix(id: UUID): DeleteSubstrateMixResult =
+      try
+        transact(transactor)(sql"delete from substrate_mix where id = ${id.toString}".update.run())
+        DeleteSubstrateMixResult.Deleted
+      catch case error: SqlException => DeleteSubstrateMixResult.DeleteFailed(error)
+
+    private def toMix(row: MixRow) =
+      for
+        id        <- Try(UUID.fromString(row.id)).toEither.leftMap(_ => RuntimeException(s"invalid substrate mix id: ${row.id}"))
+        substrate <- decode[Substrate](row.substrate).leftMap(invalidSubstrate)
+      yield SubstrateMix(id, SubstrateMixName(row.name), row.notes.map(SubstrateMixNotes.apply), substrate)
+
+    private def invalidSubstrate(reason: io.circe.Error) =
+      RuntimeException(s"invalid stored substrate mix substrate: ${reason.getMessage}", reason)
+
+    private given Decoder[SubstrateComponentId] =
+      Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value"))
+    private given Encoder[SubstrateComponentId] = Encoder.encodeString.contramap(_.value.toString)
+
+    private given Decoder[Percentage] = Decoder.decodeInt.emap(value => value.refineOption[Interval.Closed[1, 100]].toRight(s"invalid share: $value"))
+    private given Encoder[Percentage] = Encoder.encodeInt.contramap(value => value: Int)
+
+    private given Decoder[SubstratePart] = Decoder.forProduct2("component", "share")(SubstratePart.apply)
+    private given Encoder[SubstratePart] = Encoder.forProduct2("component", "share")(part => (part.componentId, part.share))
+
+    private given Decoder[Substrate] = Decoder.decodeList[SubstratePart].emap(parts => Substrate.of(parts).leftMap(_.toString))
+    private given Encoder[Substrate] = Encoder.encodeList[SubstratePart].contramap(_.parts)
+
+  private case class ComponentRow(id: String, name: String, info: Option[String], status: String) derives DbCodec
+  private case class MixRow(id: String, name: String, notes: Option[String], substrate: String) derives DbCodec

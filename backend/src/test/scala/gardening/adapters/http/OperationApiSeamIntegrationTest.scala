@@ -3,6 +3,7 @@ package gardening.adapters.http
 import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.operations.*
+import gardening.usecases.OperationLedger
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import sttp.client3.testing.SttpBackendStub
@@ -229,7 +230,7 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
       editOperationResult: EditOperationResult = EditOperationResult.OperationMissing,
       deleteOperationResult: DeleteOperationResult = DeleteOperationResult.OperationMissing
   ) =
-    val operations = new Operations:
+    val operations = new OperationLedger:
       override def getOperations(plant: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedWindows.updateAndGet(_ :+ window)
         getOperationsResult

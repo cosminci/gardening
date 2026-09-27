@@ -1,7 +1,7 @@
 package gardening.adapters.prometheus
 
 import gardening.domain.SubstrateComponentId
-import gardening.domain.substrate.SubstrateCatalogMetricsApi
+import gardening.ports.SubstrateCatalogMetricsApi
 import io.prometheus.metrics.core.metrics.GaugeWithCallback
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 

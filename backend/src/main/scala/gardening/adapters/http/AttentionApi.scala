@@ -2,6 +2,7 @@ package gardening.adapters.http
 
 import gardening.domain.PlantId
 import gardening.domain.attention.*
+import gardening.usecases.PlantAttentionMonitor
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*

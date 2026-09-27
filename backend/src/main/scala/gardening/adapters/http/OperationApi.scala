@@ -3,6 +3,7 @@ package gardening.adapters.http
 import cats.syntax.either.*
 import gardening.domain.*
 import gardening.domain.operations.*
+import gardening.usecases.OperationLedger
 import io.circe.derivation.{ConfiguredCodec, ConfiguredEnumCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
@@ -76,7 +77,7 @@ object OperationApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(getOperationsEndpoint, getOperationDateRangeEndpoint, logOperationEndpoint, editOperationEndpoint, deleteOperationEndpoint)
 
-  def serverEndpoints(using operations: Operations): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using operations: OperationLedger): List[ServerEndpoint[Any, Identity]] =
     List(
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         operations.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
