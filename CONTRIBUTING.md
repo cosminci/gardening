@@ -10,7 +10,7 @@ How the code is designed — Ports & Adapters, DDD, Fractal Design, ACLs, Indire
 
 **Setup.** Install the pinned toolchain (Java 25, Scala 3.8, Node LTS) with [mise](https://mise.jdx.dev): `mise install`. Docker is required for the Dagger pipeline and the image build. The commands below assume mise is shell-activated; otherwise prefix them with `mise exec --`.
 
-**Exposure.** Runs on the home NAS, reachable over LAN and Tailscale only, with no application authentication; no secrets are committed.
+**Exposure.** See [SECURITY.md](SECURITY.md) for the network and authentication posture; no secrets are committed.
 
 ### Local development
 
@@ -96,7 +96,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 ## Logging
 
-- Only use-case services log; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract.
+- Use-case services log business outcomes; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract. The composition root (`app/Main`) logs its own startup and top-level failure — that's bookkeeping, not a business outcome.
 - `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
 - Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
 - Every line is a single line — never a raw stack trace.
@@ -123,7 +123,7 @@ Its five phases are **classify → spec → tests → implement → sync & archi
 ## Branching & commits
 
 - One branch per change: `feature/<slug>` or `investigation/<slug>` (e.g. `feature/add-plant`).
-- Commit subjects are imperative and ≤72 characters, with no ticket prefix (this repo has no tracker). The body explains _why_ when the diff does not.
+- Commit subjects are imperative and ≤72 characters, with no ticket prefix — commits don't reference issue numbers. The body explains _why_ when the diff does not.
 
 ## Pull requests
 
