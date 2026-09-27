@@ -2,13 +2,20 @@
 
 How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise. They are adapted from the UPS RO Application Design Guidelines (Ports & Adapters, DDD, Fractal Design, Anti-Corruption Layers, Indirection Layers, Strict Build Guardrails), which are language-agnostic; this document grounds them in the choices this repo actually makes.
 
-The aims are constant: keep cognitive load low and even across the codebase, make the code cheap to extend and to change intentionally, keep long-term maintenance and dependency health under control, and favour reuse and modularity. The one thing we do **not** chase is gold-plating — polishing an implementation past the point where the business or the team benefits.
+The aims:
+
+- Low, even cognitive load across the codebase.
+- Cheap to extend, and cheap to change on purpose.
+- Maintenance and dependencies that stay healthy over the long run.
+- Reuse and modularity, favoured over one-off solutions.
+
+What we don't chase: gold-plating — polish past the point where it benefits the business or the team.
 
 ## 1. Ports & Adapters
 
-The core is isolated from the outside world. Business logic lives in `domain` (pure values, rules, and use-case services). Every external dependency is named by a **port** — a capability `trait` in `capabilities/`, expressed in domain terms, not in a vendor's terms. Concrete **adapters** implement those ports and live apart, under `adapters/` (`http`, `persistence`, `system`). The composition root in `app/` is the only place that binds an adapter to a port, injecting it with `using`.
+The core is isolated from the outside world. Pure types live in `domain`; the orchestration services that use them live in `usecases`. A business-external dependency is named by a **port** — a `trait` in `ports/`, expressed in domain terms, not a vendor's — while generic infrastructure any service could need regardless of business logic (time, identity, logging, mutual exclusion) is a **capability** in `capabilities/`; whether something happens to have a swappable adapter isn't the test. Concrete **adapters** implement ports and capabilities and live apart, under `adapters/` (one subpackage per external dependency, e.g. `http`, `sqlite`). The composition root in `app/` is the only place that binds an adapter to a port or capability, injecting it with `using`.
 
-Because the core depends only on ports, it is exhaustively unit-tested by substituting them. Adapters are proven at their seam — the persistence adapter against a real in-memory SQLite, the HTTP adapter against the served contract — never by mocking the thing they exist to talk to.
+Because the core depends only on ports and capabilities, it is exhaustively unit-tested by substituting them. Adapters are proven at their seam — the SQLite adapter against a real in-memory database, the HTTP adapter against the served contract — never by mocking the thing they exist to talk to.
 
 ## 2. Domain-Driven Design (a pragmatic subset)
 
@@ -53,6 +60,7 @@ The build is deliberately strict, and staying inside the lines is what makes hig
 - **Static analysis with zero tolerance.** scalafix `DisableSyntax` and WartRemover fail the build on any finding; ESLint, Prettier, and dependency-cruiser do the same on the frontend. Start at zero warnings and stay there.
 - **A strict compiler.** `-Werror`, `-Wunused:all`, `-Wvalue-discard`, and a pinned Java output version turn whole classes of mistake into compile errors.
 - **Healthy dependencies.** The toolchain and libraries are pinned (mise, `build.sbt`, `package.json`) and kept current, so CVEs and deprecations are paid down continuously rather than in a late, expensive migration.
+- **Dependency direction is mechanised, not reviewed.** `ArchitectureTest` (ArchUnit) fails the build if `domain` or `capabilities` gains an outgoing dependency, `ports` depends on anything but `domain`, `usecases` reaches into `adapters`/`app`, or an adapter depends on another adapter — the five-package boundary in §1 holds by construction, not by review discipline.
 
 ### Conventions the guardrails don't (or can't) mechanise
 

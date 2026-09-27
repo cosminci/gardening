@@ -1,6 +1,6 @@
 package gardening.adapters.http
 
-import gardening.capabilities.Clock
+import gardening.capabilities.{Clock, LiveConnectionsGauge}
 import ox.discard
 
 import java.time.{Duration as JavaDuration, Instant}
@@ -8,9 +8,8 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.FiniteDuration
 
-trait ConnectionHeartbeats:
+trait ConnectionHeartbeats extends LiveConnectionsGauge:
   def touch(connection: UUID): Unit
-  def liveCount: Int
 
 object ConnectionHeartbeats:
 

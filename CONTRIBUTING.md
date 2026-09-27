@@ -41,11 +41,11 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 | Task | Command |
 | --- | --- |
-| Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
+| Backend gate | `dagger call backend-check` |
 | Run the backend | `cd backend && sbt run` |
-| Frontend gate | `cd frontend && npm run verify` |
+| Frontend gate | `dagger call frontend-check` |
 | Frontend dev server | `cd frontend && npm run dev` |
-| Pipeline gate | `cd .dagger && npm run verify` |
+| Pipeline gate | `dagger call pipeline-check` |
 | Regenerate the contract | `cd backend && sbt "runMain gardening.app.GenerateOpenApi ../contract/openapi.yaml" && cd ../contract && npm run generate` |
 | Affected checks (local / pre-push) | `dagger call verify` |
 | All checks | `dagger call verify --all` |
@@ -53,7 +53,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 | Path | What |
 | --- | --- |
-| `backend/` | Scala 3 service — `domain`, `capabilities` (ports), `adapters`, `app`. |
+| `backend/` | Scala 3 service — `domain`, `usecases`, `ports`, `capabilities`, `adapters`, `app`. |
 | `frontend/` | SolidJS single-page app. |
 | `contract/` | Generated OpenAPI document and TypeScript client (read-only). |
 | `.dagger/` | TypeScript Dagger CI module. |
@@ -96,7 +96,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 ## Logging
 
-- Only the five domain services (`Plants`, `Operations`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`) log; adapters (persistence, HTTP) never do, since HTTP already discards the cause when it maps a failure to a status code and persistence is swappable machinery below the logged contract.
+- Only use-case services log; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract.
 - `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
 - Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
 - Every line is a single line — never a raw stack trace.
@@ -115,11 +115,7 @@ Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.
 - **Feature** (planned change, refactor, migration): a change spec states current → new behavior, acceptance criteria, invariants, and tradeoffs; then tests projected from the spec; then implementation.
 - **Investigation** (bug, incident): a hypotheses-and-evidence trail leads to a proven root cause; the archived spec records the root cause and the rejected hypotheses.
 
-Its five phases are **classify → spec → tests → implement → sync & archive**. The workflow is
-split into three PR stages: a **Spec PR** containing only the reviewed proposal, one or more
-**Implementation PRs** after the Spec PR merges, and a final **Archive + Living Docs PR** after
-all implementation PRs merge. The final PR only archives the proposal and synchronizes living
-documentation; it introduces no new product behavior.
+Its five phases are **classify → spec → tests → implement → sync & archive**. The workflow is split into three PR stages: a **Spec PR** containing only the reviewed proposal, one or more **Implementation PRs** after the Spec PR merges, and a final **Archive + Living Docs PR** after all implementation PRs merge. The final PR only archives the proposal and synchronizes living documentation; it introduces no new product behavior.
 
 - **Specs live in-repo** under [`specs/changes/<slug>/proposal.md`](specs/changes/), archived to `specs/changes/archive/YYYY-MM-DD-<slug>/`. The living docs are `specs/{design,contracts,testing,operational}.md` (the pipeline's are `ci/specs/`); each follows a strict template in [`specs/templates/`](specs/templates/) — one fact in one place, empty sections omitted — so they stay lean as the app grows.
 - **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored, never included in a PR). An independent reviewer fills a separate checklist before each phase is declared complete; see the SDD skill for the review protocol.
@@ -139,7 +135,7 @@ documentation; it introduces no new product behavior.
 
 ## Testing conventions
 
-- **Backend** uses MUnit; name suites `<Component>ComponentTest`. Every suite owns a real runtime trait or port (or a concrete adapter at that seam), never a result ADT, helper, or isolated method. Test behaviour through the owning boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port.
+- **Backend** uses MUnit; name suites `<Component>ComponentTest`. Every suite owns a real runtime trait or port (or a concrete adapter at that seam), never a result ADT, helper, or isolated method. Test behaviour through the owning boundary, never implementation details, so a test fails only when a stated behaviour changes. Substitute capability ports for domain and application component tests; exercise a persistence adapter against a real in-memory SQLite (a seam test); and prove an HTTP adapter that carries logic by driving its endpoints over a stub of the service it delegates to—never by reaching past that service to a lower port. A structural/policy suite that mechanically checks a cross-cutting rule instead of one runtime class's behaviour (e.g. `ArchitectureTest`) is named plainly, without a `Component`/`SeamIntegrationTest`/`SystemIntegrationTest` suffix that would falsely claim ownership of one.
 - **Frontend and pipeline** use Vitest with a tiered file-name convention: `*.componentTest.ts(x)` (one unit in isolation, boundaries stubbed), `*.seamIntegrationTest.ts(x)` (across one real seam), and `*.systemIntegrationTest.ts(x)` (the running system).
 - Every test name starts with `should ` and states one domain outcome in the vocabulary exposed by the tested boundary. Do not name an implementation threshold, transition between independent calls, private traversal, or coverage branch when the use case is the resulting behavior.
 - A backend component or HTTP seam suite uses `Refs` only for mutable observations of collaborator calls and effects. Pass fixed stub responses, failures, clocks, and other collaborator configuration directly to `buildX(refs, ...)`, with defaults for the ordinary case; call `buildX()` without `Refs` when only the returned result is asserted. The builder creates every collaborator substitute and returns only the component under test; tests assert the observed effects in `Refs`, never mock responses stored there.

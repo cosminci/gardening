@@ -4,12 +4,12 @@
 
 ## Versioning & release provenance
 
-Release from a clean annotated `vX.Y.Z` tag. The image records the version and commit as OCI provenance; `release-guard` rejects dirty or untagged release trees.
+`release-version` generates a UTC calendar-timestamp version (`YYYY.M.D-THHMMSS`) from wall-clock time, not from any git tag; two releases colliding on the same version isn't a real concern — the per-second timestamp already makes it vanishingly unlikely, and GHCR rejects a tag overwrite regardless. `publish` validates that format inline before building or pushing anything. Only after a successful publish does the released commit get an annotated `v<version>` git tag pushed to it — provenance recorded after the fact, never a pre-release gate.
 
 ## Publishing
 
-Run full verification before `publish`; it does not run checks. Publish to the private `ghcr.io/cosminci/plant-journal` package using a `write:packages` PAT passed as a Dagger Secret (`--token=env:GITHUB_PERSONAL_PAT`); never put the token in a command argument or a file in the repository.
+Publish is a manually dispatched workflow, restricted to `main`, that runs full verification (`verify --all`) first; `publish` itself does not run checks. It pushes to the public `ghcr.io/cosminci/plant-journal` package using the GitHub Actions job's own token (`packages: write`), never a personal PAT.
 
 ## Deployment
 
-The NAS pulls the private versioned image with registry authentication and persists SQLite under `/data`. WUD can auto-update from semver tags using a `read:packages` PAT; manual deployment pulls the versioned image and recreates the container. Preserve the data volume across image updates.
+See [`unraid/README.md`](../../unraid/README.md) for NAS deployment, WUD auto-update, and recovery.

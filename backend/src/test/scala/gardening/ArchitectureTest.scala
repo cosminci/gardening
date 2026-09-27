@@ -5,9 +5,12 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
 import munit.FunSuite
 
-class ArchitectureComponentTest extends FunSuite:
+class ArchitectureTest extends FunSuite:
 
-  private val classes = ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS).importPackages("gardening")
+  // `DO_NOT_INCLUDE_TESTS` only recognises Maven/Gradle/IntelliJ test layouts, not this build's `*-tests.jar`, so it's ineffective here.
+  private val excludeTestClasses: ImportOption = location => !location.contains("-tests.jar")
+
+  private val classes = ClassFileImporter().withImportOption(excludeTestClasses).importPackages("gardening")
 
   test("should keep domain free of any outgoing dependency"):
     noClasses()
@@ -45,5 +48,5 @@ class ArchitectureComponentTest extends FunSuite:
       .resideInAnyPackage("gardening.adapters..", "gardening.app..")
       .check(classes)
 
-  test("should keep adapters free of cyclic dependencies on each other"):
-    slices().matching("gardening.adapters.(*)..").should().beFreeOfCycles().check(classes)
+  test("should keep adapters independent from each other"):
+    slices().matching("gardening.adapters.(*)..").should().notDependOnEachOther().check(classes)

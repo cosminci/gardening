@@ -6,14 +6,11 @@ The engineering standard here is written for everyone, not just agents: [DESIGN-
 
 ## How work happens here
 
-All product changes go through the SDD skill (classify → spec → tests → implement → sync & archive). Do not add product behaviour outside a reviewed change spec.
+Every change classifies first through the SDD skill (classify → (spike) → spec → tests → implement → sync & archive). A spec is required only when the change adds or revises knowledge a living doc should record; a pure refactor with no such knowledge doesn't need one. Only the maintainer may waive that requirement explicitly — an agent must not decide to skip it. Do not add product behaviour outside a reviewed change spec when one is required.
 
 ## Gates — each is a stop condition; do not proceed until it holds
 
-- Before calling a component done, its gate exits zero:
-  - Backend: `cd backend && sbt scalafmtCheckAll coverage test coverageReport "scalafixAll --check"` (single instrumented compile; `coverage` before any compile so sources compile once)
-  - Frontend: `cd frontend && npm run verify`
-  - Pipeline: `cd .dagger && npm run verify`
+- Before calling a component done, its gate exits zero: backend (`dagger call backend-check`), frontend (`dagger call frontend-check`), pipeline (`dagger call pipeline-check`) — see CONTRIBUTING.md's command table.
 - Before calling a change done, `dagger call verify` (affected) exits zero. If you touched the tapir endpoints or `contract/`, `dagger call contract-drift` also exits zero.
 - Coverage is 100%. If a line cannot be covered, it belongs in an excluded imperative-shell region (see CONTRIBUTING.md) — move it there instead of lowering a threshold.
 - `contract/` is generated and read-only. Regenerate it (see README) and commit the result; never hand-edit it.
@@ -26,5 +23,5 @@ All product changes go through the SDD skill (classify → spec → tests → im
 - At serialization boundaries, prefer declarative library codecs/typeclasses owned privately by the concrete adapter over hand-written `encodeX`/`decodeX` function families.
 - Keep behavioral test suites one-to-one with real runtime classes, objects, or traits. Extend the owning type's existing suite instead of creating feature-bucket suites that have no runtime counterpart.
 - Do not create cross-suite test-fixture holder objects. Keep fixtures local to the owning suite, even when that duplicates small constants.
-- Do not commit secrets. Publishing reads a `write:packages` GitHub PAT as a Dagger Secret (`--token=env:GITHUB_PERSONAL_PAT`); never embed or print it (see [ci/specs/operational.md](ci/specs/operational.md)).
+- Do not commit secrets, and never embed or print a credential — see [ci/specs/operational.md](ci/specs/operational.md) for how publishing authenticates.
 - The household's balcony-garden notes (plant list, care guides, shopping list) live locally at `.local/garden-plan/` — gitignored, not tracked, the import source for a later feature. Do not commit them or anything else under `.local/`.
