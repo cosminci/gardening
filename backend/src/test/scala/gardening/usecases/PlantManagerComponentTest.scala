@@ -55,10 +55,10 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   private val firstPhotoPage = PhotoWindow(offset = 0, size = 3)
 
   test("should create an active plant with initial substrate independently of operations"):
-    val refs   = Refs()
-    val plants = buildPlants(refs)
+    val refs    = Refs()
+    val manager = buildManager(refs)
 
-    val result = plants.createPlant(plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
+    val result = manager.createPlant(plant.details.species, plant.details.maybeNickname, plant.details.location, substrate)
 
     val expectedPlant = plant.copy(id = PlantId("id-1"))
     assertEquals(result, CreatePlantResult.Created(expectedPlant))
@@ -69,16 +69,16 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val missingRefs    = Refs()
     val readFailedRefs = Refs()
 
-    val missing = buildPlants(
+    val missing = buildManager(
       missingRefs,
       componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
     ).createPlant(plant.details.species, none, plant.details.location, substrate)
-    val readFailed = buildPlants(
+    val readFailed = buildManager(
       readFailedRefs,
       componentReadResult = GetSubstrateComponentsResult.ReadFailed(failure)
     ).createPlant(plant.details.species, none, plant.details.location, substrate)
     val writeFailed =
-      buildPlants(addPlantResult = AddPlantResult.AddFailed(failure)).createPlant(plant.details.species, none, plant.details.location, substrate)
+      buildManager(addPlantResult = AddPlantResult.AddFailed(failure)).createPlant(plant.details.species, none, plant.details.location, substrate)
 
     assertEquals(missing, CreatePlantResult.UnknownComponent)
     assertEquals(readFailed, CreatePlantResult.CatalogReadFailed(failure))
@@ -91,8 +91,8 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val unnamed = plant.copy(id = PlantId("p2"), details = plant.details.copy(maybeNickname = None))
     val refs    = Refs()
 
-    val active    = buildPlants(refs, getPlantsResult = GetPlantsResult.Read(Vector(plant, unnamed)))
-    val failedOne = buildPlants(getPlantsResult = GetPlantsResult.ReadFailed(failure))
+    val active    = buildManager(refs, getPlantsResult = GetPlantsResult.Read(Vector(plant, unnamed)))
+    val failedOne = buildManager(getPlantsResult = GetPlantsResult.ReadFailed(failure))
 
     val activeResult   = active.getPlants(PlantStatus.Active)
     val archivedResult = failedOne.getPlants(PlantStatus.Archived)
@@ -105,8 +105,8 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val failure = RuntimeException("count unavailable")
     val refs    = Refs()
 
-    val countResult  = buildPlants(refs, archivedCountResult = ArchivedCountResult.Counted(4)).getArchivedCount
-    val failedResult = buildPlants(archivedCountResult = ArchivedCountResult.ReadFailed(failure)).getArchivedCount
+    val countResult  = buildManager(refs, archivedCountResult = ArchivedCountResult.Counted(4)).getArchivedCount
+    val failedResult = buildManager(archivedCountResult = ArchivedCountResult.ReadFailed(failure)).getArchivedCount
     val invalidCount = intercept[IllegalArgumentException](ArchivedCountResult.Counted(-1L))
 
     assertEquals(countResult, ArchivedCountResult.Counted(4))
@@ -118,7 +118,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val archivedPlant = plant.copy(details = plant.details.copy(status = PlantStatus.Archived))
     val refs          = Refs()
 
-    val result = buildPlants(refs).editPlant(plant.id, _.copy(status = PlantStatus.Archived))
+    val result = buildManager(refs).editPlant(plant.id, _.copy(status = PlantStatus.Archived))
 
     assertEquals(result, EditPlantResult.Edited(archivedPlant))
     assertEquals(refs.updatedPlants.get(), Vector(archivedPlant))
@@ -129,7 +129,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val revisedLocation = Location("Living room")
     val refs            = Refs()
 
-    val result        = buildPlants(refs).editPlant(plant.id, _.copy(revisedSpecies, none, revisedLocation, newSubstrate))
+    val result        = buildManager(refs).editPlant(plant.id, _.copy(revisedSpecies, none, revisedLocation, newSubstrate))
     val expectedPlant = plant.copy(details = plant.details.copy(revisedSpecies, none, revisedLocation, newSubstrate))
 
     assertEquals(result, EditPlantResult.Edited(expectedPlant))
@@ -141,18 +141,18 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val readFailure   = RuntimeException("read unavailable")
     val refs          = Refs()
 
-    val archivedAgainResult = buildPlants(refs, getPlantResult = GetPlantResult.Read(archivedPlant))
+    val archivedAgainResult = buildManager(refs, getPlantResult = GetPlantResult.Read(archivedPlant))
       .editPlant(plant.id, _.copy(status = PlantStatus.Archived))
-    val archivedWithUnknownComponentResult = buildPlants(
+    val archivedWithUnknownComponentResult = buildManager(
       refs,
       getPlantResult = GetPlantResult.Read(archivedPlant),
       componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty)
     ).editPlant(plant.id, _.copy(location = Location("Kitchen")))
-    val missingResult = buildPlants(refs, getPlantResult = GetPlantResult.RecordMissing)
+    val missingResult = buildManager(refs, getPlantResult = GetPlantResult.RecordMissing)
       .editPlant(plant.id, _.copy(location = Location("Kitchen")))
-    val readResult = buildPlants(refs, getPlantResult = GetPlantResult.ReadFailed(readFailure))
+    val readResult = buildManager(refs, getPlantResult = GetPlantResult.ReadFailed(readFailure))
       .editPlant(plant.id, _.copy(location = Location("Kitchen")))
-    val writeFailedResult = buildPlants(refs, updatePlantResult = UpdatePlantResult.UpdateFailed(failure))
+    val writeFailedResult = buildManager(refs, updatePlantResult = UpdatePlantResult.UpdateFailed(failure))
       .editPlant(plant.id, _.copy(location = Location("Kitchen")))
 
     assertEquals(archivedAgainResult, EditPlantResult.PlantArchived)
@@ -168,9 +168,9 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val failure      = RuntimeException("unavailable")
     val refs         = Refs()
 
-    val unknownResult = buildPlants(refs, componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty))
+    val unknownResult = buildManager(refs, componentReadResult = GetSubstrateComponentsResult.Read(Vector.empty))
       .editPlant(plant.id, _.copy(substrate = newSubstrate))
-    val readFailedResult = buildPlants(refs, componentReadResult = GetSubstrateComponentsResult.ReadFailed(failure))
+    val readFailedResult = buildManager(refs, componentReadResult = GetSubstrateComponentsResult.ReadFailed(failure))
       .editPlant(plant.id, _.copy(substrate = newSubstrate))
 
     assertEquals(unknownResult, EditPlantResult.UnknownComponent)
@@ -182,7 +182,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val expectedPhoto  = PlantPhoto(PhotoId(photoUuid), plant.id, captureInstant)
     val refs           = Refs()
 
-    val result = buildPlants(
+    val result = buildManager(
       refs,
       nextId = () => photoUuid.toString,
       addPhotoResult = AddPhotoResult.Added(expectedPhoto),
@@ -197,7 +197,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val cause = RuntimeException("disk full")
     val refs  = Refs()
 
-    val result = buildPlants(
+    val result = buildManager(
       refs,
       nextId = () => photoUuid.toString,
       putContentResult = PhotoWriteResult.WriteFailed(cause)
@@ -210,7 +210,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val cause = RuntimeException("metadata store down")
     val refs  = Refs()
 
-    val result = buildPlants(
+    val result = buildManager(
       refs,
       nextId = () => photoUuid.toString,
       addPhotoResult = AddPhotoResult.AddFailed(cause)
@@ -222,7 +222,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   test("should compensate by deleting content when plant is missing during metadata write"):
     val refs = Refs()
 
-    val result = buildPlants(
+    val result = buildManager(
       refs,
       nextId = () => photoUuid.toString,
       addPhotoResult = AddPhotoResult.PlantMissing
@@ -236,7 +236,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val compensation = RuntimeException("content delete failed too")
     val refs         = Refs()
 
-    buildPlants(
+    buildManager(
       refs,
       nextId = () => photoUuid.toString,
       addPhotoResult = AddPhotoResult.AddFailed(primary),
@@ -251,7 +251,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val compensation = RuntimeException("content delete failed too")
     val refs         = Refs()
 
-    buildPlants(
+    buildManager(
       refs,
       nextId = () => photoUuid.toString,
       addPhotoResult = AddPhotoResult.PlantMissing,
@@ -265,7 +265,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   test("should delete content after metadata removal and return the removed photo"):
     val refs = Refs()
 
-    val result = buildPlants(refs).removePhoto(photo.id)
+    val result = buildManager(refs).removePhoto(photo.id)
 
     assertEquals(result, RemovePhotoResult.Removed(photo))
     assertEquals(refs.removedPhotoIds.get(), Vector(photo.id))
@@ -274,7 +274,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   test("should surface PhotoMissing without touching the content store"):
     val refs = Refs()
 
-    val result = buildPlants(refs, removePhotoResult = RemovePhotoResult.PhotoMissing).removePhoto(photo.id)
+    val result = buildManager(refs, removePhotoResult = RemovePhotoResult.PhotoMissing).removePhoto(photo.id)
 
     assertEquals(result, RemovePhotoResult.PhotoMissing)
     assertEquals(refs.deletedPhotoContentIds.get(), Vector.empty)
@@ -283,7 +283,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val cause = RuntimeException("store down")
     val refs  = Refs()
 
-    val result = buildPlants(refs, removePhotoResult = RemovePhotoResult.RemoveFailed(cause)).removePhoto(photo.id)
+    val result = buildManager(refs, removePhotoResult = RemovePhotoResult.RemoveFailed(cause)).removePhoto(photo.id)
 
     assertEquals(result, RemovePhotoResult.RemoveFailed(cause))
     assertEquals(refs.deletedPhotoContentIds.get(), Vector.empty)
@@ -292,7 +292,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val contentDeleteCause = RuntimeException("content store down")
     val refs               = Refs()
 
-    val result = buildPlants(refs, deleteContentResult = PhotoWriteResult.WriteFailed(contentDeleteCause)).removePhoto(photo.id)
+    val result = buildManager(refs, deleteContentResult = PhotoWriteResult.WriteFailed(contentDeleteCause)).removePhoto(photo.id)
 
     assertEquals(result, RemovePhotoResult.RemoveFailed(contentDeleteCause))
     assertEquals(refs.addedPhotos.get(), Vector(photo))
@@ -302,7 +302,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val compensationCause  = RuntimeException("metadata restore failed")
     val refs               = Refs()
 
-    buildPlants(
+    buildManager(
       refs,
       deleteContentResult = PhotoWriteResult.WriteFailed(contentDeleteCause),
       addPhotoResult = AddPhotoResult.AddFailed(compensationCause)
@@ -316,7 +316,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val contentDeleteCause = RuntimeException("content store down")
     val refs               = Refs()
 
-    buildPlants(
+    buildManager(
       refs,
       deleteContentResult = PhotoWriteResult.WriteFailed(contentDeleteCause),
       addPhotoResult = AddPhotoResult.PlantMissing
@@ -330,7 +330,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val page = PhotoPage(Vector(photo), hasNextPage = false)
     val refs = Refs()
 
-    val result = buildPlants(refs, getPhotosResult = GetPhotosResult.Read(page)).getPhotos(plant.id, firstPhotoPage)
+    val result = buildManager(refs, getPhotosResult = GetPhotosResult.Read(page)).getPhotos(plant.id, firstPhotoPage)
 
     assertEquals(result, GetPhotosResult.Read(page))
     assertEquals(refs.requestedPhotoWindows.get(), Vector(plant.id -> firstPhotoPage))
@@ -338,14 +338,14 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   test("should surface a photo listing failure from the store"):
     val cause = RuntimeException("store unavailable")
 
-    val result = buildPlants(getPhotosResult = GetPhotosResult.ReadFailed(cause)).getPhotos(plant.id, firstPhotoPage)
+    val result = buildManager(getPhotosResult = GetPhotosResult.ReadFailed(cause)).getPhotos(plant.id, firstPhotoPage)
 
     assertEquals(result, GetPhotosResult.ReadFailed(cause))
 
   test("should pass photo content reads through to the content store"):
-    assertEquals(buildPlants().getPhotoContent(photo.id), PhotoReadResult.Read(photoContent))
+    assertEquals(buildManager().getPhotoContent(photo.id), PhotoReadResult.Read(photoContent))
     assertEquals(
-      buildPlants(getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id),
+      buildManager(getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id),
       PhotoReadResult.ContentMissing
     )
 
@@ -359,7 +359,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     val putPhotoContents: AtomicReference[Vector[(PhotoId, PhotoContent)]]     = AtomicReference(Vector.empty)
     val deletedPhotoContentIds: AtomicReference[Vector[PhotoId]]               = AtomicReference(Vector.empty)
 
-  private def buildPlants(
+  private def buildManager(
       refs: Refs = Refs(),
       addPlantResult: AddPlantResult = AddPlantResult.Added,
       getPlantsResult: GetPlantsResult = GetPlantsResult.Read(Vector.empty),
