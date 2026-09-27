@@ -23,5 +23,5 @@ Every change classifies first through the SDD skill (classify → (spike) → sp
 - At serialization boundaries, prefer declarative library codecs/typeclasses owned privately by the concrete adapter over hand-written `encodeX`/`decodeX` function families.
 - Keep behavioral test suites one-to-one with real runtime classes, objects, or traits. Extend the owning type's existing suite instead of creating feature-bucket suites that have no runtime counterpart.
 - Do not create cross-suite test-fixture holder objects. Keep fixtures local to the owning suite, even when that duplicates small constants.
-- Do not commit secrets. Publishing authenticates to GHCR with the GitHub Actions job's own token (`packages: write`), never a personal PAT; never embed or print a credential (see [ci/specs/operational.md](ci/specs/operational.md)).
+- Do not commit secrets, and never embed or print a credential — see [ci/specs/operational.md](ci/specs/operational.md) for how publishing authenticates.
 - The household's balcony-garden notes (plant list, care guides, shopping list) live locally at `.local/garden-plan/` — gitignored, not tracked, the import source for a later feature. Do not commit them or anything else under `.local/`.

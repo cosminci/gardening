@@ -52,7 +52,7 @@ flowchart LR
 ## Architecture constraints
 
 - The backend splits into four sibling packages: `domain` (pure types only — no use-case or port code); `usecases` (one orchestration service per subdomain: plant management, operation ledger, attention monitoring, substrate management, pesticide management); `ports` (business-external dependencies with a real adapter — every `*Store`, every `*MetricsApi`); and `capabilities` (generic infrastructure any service could need regardless of business logic — see [DESIGN-PRINCIPLES.md §1](../DESIGN-PRINCIPLES.md#1-ports--adapters) for the port/capability distinction).
-- Dependency direction between these packages is mechanically enforced — see [DESIGN-PRINCIPLES.md §6](../DESIGN-PRINCIPLES.md#6-strict-build-guardrails) for exactly what `ArchitectureComponentTest` checks, and its one limit.
+- Dependency direction between these packages is mechanically enforced — see [DESIGN-PRINCIPLES.md §6](../DESIGN-PRINCIPLES.md#6-strict-build-guardrails) for exactly what `ArchitectureTest` checks.
   ```mermaid
   flowchart TB
     app --> http & sqlite & file & prometheus & system
@@ -63,4 +63,4 @@ flowchart LR
     usecases --> ports & capabilities & domain
     ports --> domain
   ```
-- Metrics split three ways: business counters/gauges are domain capability ports (like `Logger`); HTTP RED and process/JVM USE are transport/JVM-owned, with no domain threading. All three register into one shared `PrometheusRegistry` behind a single `/metrics` endpoint.
+- Metrics conventions (business vs. transport/JVM ownership, the shared registry) are covered in [CONTRIBUTING.md's Metrics section](../CONTRIBUTING.md#metrics).
