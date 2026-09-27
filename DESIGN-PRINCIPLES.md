@@ -60,7 +60,7 @@ The build is deliberately strict, and staying inside the lines is what makes hig
 - **Static analysis with zero tolerance.** scalafix `DisableSyntax` and WartRemover fail the build on any finding; ESLint, Prettier, and dependency-cruiser do the same on the frontend. Start at zero warnings and stay there.
 - **A strict compiler.** `-Werror`, `-Wunused:all`, `-Wvalue-discard`, and a pinned Java output version turn whole classes of mistake into compile errors.
 - **Healthy dependencies.** The toolchain and libraries are pinned (mise, `build.sbt`, `package.json`) and kept current, so CVEs and deprecations are paid down continuously rather than in a late, expensive migration.
-- **Dependency direction is mechanised, not reviewed.** `ArchitectureComponentTest` (ArchUnit) fails the build if `domain` or `capabilities` gains an outgoing dependency, `ports` depends on anything but `domain`, `usecases` reaches into `adapters`/`app`, or two adapters depend on each other — the five-package boundary in §1 holds by construction, not by review discipline.
+- **Dependency direction is mechanised, not reviewed — mostly.** `ArchitectureComponentTest` (ArchUnit) fails the build if `domain` or `capabilities` gains an outgoing dependency, `ports` depends on anything but `domain`, or `usecases` reaches into `adapters`/`app` — those hold by construction, not by review discipline. Adapters are checked only for a dependency cycle on each other; a one-way adapter dependency still passes and needs a human to catch it.
 
 ### Conventions the guardrails don't (or can't) mechanise
 

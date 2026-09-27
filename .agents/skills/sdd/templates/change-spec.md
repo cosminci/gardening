@@ -1,11 +1,15 @@
 # <Title>
 
-> Standard: [Agentic Engineering Standards](https://github.com/Adobe-AIFoundations/agentic-workflow-standards) v<version>.
-> Lifetime: open from creation through implementation, archived per [the SDD skill's Archive PR phase](../../../.agents/skills/sdd/SKILL.md).
+> Standard: [Agentic Engineering Standards](https://github.com/Adobe-AIFoundations/agentic-workflow-standards) v<version>. Lifetime: open from creation through implementation, archived per [the SDD skill's Archive PR phase](../../../.agents/skills/sdd/SKILL.md).
 
 <!-- Boundary clarifications or risk callouts attach inline to the section they qualify. -->
 
 **Date:** <YYYY-MM-DD>
+
+<!-- Required. What a spike actually tried and found, or a specific, checkable reason no
+exploration was needed — never a bare assertion like "already understood." -->
+
+**Grounded in:** <finding or reason>
 
 <!-- One sentence describing the change. -->
 

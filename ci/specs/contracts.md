@@ -8,7 +8,7 @@ The contract with the external CI runner (GitHub Actions) is the `dagger call` i
 
 | Invocation | Caller | Arguments |
 | --- | --- | --- |
-| `changed` | `build.yml`, every push/PR | `--base` (defaults to merge-base with `origin/main`). |
+| `changed` | `build.yml`, every PR | `--base` (defaults to merge-base with `origin/main`). |
 | `verify` | `build.yml` (affected only); `release.yml` (`--all`, before a release) | `--base`, or `--all`. |
 | `release-version` | `release.yml`, manual dispatch | none — generates a UTC calendar-timestamp tag from wall-clock time, once per dispatched release. |
 | `publish` | `release.yml`, manual dispatch | `--tag`, `--token` (a Dagger Secret), `--registry-user`. |
