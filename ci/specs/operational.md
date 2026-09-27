@@ -4,7 +4,7 @@
 
 ## Versioning & release provenance
 
-Release from a clean annotated `vX.Y.Z` tag. The image records the version and commit as OCI provenance; `release-guard` rejects dirty or untagged release trees.
+Release from a clean annotated `vX.Y.Z` tag, derived by `release-version`. The image records the version and commit as OCI provenance; `publish` rejects a tag that fails that check inline, before building or pushing anything.
 
 ## Publishing
 

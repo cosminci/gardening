@@ -4,20 +4,13 @@
 
 ## Contract inventory
 
-The [Dagger module](../../.dagger/src/index.ts) is authoritative for callable arguments, defaults, and results:
+The contract with the external CI runner (GitHub Actions) is the `dagger call` invocations the workflows actually make, not the full internal function list — [`.dagger/src/index.ts`](../../.dagger/src/index.ts) is authoritative for that:
 
-| Contract | Responsibility |
-| --- | --- |
-| `changed` | Classify affected components. |
-| `verify` | Check selected components or all components. |
-| `backend-check` | Run the backend gate. |
-| `frontend-check` | Run the frontend gate. |
-| `pipeline-check` | Run the pipeline gate. |
-| `contract-drift` | Compare regenerated HTTP contract artifacts to committed ones. |
-| `version` | Derive a build version from git. |
-| `build-image` | Produce the runtime image. |
-| `release-guard` | Reject untagged or dirty release sources. |
-| `publish` | Publish a guarded image to GHCR. |
-| `deploy` | Produce NAS deployment instructions. |
+| Invocation | Caller | Arguments |
+| --- | --- | --- |
+| `changed` | `build.yml`, every push/PR | `--base` (defaults to merge-base with `origin/main`). |
+| `verify` | `build.yml` (affected only); `release.yml` (`--all`, before a release) | `--base`, or `--all`. |
+| `release-version` | `release.yml`, manual dispatch | none — derives a UTC tag, once per dispatched release. |
+| `publish` | `release.yml`, manual dispatch | `--tag`, `--token` (a Dagger Secret), `--registry-user`. |
 
 The [runtime image definition](../../.dagger/src/hooks/image.ts) owns image contents, runtime identity, environment, and labels. The application's HTTP surface is defined separately by [OpenAPI](../../contract/openapi.yaml).

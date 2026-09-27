@@ -41,7 +41,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 | Task | Command |
 | --- | --- |
-| Backend gate | `cd backend && sbt compile "scalafixAll --check" scalafmtCheckAll coverage test coverageReport` |
+| Backend gate | `cd backend && sbt scalafmtCheckAll coverage test coverageReport "scalafixAll --check"` |
 | Run the backend | `cd backend && sbt run` |
 | Frontend gate | `cd frontend && npm run verify` |
 | Frontend dev server | `cd frontend && npm run dev` |
@@ -53,7 +53,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 | Path | What |
 | --- | --- |
-| `backend/` | Scala 3 service — `domain`, `capabilities` (ports), `adapters`, `app`. |
+| `backend/` | Scala 3 service — `domain`, `usecases`, `ports`, `capabilities`, `adapters`, `app`. |
 | `frontend/` | SolidJS single-page app. |
 | `contract/` | Generated OpenAPI document and TypeScript client (read-only). |
 | `.dagger/` | TypeScript Dagger CI module. |
@@ -96,7 +96,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 ## Logging
 
-- Only the five domain services (`Plants`, `Operations`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`) log; adapters (persistence, HTTP) never do, since HTTP already discards the cause when it maps a failure to a status code and persistence is swappable machinery below the logged contract.
+- Only the five use-case services (`PlantManager`, `OperationLedger`, `PlantAttentionMonitor`, `SubstrateCatalog`, `PesticideCatalog`) log; adapters (`sqlite`, `http`) never do, since HTTP already discards the cause when it maps a failure to a status code and `sqlite` is swappable machinery below the logged contract.
 - `Logger` is a capability threaded like `Clock` and `IdGenerator` — built once in `Main`, resolved implicitly (`using log: Logger^`) rather than named at every call site, and substituted in tests via `TestImplicits`.
 - Info logs a successful mutation (action + id) or a meaningful state transition (e.g. a plant's watering level changing); error logs an unexpected failure (operation + cause). A successful read logs nothing.
 - Every line is a single line — never a raw stack trace.
@@ -115,11 +115,7 @@ Every change goes through the **SDD skill** at [`.agents/skills/sdd/SKILL.md`](.
 - **Feature** (planned change, refactor, migration): a change spec states current → new behavior, acceptance criteria, invariants, and tradeoffs; then tests projected from the spec; then implementation.
 - **Investigation** (bug, incident): a hypotheses-and-evidence trail leads to a proven root cause; the archived spec records the root cause and the rejected hypotheses.
 
-Its five phases are **classify → spec → tests → implement → sync & archive**. The workflow is
-split into three PR stages: a **Spec PR** containing only the reviewed proposal, one or more
-**Implementation PRs** after the Spec PR merges, and a final **Archive + Living Docs PR** after
-all implementation PRs merge. The final PR only archives the proposal and synchronizes living
-documentation; it introduces no new product behavior.
+Its five phases are **classify → spec → tests → implement → sync & archive**. The workflow is split into three PR stages: a **Spec PR** containing only the reviewed proposal, one or more **Implementation PRs** after the Spec PR merges, and a final **Archive + Living Docs PR** after all implementation PRs merge. The final PR only archives the proposal and synchronizes living documentation; it introduces no new product behavior.
 
 - **Specs live in-repo** under [`specs/changes/<slug>/proposal.md`](specs/changes/), archived to `specs/changes/archive/YYYY-MM-DD-<slug>/`. The living docs are `specs/{design,contracts,testing,operational}.md` (the pipeline's are `ci/specs/`); each follows a strict template in [`specs/templates/`](specs/templates/) — one fact in one place, empty sections omitted — so they stay lean as the app grows.
 - **The work directory** for checklists and investigation trails is `.agent-work/` (git-ignored, never included in a PR). An independent reviewer fills a separate checklist before each phase is declared complete; see the SDD skill for the review protocol.

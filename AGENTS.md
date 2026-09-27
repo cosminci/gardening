@@ -6,7 +6,7 @@ The engineering standard here is written for everyone, not just agents: [DESIGN-
 
 ## How work happens here
 
-All product changes go through the SDD skill (classify → spec → tests → implement → sync & archive). Do not add product behaviour outside a reviewed change spec.
+Every change classifies first through the SDD skill (classify → spec → tests → implement → sync & archive). A spec is required only when the change adds or revises knowledge a living doc should record; a pure refactor with no such knowledge doesn't need one. Only the maintainer may waive that requirement explicitly — an agent must not decide to skip it. Do not add product behaviour outside a reviewed change spec when one is required.
 
 ## Gates — each is a stop condition; do not proceed until it holds
 
