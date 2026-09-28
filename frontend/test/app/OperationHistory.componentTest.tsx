@@ -342,6 +342,50 @@ Vitest.describe("operation history", () => {
     Vitest.expect(scrollBySpy).toHaveBeenCalledTimes(1);
   });
 
+  Vitest.it(
+    "should not double-fire the scroll compensation when collapsed twice before the transition ends",
+    async () => {
+      const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage()));
+      Testing.render(() => (
+        <OperationHistory
+          plant={recent.plant}
+          substrateComponents={[]}
+          pesticides={[]}
+          getOperations={getOperations}
+          operationChange={undefined}
+          onEdit={() => undefined}
+        />
+      ));
+
+      const toggle = Testing.screen.getByRole("button", { name: "Show operation history" });
+      const tops = [1, 2, 3, 4, 5];
+      Vitest.vi
+        .spyOn(toggle, "getBoundingClientRect")
+        .mockImplementation(() => ({ top: tops.shift() }) as DOMRect);
+      const scrollBySpy = Vitest.vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+      const disclosure = Testing.screen.getByLabelText("Operation history");
+
+      Testing.fireEvent.click(toggle);
+      await Testing.screen.findByText("No older operations.");
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Hide operation history" }),
+      );
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Show operation history" }),
+      );
+      await Testing.screen.findByText("No older operations.");
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Hide operation history" }),
+      );
+
+      const event = new Event("transitionend") as unknown as TransitionEvent;
+      Object.defineProperty(event, "propertyName", { value: "grid-template-rows" });
+      disclosure.dispatchEvent(event);
+      Vitest.expect(scrollBySpy).toHaveBeenCalledTimes(1);
+      Vitest.expect(scrollBySpy).toHaveBeenCalledWith(0, 1);
+    },
+  );
+
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {
     const secondPage = care({
       id: "o1",

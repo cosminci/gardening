@@ -38,6 +38,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   let disclosure!: HTMLDivElement;
   let pageStatus: HTMLSpanElement | undefined;
   let failureStatus: HTMLParagraphElement | undefined;
+  let pendingScrollRestore: ((event: TransitionEvent) => void) | undefined;
 
   const loadPage = async (page: number, focusResult = false) => {
     const request = ++latestRequest;
@@ -69,12 +70,16 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
     setExpanded(opening);
     if (opening) void loadPage(1);
     if (!opening) {
+      if (pendingScrollRestore)
+        disclosure.removeEventListener("transitionend", pendingScrollRestore);
       const restoreScrollPosition = (event: TransitionEvent) => {
         if (event.target !== disclosure || event.propertyName !== "grid-template-rows") return;
         disclosure.removeEventListener("transitionend", restoreScrollPosition);
+        pendingScrollRestore = undefined;
         const drift = control.getBoundingClientRect().top - anchorBefore;
         if (drift !== 0) window.scrollBy(0, drift);
       };
+      pendingScrollRestore = restoreScrollPosition;
       disclosure.addEventListener("transitionend", restoreScrollPosition);
     }
     queueMicrotask(() => {
