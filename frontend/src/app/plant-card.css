@@ -228,6 +228,22 @@
   gap: 0.3rem;
 }
 
+@media (pointer: coarse), (max-width: 46rem) {
+  .plant-card__actions {
+    flex-direction: column;
+  }
+
+  .plant-card h2 {
+    font-size: 1.15rem;
+  }
+}
+
+@media (max-width: 62rem) and (orientation: landscape) {
+  .plant-card__actions {
+    flex-direction: row;
+  }
+}
+
 .plant-card__actions .inline-icon-action--photos svg {
   width: 0.95rem;
   height: 0.95rem;
@@ -303,7 +319,7 @@
   background: var(--leaf);
 }
 
-@media (max-width: 46rem) {
+@media (max-width: 62rem) {
   .plant-card {
     --plant-card-columns: 4.5rem minmax(0, 1fr) 3rem;
   }

@@ -234,3 +234,10 @@ select:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+@media (pointer: coarse) {
+  .inline-icon-action {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+}

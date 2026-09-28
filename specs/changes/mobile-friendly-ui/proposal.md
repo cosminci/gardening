@@ -13,14 +13,14 @@ The app's layout and dialogs were designed for a desktop-sized screen only. This
 
 ## Invariants
 
-- Nothing in this change alters layout, sizing, or behavior for a non-touch or wide (desktop-scale) session.
+- Nothing in this change alters layout, sizing, or behavior for a session that is both non-touch and wide (desktop-scale) — a narrow non-touch window still gets the same width-driven layout changes a narrow touch screen does, since those are about available space, not input method.
 
 ## Acceptance Criteria
 
-- On a touch device, in either orientation, every interactive control meets a comfortable minimum touch-target size.
+- On a touch device, in either orientation, every interactive control meets a comfortable minimum touch-target size, except where a control's own tight, space-constrained context leaves no room for it — that control instead stays pinned to a smaller, consistent size rather than overlapping neighboring content.
 - The page header stays within the screen's width at any width down to a phone's narrowest common size, in both orientations, without ever forcing horizontal scrolling.
-- On a touch device, a plant's photo/edit/archive actions stack vertically rather than horizontally, in both orientations.
-- An operation's recorded actions, moisture reading, and kind render as icons rather than text once the layout has adapted for a narrow width, identically whether the operation is among the most recent or reached by expanding older history.
+- On a touch device, a plant's photo/edit/archive actions stack vertically rather than horizontally in an upright layout; in a sideways layout with enough width for them, they stay horizontal.
+- An operation's recorded actions and moisture reading render as icons rather than text once the layout has adapted for a narrow width, identically whether the operation is among the most recent or reached by expanding older history.
 - An operation's date renders in a fixed-width short form at that same narrow width, and in its full descriptive form otherwise; its accessible label always states the full date regardless of which form is visually shown.
 - A logged note renders without a "Note" label. On a narrow, upright layout it appears on its own line below an operation's icons; on a narrow, sideways layout it continues inline after them.
 - Opening a dialog on a narrow, upright screen presents it anchored to the bottom, sized to its content and able to grow to the full screen height. The same dialog on a wide or sideways screen instead presents anchored to a screen edge, narrower than the available width.
