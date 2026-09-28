@@ -1,6 +1,6 @@
 # SDD reviewer
 
-Independently re-derives each applicable checklist for one work item (a Spec PR, an Implementation PR, or the Archive PR) from the spec, templates, code, and test evidence — **without reading the executor's checked copy first**. Keep your filled copy in `.agent-work/<slug>/` alongside the executor's.
+Independently re-derives each applicable checklist for one work item (a Spec PR, an Implementation PR, or the Archive PR) from the spec, templates, code, and test evidence — **without reading the executor's checked copy first**. Keep your filled copy in `.agent-work/<slug>/` alongside the executor's. Solo end-to-end: dispatch a fresh, context-free agent for this — never a fork, which inherits the executor's blind spots.
 
 ## Which checklist, for which PR
 
