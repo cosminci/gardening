@@ -21,6 +21,7 @@
   background: var(--paper);
   box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
   transition: transform 180ms ease;
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .sheet--entering {
@@ -77,13 +78,6 @@
   background: #fae9e5;
 }
 
-@media (max-width: 62rem) {
-  .sheet-layer--editing .sheet--operation {
-    transform: translateX(-100%);
-    visibility: hidden;
-  }
-}
-
 @media (pointer: coarse) and (orientation: landscape) {
   .sheet {
     width: 50%;
@@ -103,6 +97,8 @@
     border-radius: 1rem 1rem 0 0;
     box-shadow: 0 -8px 30px rgb(14 37 28 / 20%);
     transition-duration: 260ms;
+    padding-right: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .sheet--entering {
@@ -111,6 +107,23 @@
 
   .sheet-layer .sheet--closing {
     transform: translateY(100%);
+  }
+
+  /*
+   * A nested editor opens as its own bottom sheet on top of the first one.
+   * Reserve the first sheet's header height (padding + icon-action row +
+   * divider) on the second sheet so the first stays visible above it
+   * instead of the desktop side-by-side reveal, which has no room to work
+   * with once both sheets are full width. This query isn't pointer-gated
+   * (the invariant requires narrow non-touch to match narrow touch), so
+   * the reserved height covers the taller non-touch header padding too.
+   */
+  .sheet-layer:has(.sheet--catalog-editor) .sheet--operation {
+    transform: none;
+  }
+
+  .sheet--catalog-editor {
+    top: 5.25rem;
   }
 }
 

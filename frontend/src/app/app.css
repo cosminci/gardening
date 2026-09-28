@@ -39,7 +39,7 @@ body {
 main {
   width: min(76rem, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 2.5rem 0 5rem;
+  padding: calc(2.5rem + env(safe-area-inset-top, 0px)) 0 5rem;
 }
 
 .masthead {
@@ -281,7 +281,7 @@ h1 {
 @media (max-width: 40rem) {
   main {
     width: min(100% - 1rem, 76rem);
-    padding-top: 1.25rem;
+    padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
   }
 
   .masthead {
