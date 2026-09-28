@@ -21,6 +21,7 @@
   background: var(--paper);
   box-shadow: -20px 0 60px rgb(14 37 28 / 20%);
   transition: transform 180ms ease;
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .sheet--entering {
@@ -96,6 +97,8 @@
     border-radius: 1rem 1rem 0 0;
     box-shadow: 0 -8px 30px rgb(14 37 28 / 20%);
     transition-duration: 260ms;
+    padding-right: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .sheet--entering {
