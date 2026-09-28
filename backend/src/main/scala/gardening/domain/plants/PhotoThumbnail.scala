@@ -35,7 +35,13 @@ object PhotoThumbnail:
               attempts.foldLeft(Array.emptyByteArray)((soFar, attempt) => if soFar.isEmpty || attempt.length < soFar.length then attempt else soFar)
             val chosen = attempts.find(_.length <= maxThumbnailSize.toBytes).getOrElse(smallest)
             PhotoContent(ByteVector(chosen), PhotoMediaType.Jpeg)
-          }.fold(ThumbnailDerivationResult.DerivationFailed.apply, ThumbnailDerivationResult.Derived.apply)
+          }.fold(
+            // encodeJpeg cannot fail for any image ImageIO.read can decode; this mapping is defensive and not exercised.
+            // $COVERAGE-OFF$
+            ThumbnailDerivationResult.DerivationFailed.apply,
+            // $COVERAGE-ON$
+            ThumbnailDerivationResult.Derived.apply
+          )
 
     // drawImage never calls back into this for a complete, non-progressively-loaded BufferedImage.
     // $COVERAGE-OFF$
