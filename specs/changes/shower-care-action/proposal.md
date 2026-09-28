@@ -19,7 +19,19 @@ to one on narrow screens).
 
 ## Domain / Design Notes
 
-Showering is a plain member of the action-type set, like fertilizing or pruning: no attached data.
+`ActionType` gains one plain member, `Showered`, alongside the existing members — no attached data, same as `Fertilized`/`Pruned`:
+
+```scala
+enum ActionType(val label: String):
+  case Watered    extends ActionType("Watered")
+  case Showered   extends ActionType("Showered")
+  case Fertilized extends ActionType("Fertilized")
+  case Pesticide  extends ActionType("Insecticide / H2O2")
+  case Pruned     extends ActionType("Pruned")
+  case NoAction   extends ActionType("None")
+```
+
+No persistence schema change: `operation.payload` is a JSON blob checked only for `json_valid`, not an enumerated `check (... in (...))` column (unlike `pesticide.type`), so a new `ActionType` name is valid on day one — no Flyway migration.
 
 ## Acceptance Criteria
 
