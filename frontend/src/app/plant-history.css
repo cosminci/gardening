@@ -65,6 +65,90 @@
   height: 1.65rem;
 }
 
+.moisture-gauge {
+  display: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+  transform: translateY(0.12rem);
+}
+
+.moisture-gauge__outline {
+  fill: #dbeefb;
+  stroke: #4a90c4;
+  stroke-width: 1.2;
+}
+
+.moisture-gauge--unknown .moisture-gauge__outline {
+  fill: none;
+  stroke-dasharray: 2 1.5;
+  opacity: 0.5;
+}
+
+.moisture-gauge__fill {
+  fill: #3f8fc9;
+}
+
+.action-icons {
+  display: none;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.2rem;
+}
+
+.action-icons .info-control {
+  display: inline-grid;
+}
+
+.action-icons .info-control__trigger {
+  width: 1.3rem;
+  height: 1.3rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.action-icons .info-control__trigger:hover,
+.action-icons .info-control__trigger:focus-visible {
+  background: none;
+}
+
+.action-icon {
+  width: 1.3rem;
+  height: 1.3rem;
+  flex-shrink: 0;
+  color: var(--leaf);
+  transform: translateY(0.2rem);
+}
+
+.action-icon path,
+.action-icon circle {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.action-icon.action-icon--watered {
+  color: #2f7fc0;
+  transform: translateY(0.1rem);
+}
+
+.action-icon.action-icon--fertilized {
+  color: #c8862d;
+}
+
+.action-icon.action-icon--pesticide {
+  color: #1f1f1f;
+  transform: translateY(0.2rem);
+}
+
+.action-icon.action-icon--pruned {
+  color: #7a5ea8;
+}
+
 .operation__kind {
   flex-shrink: 0;
   padding: 0.12rem 0.35rem;
