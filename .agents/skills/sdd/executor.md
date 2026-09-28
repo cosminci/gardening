@@ -16,7 +16,7 @@ So decide, explicitly: is the problem and its solution already understood well e
 
 When spiking: actually try to solve it — throwaway code, a prototype of the hard part, working the algorithm by hand against real APIs — until you can state, concretely, the domain types, the ports, the real edge cases, and whether the approach is tractable at all. This code is disposable: it never needs to pass `AGENTS.md`'s gates, is never the Implementation PR's diff, and is not reviewed.
 
-Either way, the decision must show up somewhere it can be checked. `.agent-work/<slug>/checklist.md` is scratch and never reaches the PR, so the real record is the Spec PR's own `Grounded in` field: name the actual finding, or the actual reason none was needed — never a bare "already understood." Carry a spike's findings into `Domain / Design Notes` and `Alternatives Considered` too, grounded in what you actually found rather than renewed first-principles guessing.
+Either way, the decision must show up somewhere it can be checked. `.agent-work/<slug>/checklist.md` is scratch and never reaches the PR, so the real record is the Spec PR's own `Grounded in` field: name the actual finding, or the actual reason none was needed — never a bare "already understood." Carry a spike's findings into `Domain / Design Notes` and `Alternatives Considered` too — never the same sentence twice — grounded in what you actually found rather than renewed first-principles guessing.
 
 ## Spec PR
 
@@ -25,7 +25,7 @@ Read [`templates/change-spec.md`](templates/change-spec.md) fresh — never recr
 - **Feature:** current → new behavior, acceptance criteria, invariants, tradeoffs, Doc Sync.
 - **Investigation:** hypotheses and evidence for/against each, narrowing to a proven root cause — the spec's `What & Why` ends up stating that root cause and the hypotheses it ruled out.
 
-Self-check against [`checklists/spec-quality.md`](checklists/spec-quality.md), then open the Spec PR — the proposal and planning artifacts only, no production code. Do not start implementation until it is reviewed and merged.
+Self-check against [`checklists/spec-quality.md`](checklists/spec-quality.md), then open the Spec PR — the proposal and planning artifacts only, no production code. Self-check is prep, not review — hand off to [`reviewer.md`](reviewer.md) before anyone merges. Do not start implementation until it is reviewed and merged.
 
 ## Tests
 
