@@ -50,7 +50,7 @@ object Main:
             AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
             OperationApi.serverEndpoints(using programs.operations) ++
             SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
-            PhotoApi.serverEndpoints(using programs.plants) ++
+            PhotoApi.serverEndpoints(using programs.photos) ++
             PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
             StaticSite.endpoint(staticDir)
 

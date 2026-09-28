@@ -1704,7 +1704,9 @@ export interface operations {
     };
     getPhotosPhotoidContent: {
         parameters: {
-            query?: never;
+            query?: {
+                variant?: string;
+            };
             header?: never;
             path: {
                 photoId: string;
