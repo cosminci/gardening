@@ -192,9 +192,6 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
       override def getPlant(plant: PlantId): GetPlantResult     = getPlantResult
       override def updatePlant(plant: Plant): UpdatePlantResult =
         refs.updatedPlants.updateAndGet(_ :+ plant).pipe(_ => updatePlantResult)
-      override def addPhoto(photo: PlantPhoto): AddPhotoResult                     = fail("plants must not add photos")
-      override def removePhoto(photo: PhotoId): RemovePhotoResult                  = fail("plants must not remove photos")
-      override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult = fail("plants must not read photos")
     val substrateStore = new SubstrateStore:
       override def getSubstrateComponents: GetSubstrateComponentsResult                         = componentReadResult
       override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =

@@ -2,7 +2,7 @@ package gardening.usecases
 
 import gardening.domain.*
 import gardening.domain.plants.*
-import gardening.ports.{PlantStore, PhotoContentStore}
+import gardening.ports.{PhotoStore, PhotoContentStore}
 import gardening.capabilities.{IdGenerator, Clock, Logger}
 
 import language.experimental.captureChecking
@@ -19,7 +19,7 @@ trait PhotoManager:
 object PhotoManager:
 
   def make(using
-      store: PlantStore^,
+      store: PhotoStore^,
       contentStore: PhotoContentStore^,
       thumbnail: PhotoThumbnail^,
       idGen: IdGenerator^,
@@ -28,7 +28,7 @@ object PhotoManager:
     new LivePhotos
 
   private class LivePhotos(using
-      store: PlantStore^,
+      store: PhotoStore^,
       contentStore: PhotoContentStore^,
       thumbnail: PhotoThumbnail^,
       idGen: IdGenerator^,

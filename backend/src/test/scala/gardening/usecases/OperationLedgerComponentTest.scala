@@ -396,14 +396,11 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
       nextId: () => String = () => "id-1"
   ) =
     val plantStore = new PlantStore:
-      override def addPlant(plant: Plant): AddPlantResult                          = fail("operations must not add plants")
-      override def getPlants(status: PlantStatus): GetPlantsResult                 = fail("operations must not list plants")
-      override def getArchivedCount: ArchivedCountResult                           = fail("operations must not count plants")
-      override def getPlant(plant: PlantId): GetPlantResult                        = getPlantResult
-      override def updatePlant(plant: Plant): UpdatePlantResult                    = fail("operations must not update plants")
-      override def addPhoto(photo: PlantPhoto): AddPhotoResult                     = fail("operations must not add photos")
-      override def removePhoto(photo: PhotoId): RemovePhotoResult                  = fail("operations must not remove photos")
-      override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult = fail("operations must not list photos")
+      override def addPlant(plant: Plant): AddPlantResult          = fail("operations must not add plants")
+      override def getPlants(status: PlantStatus): GetPlantsResult = fail("operations must not list plants")
+      override def getArchivedCount: ArchivedCountResult           = fail("operations must not count plants")
+      override def getPlant(plant: PlantId): GetPlantResult        = getPlantResult
+      override def updatePlant(plant: Plant): UpdatePlantResult    = fail("operations must not update plants")
     val store = new OperationStore:
       override def getOperations(plant: PlantId, window: OperationWindow): GetOperationsResult =
         refs.requestedOperationWindows.updateAndGet(_ :+ (plant -> window)).pipe(_ => getOperationsResult)

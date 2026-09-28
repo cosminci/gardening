@@ -3,7 +3,7 @@ package gardening.usecases
 import gardening.domain.*
 import gardening.domain.plants.*
 import gardening.domain.plants.PhotoMediaType.*
-import gardening.ports.{PlantStore, PhotoContentStore}
+import gardening.ports.{PhotoStore, PhotoContentStore}
 import gardening.capabilities.TestImplicits
 import io.github.iltotore.iron.autoRefine
 import scodec.bits.ByteVector
@@ -217,13 +217,8 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
       thumbnailResult: ThumbnailDerivationResult = ThumbnailDerivationResult.Derived(expectedThumbnail),
       captureTime: Instant = date
   ) =
-    val store = new PlantStore:
-      override def addPlant(plant: Plant): AddPlantResult          = fail("photos must not add plants")
-      override def getPlants(status: PlantStatus): GetPlantsResult = fail("photos must not read plants")
-      override def getArchivedCount: ArchivedCountResult           = fail("photos must not count plants")
-      override def getPlant(plant: PlantId): GetPlantResult        = fail("photos must not read a single plant")
-      override def updatePlant(plant: Plant): UpdatePlantResult    = fail("photos must not update plants")
-      override def addPhoto(photo: PlantPhoto): AddPhotoResult     =
+    val store = new PhotoStore:
+      override def addPhoto(photo: PlantPhoto): AddPhotoResult =
         refs.addedPhotos.updateAndGet(_ :+ photo).pipe(_ => addPhotoResult)
       override def removePhoto(photo: PhotoId): RemovePhotoResult =
         refs.removedPhotoIds.updateAndGet(_ :+ photo).pipe(_ => removePhotoResult)
