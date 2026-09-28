@@ -30,7 +30,7 @@ The app's layout and dialogs were designed for a desktop-sized screen only. This
 
 ## Doc Sync
 
-- None. This changes only presentation-layer rendering and interaction; no living doc in this repo records frontend UI/UX conventions, and no domain, contract, or architecture fact changes.
+- `specs/design.md`, watering-attention bullet: the "each sheet sliding independently" sentence described only the wide-screen nested-dialog behavior; updated to also state the narrow-touch behavior (outer editor's header stays visible, content stays rendered underneath, instead of sliding away).
 
 ## Out of Scope
 
