@@ -229,7 +229,7 @@ select:disabled {
   background: #e7b54f;
 }
 
-@media (max-width: 28rem) {
+@container (max-width: 28rem) {
   .choice-grid {
     grid-template-columns: 1fr;
   }
@@ -239,5 +239,27 @@ select:disabled {
   .inline-icon-action {
     width: 1.9rem;
     height: 1.9rem;
+  }
+
+  .pesticide-choice {
+    grid-template-columns: 1.4rem minmax(0, 1fr) repeat(2, 1.4rem);
+    gap: 0.25rem;
+  }
+
+  .pesticide-choice .pesticide-type {
+    width: 1.4rem;
+    height: 1.4rem;
+    font-size: 0.6rem;
+  }
+
+  .pesticide-choice .choice span {
+    padding: 0.45rem 0.35rem;
+    font-size: 0.68rem;
+  }
+
+  .pesticide-choice .info-control__trigger,
+  .pesticide-choice .inline-icon-action {
+    width: 1.4rem;
+    height: 1.4rem;
   }
 }

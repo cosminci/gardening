@@ -34,7 +34,7 @@
 }
 
 .sheet-layer--editing .sheet--operation {
-  transform: translateX(-31rem);
+  transform: translateX(-100%);
 }
 
 .sheet--catalog-editor {
@@ -55,11 +55,18 @@
 }
 
 .sheet-collapse__icon {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-right: 0.14rem solid currentcolor;
-  border-bottom: 0.14rem solid currentcolor;
-  transform: rotate(-45deg);
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  background-color: currentcolor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 4 15 12 9 20'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 4 15 12 9 20'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .inline-alert {
@@ -74,5 +81,41 @@
   .sheet-layer--editing .sheet--operation {
     transform: translateX(-100%);
     visibility: hidden;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) {
+  .sheet {
+    width: 50%;
+  }
+}
+
+@media (max-width: 46rem) and (orientation: portrait) {
+  .sheet {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 1rem 1rem 0 0;
+    box-shadow: 0 -8px 30px rgb(14 37 28 / 20%);
+    transition-duration: 260ms;
+  }
+
+  .sheet--entering {
+    animation: sheet-enter-up 260ms ease;
+  }
+
+  .sheet-layer .sheet--closing {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes sheet-enter-up {
+  from {
+    transform: translateY(100%);
   }
 }

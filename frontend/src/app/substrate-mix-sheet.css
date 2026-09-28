@@ -10,7 +10,7 @@
 
 .substrate-mix-sheet__header {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 0.4rem;
@@ -88,5 +88,15 @@
 @media (max-width: 28rem) {
   .substrate-mix-sheet {
     padding: 1.25rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .substrate-mix-sheet {
+    padding: 1rem;
+  }
+
+  .substrate-mix-sheet__header h2 {
+    font-size: 1.3rem;
   }
 }

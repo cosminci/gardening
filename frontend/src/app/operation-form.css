@@ -10,11 +10,12 @@
   display: grid;
   align-content: start;
   gap: 1.15rem;
+  container-type: inline-size;
 }
 
 .operation-form__header {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 0.4rem;
@@ -58,5 +59,15 @@
 @media (max-width: 28rem) {
   .operation-form {
     padding: 1.25rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .operation-form {
+    padding: 1rem;
+  }
+
+  .operation-form__header h2 {
+    font-size: 1.3rem;
   }
 }
