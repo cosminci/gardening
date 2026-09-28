@@ -1,6 +1,8 @@
 package gardening.domain.plants
 
 import scodec.bits.ByteVector
+import squants.information.Information
+import squants.information.InformationConversions.*
 
 import java.awt.{Color, RenderingHints}
 import java.awt.image.{BufferedImage, ImageObserver}
@@ -16,7 +18,7 @@ object PhotoThumbnail:
 
   def make: PhotoThumbnail = LivePhotoThumbnail
 
-  private val maxBytes = 102400
+  val maxThumbnailSize: Information = 100.kibibytes
 
   private val ladder: Vector[(Int, Float)] =
     Vector((1024, 0.8f), (800, 0.8f), (800, 0.6f), (600, 0.6f), (600, 0.4f), (400, 0.4f))
@@ -30,11 +32,14 @@ object PhotoThumbnail:
         val attempts = ladder.map((maxDim, quality) => encodeJpeg(decoded, maxDim, quality))
         val smallest =
           attempts.foldLeft(Array.emptyByteArray)((soFar, attempt) => if soFar.isEmpty || attempt.length < soFar.length then attempt else soFar)
-        val chosen = attempts.find(_.length <= maxBytes).getOrElse(smallest)
+        val chosen = attempts.find(_.length <= maxThumbnailSize.toBytes).getOrElse(smallest)
         PhotoContent(ByteVector(chosen), PhotoMediaType.Jpeg)
       }.fold(ThumbnailDerivationResult.DerivationFailed.apply, ThumbnailDerivationResult.Derived.apply)
 
+    // drawImage never calls back into this for a complete, non-progressively-loaded BufferedImage.
+    // $COVERAGE-OFF$
     private val noopObserver: ImageObserver = (_, _, _, _, _, _) => true
+    // $COVERAGE-ON$
 
     @SuppressWarnings(Array("org.wartremover.warts.Null"))
     private def encodeJpeg(source: BufferedImage, maxDim: Int, quality: Float): Array[Byte] =

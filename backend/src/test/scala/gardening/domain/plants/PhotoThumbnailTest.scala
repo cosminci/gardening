@@ -12,15 +12,14 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PhotoThumbnailTest extends FunSuite:
 
-  private val maxThumbnailBytes = 102400
-
   test("should derive a jpeg thumbnail at or under the 100KB target from a small original"):
     val original = solidImage(width = 300, height = 200, color = Color.BLUE).pipe(image => encode(image, format = "png"))
 
     PhotoThumbnail.make.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
+        val actualBytes = thumbnail.bytes.length
         assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
-        assert(thumbnail.bytes.length <= maxThumbnailBytes, s"expected <= $maxThumbnailBytes bytes, got ${thumbnail.bytes.length}")
+        assert(actualBytes <= PhotoThumbnail.maxThumbnailSize.toBytes, s"expected <= ${PhotoThumbnail.maxThumbnailSize}, got $actualBytes bytes")
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
   test("should derive a jpeg thumbnail at or under the 100KB target from a large, hard-to-compress original"):
@@ -28,8 +27,9 @@ class PhotoThumbnailTest extends FunSuite:
 
     PhotoThumbnail.make.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
+        val actualBytes = thumbnail.bytes.length
         assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
-        assert(thumbnail.bytes.length <= maxThumbnailBytes, s"expected <= $maxThumbnailBytes bytes, got ${thumbnail.bytes.length}")
+        assert(actualBytes <= PhotoThumbnail.maxThumbnailSize.toBytes, s"expected <= ${PhotoThumbnail.maxThumbnailSize}, got $actualBytes bytes")
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
   test("should flatten a transparent original onto an opaque background"):

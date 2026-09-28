@@ -13,6 +13,7 @@ import gardening.ports.OperationLedgerMetricsApi
 import gardening.usecases.PesticideCatalog
 import gardening.ports.PesticideCatalogMetricsApi
 import gardening.usecases.PlantManager
+import gardening.usecases.PhotoManager
 import gardening.ports.PlantManagerMetricsApi
 import gardening.usecases.SubstrateCatalog
 import gardening.ports.SubstrateCatalogMetricsApi
@@ -23,6 +24,7 @@ import java.nio.file.Path
 
 final case class Programs(
     plants: PlantManager,
+    photos: PhotoManager,
     operations: OperationLedger,
     plantAttentionMonitor: PlantAttentionMonitor,
     substrateCatalog: SubstrateCatalog,
@@ -50,7 +52,8 @@ object Programs:
       forkDiscard:
         Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
-        PlantManager.make(using plantStore, contentStore, PhotoThumbnail.make, substrateStore, UuidIdGenerator, SystemClock, plantLock),
+        PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
+        PhotoManager.make(using plantStore, contentStore, PhotoThumbnail.make, UuidIdGenerator, SystemClock),
         OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),

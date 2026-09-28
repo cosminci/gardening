@@ -4,7 +4,7 @@ import cats.syntax.either.*
 import cats.syntax.eq.*
 import gardening.domain.*
 import gardening.domain.plants.*
-import gardening.usecases.PlantManager
+import gardening.usecases.PhotoManager
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
@@ -88,7 +88,7 @@ object PhotoApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(addPhotoEndpoint, getPhotosEndpoint, removePhotoEndpoint, photoContentEndpoint)
 
-  def serverEndpoints(using plants: PlantManager): List[ServerEndpoint[Any, Identity]] =
+  def serverEndpoints(using photos: PhotoManager): List[ServerEndpoint[Any, Identity]] =
     List(
       addPhotoEndpoint.handle: (plantId, upload) =>
         val part = upload.file
@@ -99,14 +99,14 @@ object PhotoApi:
             sniffPhotoMediaType(bytes) match
               case None            => unsupportedType.asLeft
               case Some(mediaType) =>
-                plants.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType)) match
+                photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType)) match
                   case AddPhotoResult.Added(photo) => AddedPhoto(photo.id.value.toString, photo.capturedAt).asRight
                   case AddPhotoResult.PlantMissing => plantMissing.asLeft
                   case AddPhotoResult.AddFailed(_) => ApiError("photo could not be added").asLeft
         finally part.body.delete(): Unit
       ,
       getPhotosEndpoint.handle: (plantId, offset, pageSize) =>
-        plants.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
+        photos.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
           case GetPhotosResult.Read(page) =>
             PhotoPageResponse(
               page.photos.map(p => PhotoItem(p.id.value.toString, p.capturedAt)),
@@ -114,12 +114,12 @@ object PhotoApi:
             ).asRight
           case GetPhotosResult.ReadFailed(_) => ApiError("photos could not be read").asLeft,
       removePhotoEndpoint.handle: photoId =>
-        plants.removePhoto(PhotoId(UUID.fromString(photoId))) match
+        photos.removePhoto(PhotoId(UUID.fromString(photoId))) match
           case RemovePhotoResult.Removed(_)      => ().asRight
           case RemovePhotoResult.PhotoMissing    => photoMissing.asLeft
           case RemovePhotoResult.RemoveFailed(_) => ApiError("photo could not be removed").asLeft,
       photoContentEndpoint.handle: (photoId, variant) =>
-        plants.getPhotoContent(PhotoId(UUID.fromString(photoId)), variant) match
+        photos.getPhotoContent(PhotoId(UUID.fromString(photoId)), variant) match
           case PhotoReadResult.Read(content) =>
             val contentType = content.mediaType match
               case PhotoMediaType.Jpeg => "image/jpeg"
@@ -163,8 +163,11 @@ object PhotoApi:
     case "thumbnail" => DecodeResult.Value(PhotoVariant.Thumbnail)
     case other       => DecodeResult.Error(other, IllegalArgumentException("variant must be original or thumbnail"))
   } {
+    // Only tapir's own doc/default-value generation ever calls this reverse direction, never a request.
+    // $COVERAGE-OFF$
     case PhotoVariant.Original  => "original"
     case PhotoVariant.Thumbnail => "thumbnail"
+    // $COVERAGE-ON$
   }
 
   // Photo timestamps are server-assigned and output-only in JSON bodies.

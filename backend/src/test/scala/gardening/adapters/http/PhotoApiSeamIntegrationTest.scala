@@ -2,7 +2,7 @@ package gardening.adapters.http
 
 import gardening.domain.*
 import gardening.domain.plants.*
-import gardening.usecases.PlantManager
+import gardening.usecases.PhotoManager
 import gardening.domain.plants.PhotoMediaType.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
@@ -138,12 +138,17 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(jpegResponse.header(HeaderNames.ContentType), Some("image/jpeg"))
     assertEquals(pngResponse.header(HeaderNames.ContentType), Some("image/png"))
 
-  test("should default to the original variant and request the thumbnail variant explicitly"):
+  test("should default to the original variant and accept both variants requested explicitly"):
     val refs          = Refs()
     val defaultServer = buildPhotoApi(refs, getContentResult = PhotoReadResult.Read(PhotoContent(ByteVector(jpegBytes), Jpeg)))
     val _             = get(s"/photos/${photoUuid}/content", defaultServer)
+    val _             = get(s"/photos/${photoUuid}/content?variant=original", defaultServer)
     val _             = get(s"/photos/${photoUuid}/content?variant=thumbnail", defaultServer)
-    assertEquals(refs.requestedVariants.get(), Vector(PhotoVariant.Original, PhotoVariant.Thumbnail))
+    assertEquals(refs.requestedVariants.get(), Vector(PhotoVariant.Original, PhotoVariant.Original, PhotoVariant.Thumbnail))
+
+  test("should return 400 for an unrecognized variant"):
+    val server = buildPhotoApi()
+    assertEquals(get(s"/photos/${photoUuid}/content?variant=huge", server).code, StatusCode.BadRequest)
 
   test("should return 404 when photo content is missing"):
     val server   = buildPhotoApi(getContentResult = PhotoReadResult.ContentMissing)
@@ -162,20 +167,15 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       requestedVariants: AtomicReference[Vector[PhotoVariant]] = AtomicReference(Vector.empty)
   )
 
-  private def fakePlants(
+  private def fakePhotos(
       refs: Refs,
       addPhotoResult: AddPhotoResult,
       removePhotoResult: RemovePhotoResult,
       getPhotosResult: GetPhotosResult,
       getContentResult: PhotoReadResult
-  ): PlantManager =
-    new PlantManager:
-      override def createPlant(species: Species, maybeNickname: Option[Nickname], location: Location, substrate: Substrate): CreatePlantResult =
-        fail("photo HTTP must not create plants")
-      override def getPlants(status: PlantStatus): GetPlantsResult                                  = fail("photo HTTP must not read plants")
-      override def getArchivedCount: ArchivedCountResult                                            = fail("photo HTTP must not count plants")
-      override def editPlant(plant: PlantId, revise: PlantDetails => PlantDetails): EditPlantResult = fail("photo HTTP must not edit plants")
-      override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult                  =
+  ): PhotoManager =
+    new PhotoManager:
+      override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult =
         refs.addedContents.updateAndGet(_ :+ content).pipe(_ => addPhotoResult)
       override def removePhoto(photo: PhotoId): RemovePhotoResult =
         refs.removedIds.updateAndGet(_ :+ photo).pipe(_ => removePhotoResult)
@@ -191,9 +191,9 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       getPhotosResult: GetPhotosResult = GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)),
       getContentResult: PhotoReadResult = PhotoReadResult.ContentMissing
   ) =
-    val plants = fakePlants(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
+    val photos = fakePhotos(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(using plants))
+      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(using photos))
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]
@@ -205,10 +205,10 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       getPhotosResult: GetPhotosResult = GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)),
       getContentResult: PhotoReadResult = PhotoReadResult.ContentMissing
   )(action: Int => A): A =
-    val plants = fakePlants(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
+    val photos = fakePhotos(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
     supervised:
       val binding =
-        NettySyncServer().host("127.0.0.1").port(0).addEndpoints(PhotoApi.serverEndpoints(using plants)).start()
+        NettySyncServer().host("127.0.0.1").port(0).addEndpoints(PhotoApi.serverEndpoints(using photos)).start()
       try action(binding.port)
       finally binding.stop()
 
