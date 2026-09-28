@@ -97,6 +97,13 @@ export const formatLocalDateTime = (value: string) => {
   return `${formatLocalDate(value)} ${hours}:${minutes}`;
 };
 
+export const formatShortDate = (value: string) => {
+  const date = new Date(value);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}.${month}`;
+};
+
 export const formatRecentDate = (value: string) => {
   const date = new Date(value);
   const day = date.getDate();

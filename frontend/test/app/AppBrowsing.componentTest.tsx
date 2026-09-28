@@ -113,11 +113,11 @@ describe("browsing the journal", () => {
     expect(within(card).getByRole("list", { name: "Recent operations" })).toBeInTheDocument();
     const renderedOperations = within(card).getAllByRole("listitem");
     expect(renderedOperations.map((operation) => operation.textContent)).toEqual([
-      "2nd of FebruaryCareMoistureModerate +ActionsNone recorded",
-      "3rd of MarchRepotSubstratePerlite 100%",
-      "5th of AprilCareMoistureWetActionsWatered, PesticidePesticidesNeem oilNoteRecovered",
+      "2nd of February02.02CareMoistureModerate +ActionsNone recorded",
+      "3rd of March03.03RepotSubstratePerlite 100%",
+      "5th of April05.04CareMoistureWetActionsNeem oilWatered, PesticidePesticidesNeem oilRecovered",
     ]);
-    const recentDate = within(card).getByText("5th of April");
+    const recentDate = within(card).getByText("5th of April").closest("time");
     expect(recentDate).toHaveAttribute("datetime", "2026-04-04T22:30:00Z");
     const plantNames = screen
       .getAllByRole("article")

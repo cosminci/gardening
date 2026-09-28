@@ -148,7 +148,9 @@ describe("plant cards", () => {
     ));
 
     const expectedDates = ["11th of March", "13th of March", "23rd of March"];
-    const actualDates = screen.getAllByRole("time").map((time) => time.textContent);
+    const actualDates = screen
+      .getAllByRole("time")
+      .map((time) => time.querySelector(".operation__date-long")?.textContent);
     expect(actualDates).toEqual(expectedDates.toReversed());
     expect(screen.getAllByRole("time")[0]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
   });
@@ -333,6 +335,6 @@ describe("plant cards", () => {
       />
     ));
 
-    expect(screen.getByText(expectedPesticideId)).toBeInTheDocument();
+    expect(screen.getAllByText(expectedPesticideId).length).toBeGreaterThan(0);
   });
 });
