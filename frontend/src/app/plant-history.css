@@ -61,6 +61,8 @@
 
 .operation__header .inline-icon-action--edit {
   flex-shrink: 0;
+  width: 1.65rem;
+  height: 1.65rem;
 }
 
 .operation__kind {
@@ -292,6 +294,12 @@
 @media (prefers-reduced-motion: reduce) {
   .operation-history__disclosure {
     transition-duration: 0.01ms;
+  }
+}
+
+@media (pointer: coarse) {
+  .operation-history__toggle {
+    min-height: 1.9rem;
   }
 }
 
