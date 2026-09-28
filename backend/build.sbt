@@ -17,6 +17,7 @@ val slf4jV      = "2.0.20"
 val oxV         = "1.0.8"
 val scodecV     = "1.2.5"
 val prometheusV = "1.3.1"
+val squantsV    = "1.8.3"
 
 // Match the packaged runtime's JVM flags (see image.ts): SQLite JDBC loads a native library, and
 // Scala 3's LazyVals runtime still uses sun.misc.Unsafe. Without these, every JVM launched outside
@@ -116,6 +117,7 @@ lazy val root = (project in file("."))
       "io.circe"                      %% "circe-core"                % circeV,
       "io.circe"                      %% "circe-parser"              % circeV,
       "org.scodec"                    %% "scodec-bits"               % scodecV,
+      "org.typelevel"                 %% "squants"                  % squantsV,
       "dev.optics"                    %% "monocle-macro"             % monocleV,
       "com.softwaremill.ox"           %% "core"                      % oxV,
       "org.slf4j"                      % "slf4j-simple"               % slf4jV % Runtime,

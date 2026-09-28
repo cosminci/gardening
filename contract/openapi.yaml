@@ -860,6 +860,12 @@ paths:
         required: true
         schema:
           type: string
+      - name: variant
+        in: query
+        required: false
+        schema:
+          default: original
+          type: string
       responses:
         '200':
           description: ''
