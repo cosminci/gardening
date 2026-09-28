@@ -111,14 +111,16 @@
    * Reserve the first sheet's header height (padding + icon-action row +
    * divider) on the second sheet so the first stays visible above it
    * instead of the desktop side-by-side reveal, which has no room to work
-   * with once both sheets are full width.
+   * with once both sheets are full width. This query isn't pointer-gated
+   * (the invariant requires narrow non-touch to match narrow touch), so
+   * the reserved height covers the taller non-touch header padding too.
    */
   .sheet-layer:has(.sheet--catalog-editor) .sheet--operation {
     transform: none;
   }
 
   .sheet--catalog-editor {
-    top: 4.5rem;
+    top: 5.25rem;
   }
 }
 
