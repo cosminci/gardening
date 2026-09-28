@@ -5,21 +5,11 @@
 
 **Date:** 2026-09-28
 
-**Grounded in:** Iterative testing against the running app from a real phone on the same network, across both orientations and against real plant data, found concrete, non-obvious defects no amount of code reading surfaced up front — most persistently, that width-only responsive conditions miss a phone held in landscape (its width regularly exceeds narrow breakpoints tuned for portrait), and that a dialog's own close-time animation state is not the same state its layout rules were keyed to, which silently outweighed every subsequent rule written to fix it. Both patterns recurred across unrelated parts of this change and are the concrete reason a spec could not have been written first.
-
-Make every page surface — chrome, cards, operation history, and every dialog — respond to touch capability, orientation, and available width independently, so the app is as usable on a phone as it already is on a laptop.
+**Grounded in:** Testing the running app on a real phone, in both orientations, surfaced defects code review alone did not — width-only breakpoints that miss a landscape phone's actual width, and dialogs that broke specifically during their close transition. That is why this spec follows a spike rather than preceding it.
 
 ## What & Why
 
-Today, layout and interaction across the page's chrome, a plant's card actions, its operation history, and every modal dialog were designed and tuned for a laptop-sized screen; the few conditions that varied anything reacted to viewport width alone. On a phone this produced header and list content wider than the screen, action icons and touch targets sized for a mouse, an operation history that read poorly at a glance, and dialogs that behaved like a fixed-width desktop side panel regardless of orientation or how much space was actually available.
-
-Now, each surface adapts along whichever condition actually governs it — touch capability, current orientation, or available width — independently of the others, rather than lumping every "mobile" case into one check.
-
-## Alternatives Considered
-
-- Hiding an already-open dialog entirely while a dialog opened from within it is on screen (matching this app's original mobile behavior before this change): rejected — testing showed this produces a visible flash of the page behind the dialog stack while closing, and drops the first dialog's own identity (its title) from view while a second one is open.
-- A single touch-input condition standing in for every mobile-specific rule, including ones that are really about available width: rejected — a phone held sideways reports a width many "narrow-screen" rules don't catch, reproducing the same overflow and mis-sizing this change fixes elsewhere; touch capability and available width vary independently and are treated as independent conditions throughout.
-- Reacting to a surface's own rendered width rather than the screen's, everywhere a width condition exists: rejected beyond the one selection list that actually needs it — every other affected surface renders in exactly one place today, where its own width and the screen's width always move together, so there is no independent case for the rest to get wrong.
+The app's layout and dialogs were designed for a desktop-sized screen only. This change makes the app mobile-friendly: touch-comfortable target sizing, a layout that fits within a phone's width in either orientation, an operation history that reads at a glance via icons instead of dense text, and dialogs that behave like bottom sheets on a phone instead of a fixed desktop side panel.
 
 ## Invariants
 
