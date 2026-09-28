@@ -21,16 +21,13 @@ to one on narrow screens).
 
 Showering is a plain member of the action-type set, like fertilizing or pruning: no attached data.
 
-## Invariants
-
-- Watering-cadence measurement derives from watering actions only; showering doesn't affect it
-  (maintainer decision — a shower doesn't necessarily hydrate the substrate).
-
 ## Acceptance Criteria
 
 - Showering is selectable alongside the other four actions when creating/editing an operation, and
   appears in the action summary and icon rendering wherever the other four do, with its own icon in
   watering's color family.
+- Showering does not affect watering-cadence measurement, which continues to derive from watering
+  actions only.
 - An existing operation with no showering action still displays and edits correctly.
 - The moisture reading appears above the action selection on the operation form.
 - The action selection seats three per row at any width/orientation; the pesticide list beneath it
