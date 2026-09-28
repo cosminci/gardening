@@ -75,7 +75,7 @@ export const JournalHeader: Component<JournalHeaderProps> = (props) => {
             class="plant-search"
             type="search"
             aria-label="Search plants by nickname, species, or location"
-            placeholder="Search plants…"
+            placeholder="Search…"
             value={props.searchQuery}
             onInput={(event) => {
               props.onSearchQuery(event.currentTarget.value);
