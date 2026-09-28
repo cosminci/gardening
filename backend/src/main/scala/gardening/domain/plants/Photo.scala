@@ -21,6 +21,9 @@ final case class PhotoWindow(offset: PhotoOffset, size: PhotoPageSize)
 final case class PhotoPage(photos: Vector[PlantPhoto], hasNextPage: Boolean)
 
 enum PhotoMediaType:
-  case Jpeg, Png, Webp
+  case Jpeg, Png
+
+enum PhotoVariant:
+  case Original, Thumbnail
 
 final case class PhotoContent(bytes: ByteVector, mediaType: PhotoMediaType)

@@ -51,10 +51,10 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       uploadPhoto(plantId.value, pngBytes, "image/png")
     assertEquals(response.code, StatusCode.Created)
 
-  test("should upload a webp photo"):
-    val response = withLivePhotoServer(addPhotoResult = AddPhotoResult.Added(photo)):
+  test("should reject a webp photo as an unsupported media type"):
+    val response = withLivePhotoServer():
       uploadPhoto(plantId.value, webpBytes, "image/webp")
-    assertEquals(response.code, StatusCode.Created)
+    assertEquals(response.code, StatusCode.UnsupportedMediaType)
 
   test("should accept image/jpg as a jpeg alias"):
     val response = withLivePhotoServer(addPhotoResult = AddPhotoResult.Added(photo)):
@@ -66,7 +66,7 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       uploadPhoto(plantId.value, Array[Byte](1, 2), "image/bmp")
     assertEquals(
       response.code                   -> jsonBody(response),
-      StatusCode.UnsupportedMediaType -> json("""{"message":"unsupported media type: only image/jpeg, image/png, and image/webp are accepted"}""")
+      StatusCode.UnsupportedMediaType -> json("""{"message":"unsupported media type: only image/jpeg and image/png are accepted"}""")
     )
 
   test("should reject a photo exceeding the 20 MiB size limit with 413"):
@@ -127,20 +127,23 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
   test("should return photo content with the correct Content-Type header"):
     val jpegContent = PhotoContent(ByteVector(jpegBytes), Jpeg)
     val pngContent  = PhotoContent(ByteVector(pngBytes), Png)
-    val webpContent = PhotoContent(ByteVector(webpBytes), Webp)
 
     val jpegServer = buildPhotoApi(getContentResult = PhotoReadResult.Read(jpegContent))
     val pngServer  = buildPhotoApi(getContentResult = PhotoReadResult.Read(pngContent))
-    val webpServer = buildPhotoApi(getContentResult = PhotoReadResult.Read(webpContent))
 
     val jpegResponse = get(s"/photos/${photoUuid}/content", jpegServer)
     val pngResponse  = get(s"/photos/${photoUuid}/content", pngServer)
-    val webpResponse = get(s"/photos/${photoUuid}/content", webpServer)
 
     assertEquals(jpegResponse.code, StatusCode.Ok)
     assertEquals(jpegResponse.header(HeaderNames.ContentType), Some("image/jpeg"))
     assertEquals(pngResponse.header(HeaderNames.ContentType), Some("image/png"))
-    assertEquals(webpResponse.header(HeaderNames.ContentType), Some("image/webp"))
+
+  test("should default to the original variant and request the thumbnail variant explicitly"):
+    val refs          = Refs()
+    val defaultServer = buildPhotoApi(refs, getContentResult = PhotoReadResult.Read(PhotoContent(ByteVector(jpegBytes), Jpeg)))
+    val _             = get(s"/photos/${photoUuid}/content", defaultServer)
+    val _             = get(s"/photos/${photoUuid}/content?variant=thumbnail", defaultServer)
+    assertEquals(refs.requestedVariants.get(), Vector(PhotoVariant.Original, PhotoVariant.Thumbnail))
 
   test("should return 404 when photo content is missing"):
     val server   = buildPhotoApi(getContentResult = PhotoReadResult.ContentMissing)
@@ -155,7 +158,8 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
   private case class Refs(
       addedContents: AtomicReference[Vector[PhotoContent]] = AtomicReference(Vector.empty),
       removedIds: AtomicReference[Vector[PhotoId]] = AtomicReference(Vector.empty),
-      requestedWindows: AtomicReference[Vector[PhotoWindow]] = AtomicReference(Vector.empty)
+      requestedWindows: AtomicReference[Vector[PhotoWindow]] = AtomicReference(Vector.empty),
+      requestedVariants: AtomicReference[Vector[PhotoVariant]] = AtomicReference(Vector.empty)
   )
 
   private def fakePlants(
@@ -177,7 +181,8 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
         refs.removedIds.updateAndGet(_ :+ photo).pipe(_ => removePhotoResult)
       override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult =
         refs.requestedWindows.updateAndGet(_ :+ window).pipe(_ => getPhotosResult)
-      override def getPhotoContent(photo: PhotoId): PhotoReadResult = getContentResult
+      override def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult =
+        refs.requestedVariants.updateAndGet(_ :+ variant).pipe(_ => getContentResult)
 
   private def buildPhotoApi(
       refs: Refs = Refs(),

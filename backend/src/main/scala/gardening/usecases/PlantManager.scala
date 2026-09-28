@@ -22,7 +22,7 @@ trait PlantManager:
   def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult
   def removePhoto(photo: PhotoId): RemovePhotoResult
   def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult
-  def getPhotoContent(photo: PhotoId): PhotoReadResult
+  def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult
 
 object PlantManager:
 
@@ -108,17 +108,20 @@ object PlantManager:
         case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
 
     override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult =
-      val photo = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plant, clock.now())
-      contentStore.put(photo.id, content) match
-        case PhotoWriteResult.WriteFailed(reason) =>
-          AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
-        case PhotoWriteResult.Written =>
-          store.addPhoto(photo) match
-            case result @ AddPhotoResult.Added(added) =>
-              log.info(s"photo added $added mediaType=${content.mediaType}")
-              result
-            case AddPhotoResult.PlantMissing      => compensateContentDeleteAfterMissingPlant(photo.id)
-            case AddPhotoResult.AddFailed(reason) => compensateContentDeleteAfterAddFailed(photo.id, reason)
+      PhotoThumbnail.derive(content) match
+        case Left(reason)     => AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
+        case Right(thumbnail) =>
+          val photo = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plant, clock.now())
+          contentStore.put(photo.id, content, thumbnail) match
+            case PhotoWriteResult.WriteFailed(reason) =>
+              AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
+            case PhotoWriteResult.Written =>
+              store.addPhoto(photo) match
+                case result @ AddPhotoResult.Added(added) =>
+                  log.info(s"photo added $added mediaType=${content.mediaType}")
+                  result
+                case AddPhotoResult.PlantMissing      => compensateContentDeleteAfterMissingPlant(photo.id)
+                case AddPhotoResult.AddFailed(reason) => compensateContentDeleteAfterAddFailed(photo.id, reason)
 
     override def removePhoto(photo: PhotoId): RemovePhotoResult =
       store.removePhoto(photo) match
@@ -137,7 +140,7 @@ object PlantManager:
         case GetPhotosResult.ReadFailed(reason) => log.error("get photos", reason)
         case _                                  => ()
 
-    override def getPhotoContent(photo: PhotoId): PhotoReadResult = contentStore.get(photo)
+    override def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult = contentStore.get(photo, variant)
 
     private def compensateContentDeleteAfterMissingPlant(photoId: PhotoId) =
       contentStore.delete(photoId) match

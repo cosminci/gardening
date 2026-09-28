@@ -13,9 +13,12 @@ import scodec.bits.ByteVector
 
 import language.experimental.captureChecking
 
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
+import javax.imageio.ImageIO
 import scala.util.chaining.scalaUtilChainingOps
 
 class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
@@ -49,10 +52,20 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
   private val seededComponents = Vector(perliteId, pineBarkId, sand3to5Id, lecaId)
     .map(id => SubstrateComponent(id, SubstrateComponentData(SubstrateComponentName(id.value.toString), none), SubstrateComponentStatus.Active))
 
-  private val photoUuid      = UUID.fromString("00000000-0000-4000-8002-000000000001")
-  private val photo          = PlantPhoto(PhotoId(photoUuid), plant.id, date)
-  private val photoContent   = PhotoContent(ByteVector(Array[Byte](1, 2, 3)), Jpeg)
+  private val photoUuid         = UUID.fromString("00000000-0000-4000-8002-000000000001")
+  private val photo             = PlantPhoto(PhotoId(photoUuid), plant.id, date)
+  private val photoContent      = decodableJpeg()
+  private val expectedThumbnail =
+    PhotoThumbnail.derive(photoContent).getOrElse(fail("test fixture photo must produce a thumbnail"))
   private val firstPhotoPage = PhotoWindow(offset = 0, size = 3)
+
+  // addPhoto now derives a real thumbnail via ImageIO, so this fixture must be genuinely
+  // decodable - unlike before, arbitrary placeholder bytes would fail derivation.
+  private def decodableJpeg(): PhotoContent =
+    val image  = BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB)
+    val output = ByteArrayOutputStream()
+    val _      = ImageIO.write(image, "jpg", output)
+    PhotoContent(ByteVector(output.toByteArray), Jpeg)
 
   test("should create an active plant with initial substrate independently of operations"):
     val refs    = Refs()
@@ -190,8 +203,20 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     ).addPhoto(plant.id, photoContent)
 
     assertEquals(result, AddPhotoResult.Added(expectedPhoto))
-    assertEquals(refs.putPhotoContents.get(), Vector(PhotoId(photoUuid) -> photoContent))
+    assertEquals(refs.putPhotoContents.get(), Vector((PhotoId(photoUuid), photoContent, expectedThumbnail)))
     assertEquals(refs.addedPhotos.get(), Vector(expectedPhoto))
+
+  test("should fail the upload without writing anything when a thumbnail cannot be derived"):
+    val undecodable = PhotoContent(ByteVector(Array[Byte](1, 2, 3)), Jpeg)
+    val refs        = Refs()
+
+    val result = buildManager(refs, nextId = () => photoUuid.toString).addPhoto(plant.id, undecodable)
+
+    result match
+      case AddPhotoResult.AddFailed(_) => ()
+      case other                       => fail(s"expected AddFailed, got $other")
+    assertEquals(refs.putPhotoContents.get(), Vector.empty)
+    assertEquals(refs.addedPhotos.get(), Vector.empty)
 
   test("should surface a content write failure without touching metadata"):
     val cause = RuntimeException("disk full")
@@ -342,22 +367,25 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(result, GetPhotosResult.ReadFailed(cause))
 
-  test("should pass photo content reads through to the content store"):
-    assertEquals(buildManager().getPhotoContent(photo.id), PhotoReadResult.Read(photoContent))
+  test("should pass photo content reads through to the content store, thumbnail variant included"):
+    val refs = Refs()
+    assertEquals(buildManager(refs).getPhotoContent(photo.id, PhotoVariant.Original), PhotoReadResult.Read(photoContent))
     assertEquals(
-      buildManager(getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id),
+      buildManager(getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id, PhotoVariant.Thumbnail),
       PhotoReadResult.ContentMissing
     )
+    assertEquals(refs.requestedContentVariants.get(), Vector(PhotoVariant.Original))
 
   final private case class Refs():
-    val createdPlants: AtomicReference[Vector[Plant]]                          = AtomicReference(Vector.empty)
-    val requestedStatuses: AtomicReference[Vector[PlantStatus]]                = AtomicReference(Vector.empty)
-    val updatedPlants: AtomicReference[Vector[Plant]]                          = AtomicReference(Vector.empty)
-    val addedPhotos: AtomicReference[Vector[PlantPhoto]]                       = AtomicReference(Vector.empty)
-    val removedPhotoIds: AtomicReference[Vector[PhotoId]]                      = AtomicReference(Vector.empty)
-    val requestedPhotoWindows: AtomicReference[Vector[(PlantId, PhotoWindow)]] = AtomicReference(Vector.empty)
-    val putPhotoContents: AtomicReference[Vector[(PhotoId, PhotoContent)]]     = AtomicReference(Vector.empty)
-    val deletedPhotoContentIds: AtomicReference[Vector[PhotoId]]               = AtomicReference(Vector.empty)
+    val createdPlants: AtomicReference[Vector[Plant]]                                    = AtomicReference(Vector.empty)
+    val requestedStatuses: AtomicReference[Vector[PlantStatus]]                          = AtomicReference(Vector.empty)
+    val updatedPlants: AtomicReference[Vector[Plant]]                                    = AtomicReference(Vector.empty)
+    val addedPhotos: AtomicReference[Vector[PlantPhoto]]                                 = AtomicReference(Vector.empty)
+    val removedPhotoIds: AtomicReference[Vector[PhotoId]]                                = AtomicReference(Vector.empty)
+    val requestedPhotoWindows: AtomicReference[Vector[(PlantId, PhotoWindow)]]           = AtomicReference(Vector.empty)
+    val putPhotoContents: AtomicReference[Vector[(PhotoId, PhotoContent, PhotoContent)]] = AtomicReference(Vector.empty)
+    val deletedPhotoContentIds: AtomicReference[Vector[PhotoId]]                         = AtomicReference(Vector.empty)
+    val requestedContentVariants: AtomicReference[Vector[PhotoVariant]]                  = AtomicReference(Vector.empty)
 
   private def buildManager(
       refs: Refs = Refs(),
@@ -393,9 +421,10 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
       override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult =
         refs.requestedPhotoWindows.updateAndGet(_ :+ (plant -> window)).pipe(_ => getPhotosResult)
     val contentStore = new PhotoContentStore:
-      override def put(photo: PhotoId, content: PhotoContent): PhotoWriteResult =
-        refs.putPhotoContents.updateAndGet(_ :+ (photo -> content)).pipe(_ => putContentResult)
-      override def get(photo: PhotoId): PhotoReadResult     = getContentResult
+      override def put(photo: PhotoId, original: PhotoContent, thumbnail: PhotoContent): PhotoWriteResult =
+        refs.putPhotoContents.updateAndGet(_ :+ (photo, original, thumbnail)).pipe(_ => putContentResult)
+      override def get(photo: PhotoId, variant: PhotoVariant): PhotoReadResult =
+        refs.requestedContentVariants.updateAndGet(_ :+ variant).pipe(_ => getContentResult)
       override def delete(photo: PhotoId): PhotoWriteResult =
         refs.deletedPhotoContentIds.updateAndGet(_ :+ photo).pipe(_ => deleteContentResult)
     val substrateStore = new SubstrateStore:

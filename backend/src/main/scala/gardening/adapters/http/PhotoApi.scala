@@ -33,7 +33,7 @@ object PhotoApi:
   private val plantMissing    = ApiError("plant not found")
   private val photoMissing    = ApiError("photo not found")
   private val contentMissing  = ApiError("photo content not found")
-  private val unsupportedType = ApiError("unsupported media type: only image/jpeg, image/png, and image/webp are accepted")
+  private val unsupportedType = ApiError("unsupported media type: only image/jpeg and image/png are accepted")
   private val photoTooLarge   = ApiError(s"photo exceeds the ${MaxPhotoBytes / (1024 * 1024)} MiB size limit")
   private val addPhotoErrors  = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
@@ -81,6 +81,7 @@ object PhotoApi:
 
   private val photoContentEndpoint =
     endpoint.get.in("photos" / path[String]("photoId") / "content")
+      .in(query[PhotoVariant]("variant").default(PhotoVariant.Original))
       .errorOut(photoContentErrors).out(byteArrayBody).out(header[String](HeaderNames.ContentType))
       .summary("Retrieve the raw photo content")
 
@@ -117,13 +118,12 @@ object PhotoApi:
           case RemovePhotoResult.Removed(_)      => ().asRight
           case RemovePhotoResult.PhotoMissing    => photoMissing.asLeft
           case RemovePhotoResult.RemoveFailed(_) => ApiError("photo could not be removed").asLeft,
-      photoContentEndpoint.handle: photoId =>
-        plants.getPhotoContent(PhotoId(UUID.fromString(photoId))) match
+      photoContentEndpoint.handle: (photoId, variant) =>
+        plants.getPhotoContent(PhotoId(UUID.fromString(photoId)), variant) match
           case PhotoReadResult.Read(content) =>
             val contentType = content.mediaType match
               case PhotoMediaType.Jpeg => "image/jpeg"
               case PhotoMediaType.Png  => "image/png"
-              case PhotoMediaType.Webp => "image/webp"
             (content.bytes.toArray, contentType).asRight
           case PhotoReadResult.ContentMissing => contentMissing.asLeft
           case PhotoReadResult.ReadFailed(_)  => ApiError("photo content could not be read").asLeft
@@ -137,7 +137,6 @@ object PhotoApi:
       bytes.length >= signature.size && bytes.take(signature.size).map(_ & 0xff).toSeq === signature.toSeq
     if prefixMatches(0xff, 0xd8) then Some(PhotoMediaType.Jpeg)
     else if prefixMatches(0x89, 0x50, 0x4e, 0x47) then Some(PhotoMediaType.Png)
-    else if prefixMatches(0x52, 0x49, 0x46, 0x46) then Some(PhotoMediaType.Webp)
     else None
 
   // Tapir validates query params with the plain codec, not this schema's inverse mapping.
@@ -158,6 +157,15 @@ object PhotoApi:
       case Some(size) => DecodeResult.Value(size)
       case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 24"))
   )(value => value).schema(photoPageSizeSchema)
+
+  private given TapirCodec.PlainCodec[PhotoVariant] = TapirCodec.string.mapDecode {
+    case "original"  => DecodeResult.Value(PhotoVariant.Original)
+    case "thumbnail" => DecodeResult.Value(PhotoVariant.Thumbnail)
+    case other       => DecodeResult.Error(other, IllegalArgumentException("variant must be original or thumbnail"))
+  } {
+    case PhotoVariant.Original  => "original"
+    case PhotoVariant.Thumbnail => "thumbnail"
+  }
 
   // Photo timestamps are server-assigned and output-only in JSON bodies.
   // $COVERAGE-OFF$
