@@ -29,16 +29,21 @@ object PlantManager:
   def make(using
       store: PlantStore^,
       contentStore: PhotoContentStore^,
+      thumbnail: PhotoThumbnail^,
       substrateStore: SubstrateStore^,
       idGen: IdGenerator^,
       clock: Clock^,
       lock: PlantUpdateLock^
-  )(using log: Logger^, metrics: PlantManagerMetricsApi^): PlantManager^{store, contentStore, substrateStore, idGen, clock, lock, log, metrics} =
+  )(using
+      log: Logger^,
+      metrics: PlantManagerMetricsApi^
+  ): PlantManager^{store, contentStore, thumbnail, substrateStore, idGen, clock, lock, log, metrics} =
     new LivePlants
 
   private class LivePlants(using
       store: PlantStore^,
       contentStore: PhotoContentStore^,
+      thumbnail: PhotoThumbnail^,
       substrateStore: SubstrateStore^,
       idGen: IdGenerator^,
       clock: Clock^,
@@ -108,11 +113,12 @@ object PlantManager:
         case UpdatePlantResult.UpdateFailed(reason) => EditPlantResult.EditFailed(reason).asLeft.tap(_ => log.error("edit plant", reason))
 
     override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult =
-      PhotoThumbnail.derive(content) match
-        case Left(reason)     => AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
-        case Right(thumbnail) =>
+      thumbnail.derive(content) match
+        case ThumbnailDerivationResult.DerivationFailed(reason) =>
+          AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
+        case ThumbnailDerivationResult.Derived(derivedThumbnail) =>
           val photo = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plant, clock.now())
-          contentStore.put(photo.id, content, thumbnail) match
+          contentStore.put(photo.id, content, derivedThumbnail) match
             case PhotoWriteResult.WriteFailed(reason) =>
               AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
             case PhotoWriteResult.Written =>

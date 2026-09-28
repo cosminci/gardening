@@ -3,6 +3,7 @@ package gardening.app
 import gardening.adapters.sqlite.{SqliteOperationStore, SqlitePesticideStore, SqlitePlantStore, SqliteSubstrateStore}
 import gardening.adapters.prometheus.*
 import gardening.adapters.file.FilePhotoContentStore
+import gardening.domain.plants.PhotoThumbnail
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.capabilities.{Logger, PlantUpdateLock}
 import gardening.usecases.PlantAttentionMonitor
@@ -49,7 +50,7 @@ object Programs:
       forkDiscard:
         Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
-        PlantManager.make(using plantStore, contentStore, substrateStore, UuidIdGenerator, SystemClock, plantLock),
+        PlantManager.make(using plantStore, contentStore, PhotoThumbnail.make, substrateStore, UuidIdGenerator, SystemClock, plantLock),
         OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),

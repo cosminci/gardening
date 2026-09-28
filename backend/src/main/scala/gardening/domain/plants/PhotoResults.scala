@@ -22,3 +22,7 @@ enum PhotoReadResult:
   case Read(content: PhotoContent)
   case ContentMissing
   case ReadFailed(reason: Throwable)
+
+enum ThumbnailDerivationResult:
+  case Derived(thumbnail: PhotoContent)
+  case DerivationFailed(reason: Throwable)

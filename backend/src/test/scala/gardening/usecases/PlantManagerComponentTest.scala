@@ -13,12 +13,9 @@ import scodec.bits.ByteVector
 
 import language.experimental.captureChecking
 
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
-import javax.imageio.ImageIO
 import scala.util.chaining.scalaUtilChainingOps
 
 class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
@@ -54,18 +51,9 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
 
   private val photoUuid         = UUID.fromString("00000000-0000-4000-8002-000000000001")
   private val photo             = PlantPhoto(PhotoId(photoUuid), plant.id, date)
-  private val photoContent      = decodableJpeg()
-  private val expectedThumbnail =
-    PhotoThumbnail.derive(photoContent).getOrElse(fail("test fixture photo must produce a thumbnail"))
-  private val firstPhotoPage = PhotoWindow(offset = 0, size = 3)
-
-  // addPhoto now derives a real thumbnail via ImageIO, so this fixture must be genuinely
-  // decodable - unlike before, arbitrary placeholder bytes would fail derivation.
-  private def decodableJpeg(): PhotoContent =
-    val image  = BufferedImage(2, 2, BufferedImage.TYPE_INT_RGB)
-    val output = ByteArrayOutputStream()
-    val _      = ImageIO.write(image, "jpg", output)
-    PhotoContent(ByteVector(output.toByteArray), Jpeg)
+  private val photoContent      = PhotoContent(ByteVector(Array[Byte](1, 2, 3)), Jpeg)
+  private val expectedThumbnail = PhotoContent(ByteVector(Array[Byte](9, 9, 9)), Jpeg)
+  private val firstPhotoPage    = PhotoWindow(offset = 0, size = 3)
 
   test("should create an active plant with initial substrate independently of operations"):
     val refs    = Refs()
@@ -207,14 +195,16 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.addedPhotos.get(), Vector(expectedPhoto))
 
   test("should fail the upload without writing anything when a thumbnail cannot be derived"):
-    val undecodable = PhotoContent(ByteVector(Array[Byte](1, 2, 3)), Jpeg)
-    val refs        = Refs()
+    val reason = RuntimeException("no image reader available for this content")
+    val refs   = Refs()
 
-    val result = buildManager(refs, nextId = () => photoUuid.toString).addPhoto(plant.id, undecodable)
+    val result = buildManager(
+      refs,
+      nextId = () => photoUuid.toString,
+      thumbnailResult = ThumbnailDerivationResult.DerivationFailed(reason)
+    ).addPhoto(plant.id, photoContent)
 
-    result match
-      case AddPhotoResult.AddFailed(_) => ()
-      case other                       => fail(s"expected AddFailed, got $other")
+    assertEquals(result, AddPhotoResult.AddFailed(reason))
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
     assertEquals(refs.addedPhotos.get(), Vector.empty)
 
@@ -402,6 +392,7 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
       putContentResult: PhotoWriteResult = PhotoWriteResult.Written,
       deleteContentResult: PhotoWriteResult = PhotoWriteResult.Written,
       getContentResult: PhotoReadResult = PhotoReadResult.Read(photoContent),
+      thumbnailResult: ThumbnailDerivationResult = ThumbnailDerivationResult.Derived(expectedThumbnail),
       captureTime: Instant = date
   ) =
     val store = new PlantStore:
@@ -427,6 +418,8 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
         refs.requestedContentVariants.updateAndGet(_ :+ variant).pipe(_ => getContentResult)
       override def delete(photo: PhotoId): PhotoWriteResult =
         refs.deletedPhotoContentIds.updateAndGet(_ :+ photo).pipe(_ => deleteContentResult)
+    val thumbnail = new PhotoThumbnail:
+      override def derive(original: PhotoContent): ThumbnailDerivationResult = thumbnailResult
     val substrateStore = new SubstrateStore:
       override def getSubstrateComponents: GetSubstrateComponentsResult                         = componentReadResult
       override def getSubstrateComponent(id: SubstrateComponentId): GetSubstrateComponentResult =
@@ -441,4 +434,4 @@ class PlantManagerComponentTest extends munit.FunSuite with TestImplicits:
         fail("plants must not write substrate mixes")
       override def deleteSubstrateMix(id: java.util.UUID): DeleteSubstrateMixResult =
         fail("plants must not delete substrate mixes")
-    PlantManager.make(using store, contentStore, substrateStore, () => nextId(), () => captureTime, PlantUpdateLock.make)
+    PlantManager.make(using store, contentStore, thumbnail, substrateStore, () => nextId(), () => captureTime, PlantUpdateLock.make)
