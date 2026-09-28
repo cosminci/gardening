@@ -6,6 +6,7 @@ interface InfoControlProps {
   readonly id: string;
   readonly label: string;
   readonly notes: JSX.Element | null;
+  readonly trigger?: JSX.Element;
 }
 
 export const InfoControl: Component<InfoControlProps> = (props) => {
@@ -35,7 +36,7 @@ export const InfoControl: Component<InfoControlProps> = (props) => {
           }
         }}
       >
-        i
+        {props.trigger ?? "i"}
       </button>
       <span id={props.id} class="info-control__content" role="tooltip">
         {props.notes ?? "No notes."}

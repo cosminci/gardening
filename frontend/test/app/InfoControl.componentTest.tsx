@@ -29,3 +29,17 @@ it("should explain when no information was recorded", () => {
 
   expect(screen.getByRole("tooltip")).toHaveTextContent("No notes.");
 });
+
+it("should render a caller-supplied trigger instead of the default label", () => {
+  render(() => (
+    <InfoControl
+      id="custom-trigger-info"
+      label="Pesticides applied"
+      notes="Neem oil."
+      trigger={<span data-testid="custom-trigger">glyph</span>}
+    />
+  ));
+
+  const trigger = screen.getByRole("button", { name: "Pesticides applied" });
+  expect(trigger).toContainElement(screen.getByTestId("custom-trigger"));
+});
