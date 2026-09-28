@@ -3,7 +3,10 @@ import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PlantPhotoClient } from "../../domain/PlantPhoto";
 
-export const photoContentUrl = (id: Journal.PhotoId): string => `/photos/${String(id)}/content`;
+export type PhotoVariant = "original" | "thumbnail";
+
+export const photoContentUrl = (id: Journal.PhotoId, variant: PhotoVariant): string =>
+  `/photos/${String(id)}/content?variant=${variant}`;
 
 export const makeHttpPlantPhotoClient = (
   fetch: (request: Request) => Promise<Response> = globalThis.fetch,

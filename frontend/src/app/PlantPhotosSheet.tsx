@@ -11,7 +11,7 @@ import "./plant-photos-sheet.css";
 
 const photosPageSize = 6;
 const maxUploadBytes = 20 * 1024 * 1024;
-const acceptedMimeTypes = ["image/jpeg", "image/png", "image/webp"] as const;
+const acceptedMimeTypes = ["image/jpeg", "image/png"] as const;
 
 interface PlantPhotosSheetProps {
   readonly plant: Journal.Plant;
@@ -85,7 +85,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
     setUploadError(undefined);
 
     if (!acceptedMimeTypes.includes(file.type as (typeof acceptedMimeTypes)[number])) {
-      setUploadError("Unsupported file type. Choose a JPEG, PNG, or WebP image.");
+      setUploadError("Unsupported file type. Choose a JPEG or PNG image.");
       input.value = "";
       return;
     }
@@ -183,7 +183,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
             <input
               class="photos-sheet__add-input"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png"
               aria-label="Choose a photo to upload"
               disabled={uploading()}
               onChange={(event) => void handleFileChange(event)}
@@ -250,7 +250,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
                             <div class="photo-thumb__img-wrap">
                               <img
                                 class="photo-thumb__img"
-                                src={photoContentUrl(photo.id)}
+                                src={photoContentUrl(photo.id, "thumbnail")}
                                 alt={`Photo from ${formatLocalDateTime(photo.capturedAt)}`}
                                 onClick={() => {
                                   openFullsize(photo);
@@ -384,7 +384,11 @@ const PhotoOverlay: Component<{
         >
           ×
         </button>
-        <img class="photo-overlay__image" src={photoContentUrl(props.photo.id)} alt="" />
+        <img
+          class="photo-overlay__image"
+          src={photoContentUrl(props.photo.id, "original")}
+          alt=""
+        />
       </div>
     </div>
   );

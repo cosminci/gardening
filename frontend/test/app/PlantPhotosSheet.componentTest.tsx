@@ -198,7 +198,7 @@ Vitest.describe("PlantPhotosSheet", () => {
         const imgs = Testing.screen.getAllByAltText(/Photo from/);
         Vitest.expect(imgs).toHaveLength(2);
         // New photo first (newest)
-        Vitest.expect(imgs[0]).toHaveAttribute("src", `/photos/ph-new/content`);
+        Vitest.expect(imgs[0]).toHaveAttribute("src", `/photos/ph-new/content?variant=thumbnail`);
       });
       // Input value is cleared (we can't check value directly in jsdom for file inputs,
       // but the absence of an upload error confirms success)
@@ -370,10 +370,16 @@ Vitest.describe("PlantPhotosSheet", () => {
       <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
     ));
 
-    Testing.fireEvent.click(await Testing.screen.findByAltText(/Photo from/));
+    const thumbnail = await Testing.screen.findByAltText(/Photo from/);
+    Vitest.expect(thumbnail).toHaveAttribute("src", "/photos/ph1/content?variant=thumbnail");
+    Testing.fireEvent.click(thumbnail);
 
     const overlay = Testing.screen.getByRole("dialog", { name: "Photo viewer" });
     Vitest.expect(overlay).toBeInTheDocument();
+    Vitest.expect(Testing.within(overlay).getByAltText("")).toHaveAttribute(
+      "src",
+      "/photos/ph1/content?variant=original",
+    );
     const closeBtn = Testing.within(overlay).getByRole("button", { name: "Close photo viewer" });
     Vitest.expect(closeBtn).toHaveFocus();
 
