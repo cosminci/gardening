@@ -1307,7 +1307,9 @@ Vitest.describe("changing the journal", () => {
     });
     Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
     const editNeem = Testing.screen.getByRole("button", { name: "Edit Neem concentrate" });
-    const neemDetails = Testing.screen.getByText("Neem concentrate", { selector: "dd" });
+    const neemDetails = Testing.screen.getByText("Neem concentrate", {
+      selector: ".operation__detail-value--compact-text",
+    });
     Vitest.expect(editNeem).toBeInTheDocument();
     Vitest.expect(neemDetails).toBeInTheDocument();
 

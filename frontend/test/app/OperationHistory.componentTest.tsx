@@ -77,7 +77,8 @@ Vitest.describe("operation history", () => {
         details: { ...firstOlder.details, maybeNote: Journal.note("Updated note") },
       },
     });
-    Vitest.expect(await Testing.screen.findByText("Updated note")).toBeInTheDocument();
+    const editedTable = await Testing.screen.findByRole("table");
+    Vitest.expect(await Testing.within(editedTable).findByText("Updated note")).toBeInTheDocument();
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
     const pageTwo = await Testing.screen.findByText("Page 2");
@@ -210,12 +211,13 @@ Vitest.describe("operation history", () => {
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
     setOperationChange({ kind: "logged" });
-    Vitest.expect(await Testing.screen.findByText("Refreshed")).toBeInTheDocument();
+    const table = await Testing.screen.findByRole("table");
+    Vitest.expect(await Testing.within(table).findByText("Refreshed")).toBeInTheDocument();
 
     resolveFirst(operationsPage(older));
     await Promise.resolve();
-    Vitest.expect(Testing.screen.getByText("Refreshed")).toBeInTheDocument();
-    Vitest.expect(Testing.screen.queryByText("Long note")).not.toBeInTheDocument();
+    Vitest.expect(Testing.within(table).getByText("Refreshed")).toBeInTheDocument();
+    Vitest.expect(Testing.within(table).queryByText("Long note")).not.toBeInTheDocument();
   });
 
   Vitest.it("should reset history when its index slot changes plant", async () => {
@@ -233,7 +235,8 @@ Vitest.describe("operation history", () => {
     ));
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
-    Vitest.expect(await Testing.screen.findByText("Long note")).toBeInTheDocument();
+    const firstTable = await Testing.screen.findByRole("table");
+    Vitest.expect(await Testing.within(firstTable).findByText("Long note")).toBeInTheDocument();
 
     setPlant(Journal.plantId("p2"));
 
@@ -264,6 +267,79 @@ Vitest.describe("operation history", () => {
     await Testing.waitFor(() => {
       Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
     });
+  });
+
+  Vitest.it(
+    "should edit an operation from the card list, distinct from the table row",
+    async () => {
+      const edited: Journal.Operation[] = [];
+      const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
+      Testing.render(() => (
+        <OperationHistory
+          plant={recent.plant}
+          substrateComponents={[]}
+          pesticides={[]}
+          getOperations={getOperations}
+          operationChange={undefined}
+          onEdit={(operation) => {
+            edited.push(operation);
+          }}
+        />
+      ));
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Show operation history" }),
+      );
+      const cards = await Testing.screen.findByRole("list", { name: "Older operations" });
+      Testing.fireEvent.click(
+        Testing.within(cards).getByRole("button", {
+          name: "Edit historical care operation 1 from 03.03.2026",
+        }),
+      );
+      Vitest.expect(edited).toEqual([firstOlder]);
+    },
+  );
+
+  Vitest.it("should scroll to compensate for a shifted anchor when collapsing", async () => {
+    const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage()));
+    Testing.render(() => (
+      <OperationHistory
+        plant={recent.plant}
+        substrateComponents={[]}
+        pesticides={[]}
+        getOperations={getOperations}
+        operationChange={undefined}
+        onEdit={() => undefined}
+      />
+    ));
+
+    const toggle = Testing.screen.getByRole("button", { name: "Show operation history" });
+    const tops = [100, 100, 140, 200, 200, 200];
+    Vitest.vi
+      .spyOn(toggle, "getBoundingClientRect")
+      .mockImplementation(() => ({ top: tops.shift() }) as DOMRect);
+    const scrollBySpy = Vitest.vi.spyOn(window, "scrollBy").mockImplementation(() => undefined);
+    const disclosure = Testing.screen.getByLabelText("Operation history");
+
+    Testing.fireEvent.click(toggle);
+    await Testing.screen.findByText("No older operations.");
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Hide operation history" }));
+    const unrelatedEvent = new Event("transitionend") as unknown as TransitionEvent;
+    Object.defineProperty(unrelatedEvent, "propertyName", { value: "opacity" });
+    disclosure.dispatchEvent(unrelatedEvent);
+    Vitest.expect(scrollBySpy).not.toHaveBeenCalled();
+    const shiftedEvent = new Event("transitionend") as unknown as TransitionEvent;
+    Object.defineProperty(shiftedEvent, "propertyName", { value: "grid-template-rows" });
+    disclosure.dispatchEvent(shiftedEvent);
+    Vitest.expect(scrollBySpy).toHaveBeenCalledWith(0, 40);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Show operation history" }));
+    await Testing.screen.findByText("No older operations.");
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Hide operation history" }));
+    const unshiftedEvent = new Event("transitionend") as unknown as TransitionEvent;
+    Object.defineProperty(unshiftedEvent, "propertyName", { value: "grid-template-rows" });
+    disclosure.dispatchEvent(unshiftedEvent);
+    Vitest.expect(scrollBySpy).toHaveBeenCalledTimes(1);
   });
 
   Vitest.it("should focus a failed navigation and retry its requested page", async () => {

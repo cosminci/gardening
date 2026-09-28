@@ -3,6 +3,7 @@ import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import * as Labels from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
+import { OperationCell } from "./OperationCell";
 
 export type OperationHistoryChange =
   | { readonly kind: "logged" }
@@ -34,6 +35,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   let latestRequest = 0;
   let requestedPage = 1;
   let control!: HTMLButtonElement;
+  let disclosure!: HTMLDivElement;
   let pageStatus: HTMLSpanElement | undefined;
   let failureStatus: HTMLParagraphElement | undefined;
 
@@ -63,10 +65,20 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
 
   const toggle = () => {
     const opening = !expanded();
+    const anchorBefore = control.getBoundingClientRect().top;
     setExpanded(opening);
     if (opening) void loadPage(1);
+    if (!opening) {
+      const restoreScrollPosition = (event: TransitionEvent) => {
+        if (event.target !== disclosure || event.propertyName !== "grid-template-rows") return;
+        disclosure.removeEventListener("transitionend", restoreScrollPosition);
+        const drift = control.getBoundingClientRect().top - anchorBefore;
+        if (drift !== 0) window.scrollBy(0, drift);
+      };
+      disclosure.addEventListener("transitionend", restoreScrollPosition);
+    }
     queueMicrotask(() => {
-      control.focus();
+      control.focus({ preventScroll: true });
     });
   };
 
@@ -117,6 +129,9 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   return (
     <section class="operation-history">
       <div
+        ref={(element) => {
+          disclosure = element;
+        }}
         id={`operation-history-${props.plant}`}
         class="operation-history__disclosure"
         classList={{ "operation-history__disclosure--expanded": expanded() }}
@@ -155,6 +170,25 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                     when={page.operations.length > 0}
                     fallback={<p class="operation-history__state">No older operations.</p>}
                   >
+                    <ol
+                      class="operation-list operation-history__cards"
+                      aria-label="Older operations"
+                    >
+                      <For each={page.operations}>
+                        {(operation, index) => (
+                          <OperationCell
+                            operation={operation}
+                            position={index() + 1}
+                            section="historical"
+                            substrateComponents={props.substrateComponents}
+                            pesticides={props.pesticides}
+                            onEdit={() => {
+                              props.onEdit(operation);
+                            }}
+                          />
+                        )}
+                      </For>
+                    </ol>
                     <div class="operation-history__table-wrap">
                       <table>
                         <thead>
