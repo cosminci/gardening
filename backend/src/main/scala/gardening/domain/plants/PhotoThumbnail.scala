@@ -26,15 +26,16 @@ object PhotoThumbnail:
   private object LivePhotoThumbnail extends PhotoThumbnail:
 
     override def derive(original: PhotoContent): ThumbnailDerivationResult =
-      Try {
-        val decoded = ImageIO.read(ByteArrayInputStream(original.bytes.toArray))
-        if decoded == null then throw IOException("no image reader available for this content")
-        val attempts = ladder.map((maxDim, quality) => encodeJpeg(decoded, maxDim, quality))
-        val smallest =
-          attempts.foldLeft(Array.emptyByteArray)((soFar, attempt) => if soFar.isEmpty || attempt.length < soFar.length then attempt else soFar)
-        val chosen = attempts.find(_.length <= maxThumbnailSize.toBytes).getOrElse(smallest)
-        PhotoContent(ByteVector(chosen), PhotoMediaType.Jpeg)
-      }.fold(ThumbnailDerivationResult.DerivationFailed.apply, ThumbnailDerivationResult.Derived.apply)
+      Option(ImageIO.read(ByteArrayInputStream(original.bytes.toArray))) match
+        case None => ThumbnailDerivationResult.DerivationFailed(IOException("no image reader available for this content"))
+        case Some(decoded) =>
+          Try {
+            val attempts = ladder.map((maxDim, quality) => encodeJpeg(decoded, maxDim, quality))
+            val smallest =
+              attempts.foldLeft(Array.emptyByteArray)((soFar, attempt) => if soFar.isEmpty || attempt.length < soFar.length then attempt else soFar)
+            val chosen = attempts.find(_.length <= maxThumbnailSize.toBytes).getOrElse(smallest)
+            PhotoContent(ByteVector(chosen), PhotoMediaType.Jpeg)
+          }.fold(ThumbnailDerivationResult.DerivationFailed.apply, ThumbnailDerivationResult.Derived.apply)
 
     // drawImage never calls back into this for a complete, non-progressively-loaded BufferedImage.
     // $COVERAGE-OFF$
@@ -65,9 +66,12 @@ object PhotoThumbnail:
       val stream = ImageIO.createImageOutputStream(output)
       try
         writer.setOutput(stream)
+        // ImageWriter#write has no metadata-free overload that also accepts an ImageWriteParam; the Java API requires literal nulls here.
+        // scalafix:off DisableSyntax.null
         val noStreamMetadata: IIOMetadata                       = null
         val noAttachedThumbnails: java.util.List[BufferedImage] = null
         val noImageMetadata: IIOMetadata                        = null
+        // scalafix:on DisableSyntax.null
         writer.write(noStreamMetadata, IIOImage(resized, noAttachedThumbnails, noImageMetadata), params)
       finally
         writer.dispose()
