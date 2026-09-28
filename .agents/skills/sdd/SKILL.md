@@ -12,11 +12,15 @@ Standard: Agentic Engineering Standards v1.2.0. This file is the orchestrator: i
 
 Before Phase 1, create `.agent-work/<slug>/checklist.md` listing every gate below plus the full text of each checklist that will apply. Check items off as you go. A checked box is a claim to verify, not proof by itself — see [`reviewer.md`](reviewer.md) for how it gets verified.
 
+## Adjudication
+
+When executor and reviewer disagree, this file decides — the reviewer only reports, the executor's work is already done. Weigh the disputed artifact against the checklist item, pick a side, then direct a fix or record a justified exception in `.agent-work/<slug>/checklist.md`. A phase gate needing that checklist waits on this.
+
 ## Phases
 
 1. **Classify** — `feature` or `investigation`; branch named to match. Per AGENTS.md, a spec is required only when the change adds or revises knowledge a living doc should record; only the maintainer may waive that requirement, explicitly. Gate: the classification and the spec requirement (or waiver) are recorded.
 2. **Spike** — is the problem and its solution already understood well enough to spec directly, or does the space need exploring first (an unclear problem, a design of uncertain tractability, an algorithm, anything not yet statable in concrete domain types and ports)? When unclear, explore by actually trying to solve it — throwaway code, a prototype of the hard part, working an algorithm by hand — until the domain shape, the ports, and the real edge cases are known, not guessed. Gate: the skip-or-spike decision, and any findings, are recorded in `.agent-work/<slug>/` and carried into the spec; nothing from this phase is required to pass `AGENTS.md`'s gates or to survive into the Implementation PR.
-3. **Spec PR** — reviewed and merged before any implementation starts. Self-check isn't review. Gate: a second, independently-filled [`checklists/spec-quality.md`](checklists/spec-quality.md) copy reconciles with the executor's, and the PR is merged.
+3. **Spec PR** — reviewed and merged before any implementation starts. Self-check isn't review. Gate: a second, independently-filled [`checklists/spec-quality.md`](checklists/spec-quality.md) copy is filed against the executor's, every disagreement is adjudicated (see Adjudication), and the PR is merged.
 4. **Tests** — projected from the merged spec, before implementation. Gate: every acceptance criterion and enumerated edge case maps to a test; changed tests fail for the right reason first.
 5. **Implementation PR(s)** — one or more, each within the approved spec. Gate: every gate in `AGENTS.md` exits zero; [`checklists/code-quality.md`](checklists/code-quality.md) and [`checklists/implementation-completeness.md`](checklists/implementation-completeness.md) (this PR's slice) pass.
 6. **Archive + Living Docs PR** — after every Implementation PR has merged; introduces no new product behavior. Gate: every `Doc Sync` entry applied verbatim; [`checklists/implementation-completeness.md`](checklists/implementation-completeness.md) passes against the complete merged change; the spec is moved to `specs/changes/archive/YYYY-MM-DD-<slug>/`.

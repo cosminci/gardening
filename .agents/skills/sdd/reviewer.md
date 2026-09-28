@@ -15,5 +15,5 @@ Spike has no work item of its own — it produces no PR, and its scratch notes i
 ## Protocol
 
 1. Fill your copy of the applicable checklist(s) blind.
-2. Compare against the executor's copy. Reconcile every disagreement by changing the artifact (spec, code, test, or doc) or by recording a justified exception in the checklist — never by softening the checklist item itself.
-3. Confirm the reconciled result, then check off the phase gate. An unchecked or unreviewed gate is never self-approved by the executor.
+2. Compare against the executor's copy and list every disagreement — never edit the artifact or soften the checklist to close one yourself.
+3. Hand the list to the orchestrator ([`SKILL.md`](SKILL.md#adjudication)) and wait. The gate is checked off only after it adjudicates every item — never self-approved by the executor, never resolved by you.
