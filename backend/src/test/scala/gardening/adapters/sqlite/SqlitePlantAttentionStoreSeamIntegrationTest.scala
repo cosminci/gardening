@@ -46,11 +46,12 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
       val secondWaterings = Vector.tabulate(3): index =>
         Operation(OperationId(f"second-$index%02d"), secondPlantId, date, care)
       val archivedWatering = Operation(OperationId("archived-watering"), archivedPlantId, date, care)
-      val nonWatering      = Operation(OperationId("care-only"), firstPlantId, date.plusSeconds(30), care.copy(actions = Set(ActionType.Pruned)))
-      val operations       = firstWaterings ++ secondWaterings :+ archivedWatering :+ nonWatering
-      val logged           = operations.map(operationStore.addOperation)
-      val archived         = plantStore.updatePlant(Plant(archivedPlantId, defaultPlantDetails.copy(status = PlantStatus.Archived)))
-      val actual           = plantStore.getAttentionSamples(size = 20)
+      val nonWatering      =
+        Operation(OperationId("care-only"), firstPlantId, date.plusSeconds(30), care.copy(actions = Set(ActionType.Pruned, ActionType.Showered)))
+      val operations = firstWaterings ++ secondWaterings :+ archivedWatering :+ nonWatering
+      val logged     = operations.map(operationStore.addOperation)
+      val archived   = plantStore.updatePlant(Plant(archivedPlantId, defaultPlantDetails.copy(status = PlantStatus.Archived)))
+      val actual     = plantStore.getAttentionSamples(size = 20)
 
       val firstWateringHistory  = WateringHistory.from(firstWaterings.reverse.take(20).map(_.date)).fold(message => fail(message), identity)
       val secondWateringHistory = WateringHistory.from(secondWaterings.reverse.map(_.date)).fold(message => fail(message), identity)

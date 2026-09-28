@@ -5,6 +5,7 @@ export const plantDisplayName = (plant: Journal.Plant) =>
 
 export const actionLabels: Record<Journal.ActionType, string> = {
   watered: "Watered",
+  showered: "Showered",
   fertilized: "Fertilized",
   pesticide: "Pesticide",
   pruned: "Pruned",

@@ -85,7 +85,9 @@ it("should render an empty action-icon row when no actions were recorded", () =>
     />
   ));
 
-  expect(screen.queryAllByRole("img", { name: /Watered|Fertilized|Pesticide|Pruned/ })).toEqual([]);
+  expect(
+    screen.queryAllByRole("img", { name: /Watered|Showered|Fertilized|Pesticide|Pruned/ }),
+  ).toEqual([]);
   expect(screen.getByText("None recorded")).toBeInTheDocument();
 });
 
@@ -152,5 +154,7 @@ it("should render only the substrate row for a repot operation, with no moisture
 
   expect(screen.getByText("Substrate")).toBeInTheDocument();
   expect(screen.queryByRole("img", { name: "Wet" })).not.toBeInTheDocument();
-  expect(screen.queryAllByRole("img", { name: /Watered|Fertilized|Pesticide|Pruned/ })).toEqual([]);
+  expect(
+    screen.queryAllByRole("img", { name: /Watered|Showered|Fertilized|Pesticide|Pruned/ }),
+  ).toEqual([]);
 });

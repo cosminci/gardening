@@ -146,6 +146,10 @@
   transform: translateY(0.1rem);
 }
 
+.action-icon.action-icon--showered {
+  color: #4a90c4;
+}
+
 .action-icon.action-icon--fertilized {
   color: #c8862d;
 }

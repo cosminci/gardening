@@ -162,7 +162,13 @@ describe("OperationForm", () => {
     )
       .getAllByRole("checkbox")
       .map((choice) => choice.parentElement?.textContent);
-    expect(actionChoices).toEqual(["Watered", "Fertilized", "Pruned", "Pesticide"]);
+    expect(actionChoices).toEqual(["Watered", "Showered", "Fertilized", "Pruned", "Pesticide"]);
+    expect(
+      Testing.screen
+        .getByRole("combobox", { name: "Moisture" })
+        .compareDocumentPosition(Testing.screen.getByRole("group", { name: "Care actions" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
     const watered = Testing.screen.getByRole("checkbox", { name: "Watered" });
     expect(watered).toBeChecked();

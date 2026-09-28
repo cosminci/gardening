@@ -53,7 +53,14 @@ export type PesticideStatus = (typeof pesticideStatuses)[number];
 export const plantStatuses = ["active", "archived"] as const;
 export type PlantStatus = (typeof plantStatuses)[number];
 
-export const actionTypes = ["watered", "fertilized", "pesticide", "pruned", "noAction"] as const;
+export const actionTypes = [
+  "watered",
+  "showered",
+  "fertilized",
+  "pesticide",
+  "pruned",
+  "noAction",
+] as const;
 export type ActionType = (typeof actionTypes)[number];
 
 export const moistureLevels = ["wet", "moderatePlus", "moderateMinus", "dry", "noReading"] as const;

@@ -24,9 +24,23 @@ const selectableActions: readonly Journal.ActionType[] = [
 
 export const CareFields: Component<CareFieldsProps> = (props) => (
   <>
+    <label class="field">
+      <span>Moisture reading</span>
+      <select
+        aria-label="Moisture"
+        value={props.moisture}
+        onChange={(event) => {
+          props.onMoistureChange(event.currentTarget.value as Journal.MoistureLevel);
+        }}
+      >
+        <For each={Journal.moistureLevels}>
+          {(level) => <option value={level}>{moistureLabels[level]}</option>}
+        </For>
+      </select>
+    </label>
     <fieldset class="field-group">
       <legend>Care actions</legend>
-      <div class="choice-grid">
+      <div class="action-grid">
         <For each={selectableActions}>
           {(action) => (
             <label class="choice">
@@ -43,20 +57,6 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         </For>
       </div>
     </fieldset>
-    <label class="field">
-      <span>Moisture reading</span>
-      <select
-        aria-label="Moisture"
-        value={props.moisture}
-        onChange={(event) => {
-          props.onMoistureChange(event.currentTarget.value as Journal.MoistureLevel);
-        }}
-      >
-        <For each={Journal.moistureLevels}>
-          {(level) => <option value={level}>{moistureLabels[level]}</option>}
-        </For>
-      </select>
-    </label>
     <Show when={props.actions.has("pesticide")}>
       <fieldset class="field-group">
         <legend>Pesticides</legend>

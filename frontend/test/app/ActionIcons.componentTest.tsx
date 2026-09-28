@@ -3,11 +3,14 @@ import { expect, it } from "vitest";
 import { ActionIcons } from "../../src/app/ActionIcons";
 
 it("should render an icon for each recorded action in a fixed order, skipping noAction", () => {
-  render(() => <ActionIcons actions={new Set(["pruned", "noAction", "watered", "fertilized"])} />);
+  render(() => (
+    <ActionIcons actions={new Set(["pruned", "noAction", "watered", "showered", "fertilized"])} />
+  ));
 
   const icons = screen.getAllByRole("img");
   expect(icons.map((icon) => icon.getAttribute("aria-label"))).toEqual([
     "Watered",
+    "Showered",
     "Fertilized",
     "Pruned",
   ]);
@@ -24,4 +27,11 @@ it("should render the pesticide glyph with its own class for styling", () => {
 
   const icon = screen.getByRole("img", { name: "Pesticide" });
   expect(icon).toHaveClass("action-icon", "action-icon--pesticide");
+});
+
+it("should render the showered glyph with its own class for styling", () => {
+  render(() => <ActionIcons actions={new Set(["showered"])} />);
+
+  const icon = screen.getByRole("img", { name: "Showered" });
+  expect(icon).toHaveClass("action-icon", "action-icon--showered");
 });

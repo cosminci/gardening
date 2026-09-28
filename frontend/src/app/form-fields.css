@@ -66,6 +66,12 @@ select:disabled {
   gap: 0.5rem;
 }
 
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
 .choice {
   position: relative;
 }

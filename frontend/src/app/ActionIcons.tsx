@@ -12,6 +12,12 @@ export const ActionGlyph: Component<{ type: Exclude<Journal.ActionType, "noActio
       <path d="M16 6l3-1v3l-3 1" />
       <path d="M6 8a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v10a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V8Z" />
     </Match>
+    <Match when={props.type === "showered"}>
+      <path d="M15 4l2-1.5" />
+      <path d="M6 9.5a5.5 5.5 0 0 1 11 0" />
+      <path d="M4.5 9.5h14" />
+      <path d="M8 13v2.4M12 13v3M16 13v2.4" />
+    </Match>
     <Match when={props.type === "fertilized"}>
       <path d="M10 3h4v3h-4z" />
       <path d="M8 6C6 8 6 13 7 17C7.5 20 9.5 21 12 21C14.5 21 16.5 20 17 17C18 13 18 8 16 6Z" />

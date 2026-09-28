@@ -342,7 +342,7 @@ export interface components {
          * ActionType
          * @enum {string}
          */
-        ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "watered";
+        ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "showered" | "watered";
         /** AddedPhoto */
         AddedPhoto: {
             id: string;

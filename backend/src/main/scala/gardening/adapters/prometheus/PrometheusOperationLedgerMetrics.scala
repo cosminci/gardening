@@ -59,6 +59,7 @@ object PrometheusOperationLedgerMetrics:
 
     private def actionLabel(kind: ActionType): String = kind match
       case ActionType.Watered    => "watered"
+      case ActionType.Showered   => "showered"
       case ActionType.Fertilized => "fertilized"
       case ActionType.Pesticide  => "pesticide"
       case ActionType.Pruned     => "pruned"
