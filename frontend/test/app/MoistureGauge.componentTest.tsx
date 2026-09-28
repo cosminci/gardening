@@ -35,3 +35,11 @@ it("should render a dashed, unfilled outline when there is no reading", () => {
   expect(gauge).toHaveClass("moisture-gauge--unknown");
   expect(gauge.querySelector(".moisture-gauge__fill")).not.toBeInTheDocument();
 });
+
+it("should render a solid, empty outline for a known-dry reading, unlike an unknown reading", () => {
+  render(() => <MoistureGauge level="dry" />);
+
+  const gauge = screen.getByRole("img", { name: "Dry" });
+  expect(gauge).not.toHaveClass("moisture-gauge--unknown");
+  expect(gauge.querySelector(".moisture-gauge__fill")).toHaveAttribute("height", "0");
+});
