@@ -19,22 +19,21 @@ Photos are 3-10MB each, and the photo grid loads every visible photo at full siz
 enum PhotoMediaType:
   case Jpeg, Png
 
-enum PhotoVariant:
-  case Original, Thumbnail
-
 trait PhotoContentStore:
   def put(photo: PhotoId, original: PhotoContent, thumbnail: PhotoContent): PhotoWriteResult
-  def get(photo: PhotoId, variant: PhotoVariant): PhotoReadResult
-  def delete(photo: PhotoId): PhotoWriteResult
+  def get(photo: PhotoId): PhotoReadResult             // original — unchanged
+  def getThumbnail(photo: PhotoId): PhotoReadResult    // new
+  def delete(photo: PhotoId): PhotoWriteResult         // unchanged signature, now removes both
 
 trait PlantManager:
-  def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult
-  // addPhoto, removePhoto, getPhotos unchanged
+  def getPhotoContent(photo: PhotoId): PhotoReadResult          // original — unchanged
+  def getThumbnailContent(photo: PhotoId): PhotoReadResult      // new
+  // addPhoto, removePhoto, getPhotos otherwise unchanged
 ```
 
 - A thumbnail is derived from its original at upload time by downscaling to a bounded longest edge and re-encoding as JPEG, regardless of the original's media type — see Acceptance Criteria for the size target and its boundary case. Derivation is a pure, in-memory step with no side effects of its own; it happens before either variant is written.
-- `put` takes both variants and writes them together in one call; `delete` removes both variants through one call.
-- The one-time backfill enumerates existing photos through the existing plant/photo listing operations (across active and archived plants) and, for each one missing a thumbnail, reads its original through the existing `get` and writes it back through the same `put` upload uses, now paired with a derived thumbnail. No port or use-case method is added or changed to support it.
+- `put` gains a required second content parameter for the thumbnail and writes both together in one call. `get`/`getPhotoContent` keep returning exactly what they return today (the original); a new `getThumbnail`/`getThumbnailContent` sits alongside them for the derived copy, so every caller states which one it wants by which method it calls, not by an extra argument. `delete`'s signature is unchanged; it now removes both stored blobs.
+- The one-time backfill enumerates existing photos through the existing plant/photo listing operations (across active and archived plants) and, for each one missing a thumbnail, reads its original through the existing `get` and writes it back through the same `put` upload uses, now paired with a derived thumbnail. It calls nothing beyond `get`/`put`, which the feature needs anyway — no method is added or changed just for the backfill.
 
 ## Alternatives Considered
 
