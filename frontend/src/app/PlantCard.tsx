@@ -275,6 +275,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
                 <OperationCell
                   operation={operation}
                   position={index() + 1}
+                  section="recent"
                   substrateComponents={props.substrateComponents}
                   pesticides={props.pesticides}
                   onEdit={() => {

@@ -1307,9 +1307,9 @@ Vitest.describe("changing the journal", () => {
     });
     Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
     const editNeem = Testing.screen.getByRole("button", { name: "Edit Neem concentrate" });
-    const neemDetails = Testing.screen.getByText("Neem concentrate", { selector: "dd" });
+    const pesticidesTerm = Testing.screen.getByText("Pesticides", { selector: "dt" });
     Vitest.expect(editNeem).toBeInTheDocument();
-    Vitest.expect(neemDetails).toBeInTheDocument();
+    Vitest.expect(pesticidesTerm.nextElementSibling).toHaveTextContent("Neem concentrate");
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new pesticide" }));
     Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
