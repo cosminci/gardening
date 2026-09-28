@@ -77,13 +77,6 @@
   background: #fae9e5;
 }
 
-@media (max-width: 62rem) {
-  .sheet-layer--editing .sheet--operation {
-    transform: translateX(-100%);
-    visibility: hidden;
-  }
-}
-
 @media (pointer: coarse) and (orientation: landscape) {
   .sheet {
     width: 50%;
@@ -111,6 +104,21 @@
 
   .sheet-layer .sheet--closing {
     transform: translateY(100%);
+  }
+
+  /*
+   * A nested editor opens as its own bottom sheet on top of the first one.
+   * Reserve the first sheet's header height (padding + icon-action row +
+   * divider) on the second sheet so the first stays visible above it
+   * instead of the desktop side-by-side reveal, which has no room to work
+   * with once both sheets are full width.
+   */
+  .sheet-layer:has(.sheet--catalog-editor) .sheet--operation {
+    transform: none;
+  }
+
+  .sheet--catalog-editor {
+    top: 4.5rem;
   }
 }
 
