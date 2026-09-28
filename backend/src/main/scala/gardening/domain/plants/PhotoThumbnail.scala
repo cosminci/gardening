@@ -27,7 +27,7 @@ object PhotoThumbnail:
 
     override def derive(original: PhotoContent): ThumbnailDerivationResult =
       Option(ImageIO.read(ByteArrayInputStream(original.bytes.toArray))) match
-        case None => ThumbnailDerivationResult.DerivationFailed(IOException("no image reader available for this content"))
+        case None          => ThumbnailDerivationResult.DerivationFailed(IOException("no image reader available for this content"))
         case Some(decoded) =>
           Try {
             val attempts = ladder.map((maxDim, quality) => encodeJpeg(decoded, maxDim, quality))
