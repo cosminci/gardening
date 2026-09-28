@@ -2,7 +2,7 @@
 
 .catalog-editor__header {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 0.4rem;
@@ -68,5 +68,15 @@
 @media (max-width: 28rem) {
   .catalog-editor {
     padding: 1.25rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .catalog-editor {
+    padding: 1rem;
+  }
+
+  .catalog-editor__header h2 {
+    font-size: 1.3rem;
   }
 }
