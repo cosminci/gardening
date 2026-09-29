@@ -37,6 +37,7 @@ export const makeHttpPlantPhotoClient = (
       try {
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("idempotencyKey", crypto.randomUUID());
         const { data, error, response } = await client.POST("/plants/{plantId}/photos", {
           params: { path: { plantId: plant } },
           body: formData as never,

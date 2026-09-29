@@ -6,7 +6,7 @@ import gardening.usecases.PhotoManager
 import gardening.domain.plants.PhotoMediaType.*
 import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
-import ox.supervised
+import ox.{discard, supervised}
 import scodec.bits.ByteVector
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{HttpClientSyncBackend, Response, SttpBackend, UriContext, basicRequest, multipart}
@@ -41,10 +41,11 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
     val refs = Refs()
 
     val response = withLivePhotoServer(refs, addPhotoResult = AddPhotoResult.Added(photo)):
-      uploadPhoto(plantId.value, jpegBytes, "image/jpeg")
+      uploadPhoto(plantId.value, jpegBytes, "image/jpeg", idempotencyKey = "upload-1")
 
     assertEquals(response.code -> jsonBody(response), StatusCode.Created -> json(addedJson))
     assertEquals(refs.addedContents.get().map(_.mediaType), Vector(Jpeg))
+    assertEquals(refs.addedIdempotencyKeys.get(), Vector("upload-1"))
 
   test("should upload a png photo"):
     val response = withLivePhotoServer(addPhotoResult = AddPhotoResult.Added(photo)):
@@ -162,6 +163,7 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
 
   private case class Refs(
       addedContents: AtomicReference[Vector[PhotoContent]] = AtomicReference(Vector.empty),
+      addedIdempotencyKeys: AtomicReference[Vector[String]] = AtomicReference(Vector.empty),
       removedIds: AtomicReference[Vector[PhotoId]] = AtomicReference(Vector.empty),
       requestedWindows: AtomicReference[Vector[PhotoWindow]] = AtomicReference(Vector.empty),
       requestedVariants: AtomicReference[Vector[PhotoVariant]] = AtomicReference(Vector.empty)
@@ -175,8 +177,9 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       getContentResult: PhotoReadResult
   ): PhotoManager =
     new PhotoManager:
-      override def addPhoto(plant: PlantId, content: PhotoContent): AddPhotoResult =
-        refs.addedContents.updateAndGet(_ :+ content).pipe(_ => addPhotoResult)
+      override def addPhoto(plant: PlantId, content: PhotoContent, idempotencyKey: String): AddPhotoResult =
+        refs.addedContents.updateAndGet(_ :+ content).discard
+        refs.addedIdempotencyKeys.updateAndGet(_ :+ idempotencyKey).pipe(_ => addPhotoResult)
       override def removePhoto(photo: PhotoId): RemovePhotoResult =
         refs.removedIds.updateAndGet(_ :+ photo).pipe(_ => removePhotoResult)
       override def getPhotos(plant: PlantId, window: PhotoWindow): GetPhotosResult =
@@ -212,10 +215,10 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
       try action(binding.port)
       finally binding.stop()
 
-  private def uploadPhoto(plantId: String, bytes: Array[Byte], contentType: String)(port: Int) =
+  private def uploadPhoto(plantId: String, bytes: Array[Byte], contentType: String, idempotencyKey: String = "idem-1")(port: Int) =
     basicRequest
       .post(uri"http://127.0.0.1:$port/plants/$plantId/photos")
-      .multipartBody(multipart("file", bytes).contentType(contentType))
+      .multipartBody(multipart("file", bytes).contentType(contentType), multipart("idempotencyKey", idempotencyKey))
       .send(HttpClientSyncBackend())
 
   private def get(path: String, server: TestServer) =
