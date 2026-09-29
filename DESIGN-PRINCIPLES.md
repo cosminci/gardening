@@ -15,6 +15,8 @@ What we don't chase: gold-plating — polish past the point where it benefits th
 
 The core is isolated from the outside world. Pure types live in `domain`; the orchestration services that use them live in `usecases`. A business-external dependency is named by a **port** — a `trait` in `ports/`, expressed in domain terms, not a vendor's — while generic infrastructure any service could need regardless of business logic (time, identity, logging, mutual exclusion) is a **capability** in `capabilities/`; whether something happens to have a swappable adapter isn't the test. Concrete **adapters** implement ports and capabilities and live apart, under `adapters/` (one subpackage per external dependency, e.g. `http`, `sqlite`). The composition root in `app/` is the only place that binds an adapter to a port or capability, injecting it with `using`.
 
+Static configuration flows the same way. The composition root loads and parses it, converting each setting into the domain type it feeds — `domain` and `usecases` do no config parsing or conversion of their own. A static value never varies between calls, so it is captured once at construction (a `make`/constructor parameter), never threaded through a port's method or any per-call API.
+
 Because the core depends only on ports and capabilities, it is exhaustively unit-tested by substituting them. Adapters are proven at their seam — the SQLite adapter against a real in-memory database, the HTTP adapter against the served contract — never by mocking the thing they exist to talk to.
 
 ## 2. Domain-Driven Design (a pragmatic subset)
