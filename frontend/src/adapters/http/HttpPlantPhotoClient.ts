@@ -3,7 +3,10 @@ import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PlantPhotoClient } from "../../domain/PlantPhoto";
 
-export const photoContentUrl = (id: Journal.PhotoId): string => `/photos/${String(id)}/content`;
+export type PhotoVariant = "original" | "thumbnail";
+
+export const photoContentUrl = (id: Journal.PhotoId, variant: PhotoVariant): string =>
+  `/photos/${String(id)}/content?variant=${variant}`;
 
 export const makeHttpPlantPhotoClient = (
   fetch: (request: Request) => Promise<Response> = globalThis.fetch,
@@ -37,6 +40,7 @@ export const makeHttpPlantPhotoClient = (
       try {
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("idempotencyKey", crypto.randomUUID());
         const { data, error, response } = await client.POST("/plants/{plantId}/photos", {
           params: { path: { plantId: plant } },
           body: formData as never,

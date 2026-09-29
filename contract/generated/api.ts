@@ -460,6 +460,7 @@ export interface components {
         PhotoUploadPart: {
             /** Format: binary */
             file: string;
+            idempotencyKey: string;
         };
         /** Plant */
         Plant: {

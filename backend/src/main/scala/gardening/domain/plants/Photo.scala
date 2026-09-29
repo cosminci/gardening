@@ -27,3 +27,20 @@ enum PhotoVariant:
   case Original, Thumbnail
 
 final case class PhotoContent(bytes: ByteVector, mediaType: PhotoMediaType)
+
+enum PhotoWriteOperation:
+  case Add, Remove
+
+enum PhotoWriteIntentStatus:
+  case Pending, Done
+
+// plantId/capturedAt are set only for Add (needed to finish a write metadata can't be reconstructed
+// from elsewhere); Remove keys the row by the PhotoId itself and needs neither.
+final case class PhotoWriteIntent(
+    key: String,
+    operation: PhotoWriteOperation,
+    status: PhotoWriteIntentStatus,
+    photoId: Option[PhotoId],
+    plantId: Option[PlantId],
+    capturedAt: Option[Instant]
+)
