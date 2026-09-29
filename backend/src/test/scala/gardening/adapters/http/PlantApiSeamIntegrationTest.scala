@@ -105,16 +105,16 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should archive a plant and distinguish missing, already archived, and failed writes"):
-    val archivePath  = s"/plants/${plant.id.value}"
-    val archivePatch = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
-    val refs         = Refs()
+    val archivePath   = s"/plants/${plant.id.value}"
+    val archivePatch  = """[{"op":"replace","path":"/details/status","value":"archived"}]"""
+    val refs          = Refs()
+    val refreshFailed = buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
 
     val archived = patch(archivePath, archivePatch, buildPlantApi(refs))
     val missing  = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
     val repeat   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
-    val server   = buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
     val failed   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
-    val refreshedLate = patch(archivePath, archivePatch, server)
+    val refreshedLate = patch(archivePath, archivePatch, refreshFailed)
 
     val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
     val expectedRepeat  = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")

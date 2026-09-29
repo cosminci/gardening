@@ -143,9 +143,9 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
     val server = buildOperationApi(refs)
 
     val responses = invalidBodies.map(body => post("/operations", body, server).code)
+    val malformed = post("/operations", malformedDate, server)
 
     assertEquals(responses, List.fill(invalidBodies.size)(StatusCode.BadRequest))
-    val malformed = post("/operations", malformedDate, server)
     assert(malformed.body.merge.contains("Invalid value for: body"))
     assertEquals(refs.loggedOperations.get(), Vector.empty)
 

@@ -49,10 +49,12 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "p1", maybeNickname = "Fig".some, substrate = List(perliteId -> 100))
 
       val expectedDetails = PlantDetails(Species("Ficus lyrata"), Nickname("Fig").some, Location("Balcony"), perliteSubstrate, PlantStatus.Active)
-      val expectedResult  = GetPlantResult.Read(Plant(PlantId("p1"), expectedDetails))
 
-      assertEquals(plantStore.getPlant(PlantId("p1")), expectedResult)
-      assertEquals(plantStore.getPlant(PlantId("missing")), GetPlantResult.RecordMissing)
+      val found   = plantStore.getPlant(PlantId("p1"))
+      val missing = plantStore.getPlant(PlantId("missing"))
+
+      assertEquals(found, GetPlantResult.Read(Plant(PlantId("p1"), expectedDetails)))
+      assertEquals(missing, GetPlantResult.RecordMissing)
 
   test("should list plants by status without decoding records in the other view"):
     Using.resource(storeResource): resource =>
@@ -198,7 +200,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         case UpdatePlantResult.UpdateFailed(_) => ()
         case other                             => fail(s"expected UpdateFailed, got $other")
 
-  test("should return read failures for plants and attention samples when the schema is unavailable"):
+  test("should return read failures for plants, attention samples, and archived count when the schema is unavailable"):
     Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val plantStore = SqlitePlantStore.make(connection.transactor)
       plantStore.addPlant(Plant(PlantId("new"), defaultPlantDetails)) match
@@ -213,13 +215,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
       plantStore.getAttentionSamples(size = 20) match
         case GetAttentionSamplesResult.ReadFailed(_) => ()
         case other                                   => fail(s"expected ReadFailed, got $other")
-
-  test("should report an archived count read failure when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val plantStore  = SqlitePlantStore.make(connection.transactor)
-      val countResult = plantStore.getArchivedCount
-
-      countResult match
+      plantStore.getArchivedCount match
         case ArchivedCountResult.ReadFailed(_) => ()
         case other                             => fail(s"expected ReadFailed, got $other")
 

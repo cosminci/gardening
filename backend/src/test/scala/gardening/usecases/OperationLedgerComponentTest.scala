@@ -286,7 +286,7 @@ class OperationLedgerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(logged, LogOperationResult.Logged(loggedId))
     assertEquals(failed, LogOperationResult.LoggingFailed(cause))
     assertEquals(refs.recordedOperations.get(), Vector.empty)
-    assertEquals(refs.recordedRepots.get().size, 2)
+    assertEquals(refs.recordedRepots.get(), Vector.fill(2)(Operation(OperationId("id-1"), plant.id, date, repot)))
 
   test("should route a repot edit through the store's dedicated repot path, propagating its outcome"):
     val cause              = RuntimeException("store down")

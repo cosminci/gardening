@@ -72,10 +72,12 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
       val operationStore = resource.operationStore
       seedPlant(dataSource, id = "p1")
       val watering = Operation(OperationId("watering"), PlantId("p1"), date, care)
-      assertEquals(operationStore.addOperation(watering), AddOperationResult.Logged(watering.id))
+      val logged   = operationStore.addOperation(watering)
       execute(dataSource, "update operation set date = 'today' where id = ?", watering.id.value)
+      val actual = plantStore.getAttentionSamples(size = 20)
 
-      plantStore.getAttentionSamples(size = 20) match
+      assertEquals(logged, AddOperationResult.Logged(watering.id))
+      actual match
         case GetAttentionSamplesResult.ReadFailed(DatabaseCorruption(reason)) =>
           assertEquals(reason.getMessage, "invalid stored operation date: today")
         case other => fail(s"expected ReadFailed, got $other")
