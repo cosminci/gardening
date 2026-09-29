@@ -901,6 +901,7 @@ components:
       - noAction
       - pesticide
       - pruned
+      - showered
       - watered
     AddedPhoto:
       title: AddedPhoto

@@ -1,9 +1,11 @@
 import { For, Show } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
+import { ActionGlyph } from "./ActionIcons";
 import { InfoControl } from "./InfoControl";
 import { actionLabels, moistureLabels, pesticideTypeLabels } from "./JournalLabels";
 import { addPesticideControlId, editPesticideControlId } from "./OperationControlIds";
+import "./plant-history.css";
 
 interface CareFieldsProps {
   readonly actions: ReadonlySet<Journal.ActionType>;
@@ -17,32 +19,16 @@ interface CareFieldsProps {
   readonly onEditPesticide: (pesticide: Journal.Pesticide) => void;
 }
 
-const selectableActions: readonly Journal.ActionType[] = [
-  ...Journal.actionTypes.filter((action) => action !== "noAction" && action !== "pesticide"),
+const selectableActions: readonly Exclude<Journal.ActionType, "noAction">[] = [
+  ...Journal.actionTypes.filter(
+    (action): action is Exclude<Journal.ActionType, "noAction" | "pesticide"> =>
+      action !== "noAction" && action !== "pesticide",
+  ),
   "pesticide",
 ];
 
 export const CareFields: Component<CareFieldsProps> = (props) => (
   <>
-    <fieldset class="field-group">
-      <legend>Care actions</legend>
-      <div class="choice-grid">
-        <For each={selectableActions}>
-          {(action) => (
-            <label class="choice">
-              <input
-                type="checkbox"
-                checked={props.actions.has(action)}
-                onChange={(event) => {
-                  props.onActionChange(action, event.currentTarget.checked);
-                }}
-              />
-              <span>{actionLabels[action]}</span>
-            </label>
-          )}
-        </For>
-      </div>
-    </fieldset>
     <label class="field">
       <span>Moisture reading</span>
       <select
@@ -57,6 +43,34 @@ export const CareFields: Component<CareFieldsProps> = (props) => (
         </For>
       </select>
     </label>
+    <fieldset class="field-group">
+      <legend>Care actions</legend>
+      <div class="action-grid">
+        <For each={selectableActions}>
+          {(action) => (
+            <label class="choice">
+              <input
+                type="checkbox"
+                checked={props.actions.has(action)}
+                onChange={(event) => {
+                  props.onActionChange(action, event.currentTarget.checked);
+                }}
+              />
+              <span class="choice-action">
+                <svg
+                  class={`action-icon action-icon--${action}`}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <ActionGlyph type={action} />
+                </svg>
+                {actionLabels[action]}
+              </span>
+            </label>
+          )}
+        </For>
+      </div>
+    </fieldset>
     <Show when={props.actions.has("pesticide")}>
       <fieldset class="field-group">
         <legend>Pesticides</legend>

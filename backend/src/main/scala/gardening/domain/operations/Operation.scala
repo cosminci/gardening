@@ -18,6 +18,7 @@ object Note:
 
 enum ActionType(val label: String):
   case Watered    extends ActionType("Watered")
+  case Showered   extends ActionType("Showered")
   case Fertilized extends ActionType("Fertilized")
   case Pesticide  extends ActionType("Insecticide / H2O2")
   case Pruned     extends ActionType("Pruned")
