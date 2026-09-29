@@ -6,6 +6,11 @@
 
 **Date:** <YYYY-MM-DD>
 
+<!-- Required. `feature` (planned change, refactor, migration) or `investigation` (bug/incident).
+Must match the branch prefix. -->
+
+**Classification:** <feature|investigation>
+
 <!-- Required. What a spike actually tried and found, or a specific, checkable reason no
 exploration was needed — never a bare assertion like "already understood." -->
 

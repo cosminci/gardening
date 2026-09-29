@@ -1,6 +1,6 @@
 # Spec quality checklist
 
-Gate for the Spec PR. Fill from the spec and [`templates/change-spec.md`](../templates/change-spec.md) — never from memory of a past spec. Read the whole spec once, straight through, before checking anything below.
+Gate for the Spec PR. First verify against `CONTRIBUTING.md` §Documentation style — it owns prose/terseness rules; do not restate them here. Then fill from the spec and [`templates/change-spec.md`](../templates/change-spec.md) — never from memory of a past spec. Read the whole spec once, straight through, before checking anything below.
 
 - [ ] Classification (`feature`/`investigation`) is recorded and the branch name matches it.
 - [ ] Every sentence lives in exactly one section; removing any sentence loses information — no fact is restated across sections, and no two sections share a clause of near-identical wording.
