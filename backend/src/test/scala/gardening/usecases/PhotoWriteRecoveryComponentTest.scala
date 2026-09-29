@@ -24,14 +24,9 @@ class PhotoWriteRecoveryComponentTest extends munit.FunSuite with TestImplicits:
   private val expectedThumbnail = PhotoContent(ByteVector(Array[Byte](9, 9, 9)), Jpeg)
   private val key               = "idem-1"
 
-  private val doneAdd       = PhotoWriteIntent(key, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Done, Some(photoId), Some(plantId), Some(date))
-  private val unattached    = PhotoWriteIntent(key, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Pending, None, Some(plantId), Some(date))
-  private val pendingAdd    = PhotoWriteIntent(key, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Pending, Some(photoId), Some(plantId), Some(date))
-  private val corruptAdd    = PhotoWriteIntent(key, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Pending, Some(photoId), None, None)
-  private val pendingRemove =
-    PhotoWriteIntent(photoId.value.toString, PhotoWriteOperation.Remove, PhotoWriteIntentStatus.Pending, Some(photoId), None, None)
-  private val removeWithoutPhotoId =
-    PhotoWriteIntent("corrupt-remove", PhotoWriteOperation.Remove, PhotoWriteIntentStatus.Pending, None, None, None)
+  private val doneAdd       = PhotoWriteIntent.Add(key, PhotoWriteIntentStatus.Done, plantId, date, photoId)
+  private val pendingAdd    = PhotoWriteIntent.Add(key, PhotoWriteIntentStatus.Pending, plantId, date, photoId)
+  private val pendingRemove = PhotoWriteIntent.Remove(photoId.value.toString, PhotoWriteIntentStatus.Pending, photoId)
 
   test("should purge an already-done add intent without touching any store"):
     val refs = Refs()
@@ -64,14 +59,6 @@ class PhotoWriteRecoveryComponentTest extends munit.FunSuite with TestImplicits:
       discardResult = PhotoJournalWriteResult.RecordFailed(RuntimeException("journal down"))
     ).reconcile()
 
-    assertEquals(refs.discardedKeys.get(), Vector(key))
-
-  test("should discard a pending add that crashed before its photo id was attached"):
-    val refs = Refs()
-
-    buildRecovery(refs, listResult = PhotoJournalListResult.Listed(Vector(unattached))).reconcile()
-
-    assertEquals(refs.addedPhotos.get(), Vector.empty)
     assertEquals(refs.discardedKeys.get(), Vector(key))
 
   test("should finish a pending add whose content fully landed, then mark it done"):
@@ -144,15 +131,6 @@ class PhotoWriteRecoveryComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.deletedContentIds.get(), Vector(photoId))
     assertEquals(refs.discardedKeys.get(), Vector(key))
 
-  test("should clean up and discard a pending add missing its plant or capturedAt without attempting to finish it"):
-    val refs = Refs()
-
-    buildRecovery(refs, listResult = PhotoJournalListResult.Listed(Vector(corruptAdd))).reconcile()
-
-    assertEquals(refs.addedPhotos.get(), Vector.empty)
-    assertEquals(refs.deletedContentIds.get(), Vector(photoId))
-    assertEquals(refs.discardedKeys.get(), Vector(key))
-
   test("should finish an interrupted removal whose metadata delete never ran, then discard its intent"):
     val refs = Refs()
 
@@ -202,14 +180,6 @@ class PhotoWriteRecoveryComponentTest extends munit.FunSuite with TestImplicits:
 
     assertEquals(refs.discardedKeys.get(), Vector.empty)
 
-  test("should discard a corrupt remove intent that never recorded a photo id"):
-    val refs = Refs()
-
-    buildRecovery(refs, listResult = PhotoJournalListResult.Listed(Vector(removeWithoutPhotoId))).reconcile()
-
-    assertEquals(refs.removedPhotoIds.get(), Vector.empty)
-    assertEquals(refs.discardedKeys.get(), Vector("corrupt-remove"))
-
   test("should reconcile every listed intent in one pass"):
     val refs = Refs()
 
@@ -258,11 +228,11 @@ class PhotoWriteRecoveryComponentTest extends munit.FunSuite with TestImplicits:
       override def delete(photo: PhotoId): PhotoWriteResult =
         refs.deletedContentIds.updateAndGet(_ :+ photo).pipe(_ => deleteContentResult)
     val journal = new PhotoWriteJournal:
-      override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant): PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded
-      override def recordRemove(photo: PhotoId): PhotoJournalWriteResult                                           = PhotoJournalWriteResult.Recorded
-      override def attachPhoto(idempotencyKey: String, photo: PhotoId): PhotoJournalWriteResult                    = PhotoJournalWriteResult.Recorded
-      override def markDone(key: String): PhotoJournalWriteResult = refs.markedDoneKeys.updateAndGet(_ :+ key).pipe(_ => markDoneResult)
-      override def discard(key: String): PhotoJournalWriteResult  = refs.discardedKeys.updateAndGet(_ :+ key).pipe(_ => discardResult)
-      override def findByKey(key: String): PhotoJournalFindResult = PhotoJournalFindResult.NotFound
-      override def list(): PhotoJournalListResult                 = listResult
+      override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant, photo: PhotoId): PhotoJournalWriteResult =
+        PhotoJournalWriteResult.Recorded
+      override def recordRemove(photo: PhotoId): PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded
+      override def markDone(key: String): PhotoJournalWriteResult        = refs.markedDoneKeys.updateAndGet(_ :+ key).pipe(_ => markDoneResult)
+      override def discard(key: String): PhotoJournalWriteResult         = refs.discardedKeys.updateAndGet(_ :+ key).pipe(_ => discardResult)
+      override def findByKey(key: String): PhotoJournalFindResult        = PhotoJournalFindResult.NotFound
+      override def list(): PhotoJournalListResult                        = listResult
     PhotoWriteRecovery.make(using store, contentStore, journal)

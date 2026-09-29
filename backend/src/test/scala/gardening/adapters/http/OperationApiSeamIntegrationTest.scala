@@ -37,12 +37,10 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
   private val repotJson =
     """{"id":"repot","plantId":"p1","date":"2026-01-01T00:00:01Z","details":{"kind":"repot","substrate":[{"componentId":"00000000-0000-4000-8000-000000000003","share":100}],"notes":"fresh"}}"""
   test("should return the requested plant's care history"):
-    val refs   = Refs()
-    val server = buildOperationApi(
-      refs,
-      getOperationsResult = GetOperationsResult.Read(OperationPage(Vector(careOperation, repotOperation), hasNextPage = true))
-    )
+    val refs        = Refs()
+    val getOpResult = GetOperationsResult.Read(OperationPage(Vector(careOperation, repotOperation), hasNextPage = true))
 
+    val server             = buildOperationApi(refs, getOperationsResult = getOpResult)
     val operationsResponse = getOperations(server)
 
     assertEquals(operationsResponse.code -> jsonBody(operationsResponse), StatusCode.Ok -> json(operationsJson))
@@ -155,12 +153,14 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
     val server = buildOperationApi(getOperationsResult = GetOperationsResult.ReadFailed(RuntimeException("offline")))
 
     val operationsResponse = getOperations(server)
-    val expected           = StatusCode.InternalServerError -> json("""{"message":"journal could not be read"}""")
+
+    val expected = StatusCode.InternalServerError -> json("""{"message":"journal could not be read"}""")
     assertEquals(operationsResponse.code -> jsonBody(operationsResponse), expected)
 
   test("should hide the cause when logging an operation fails"):
     val server   = buildOperationApi(logOperationResult = LogOperationResult.LoggingFailed(RuntimeException("offline")))
     val response = post("/operations", loggedCareRequest, server)
+
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be logged"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -170,20 +170,15 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
     assertEquals(response.code -> jsonBody(response), StatusCode.NotFound -> json("""{"message":"operation not found"}"""))
 
   test("should reject changing an operation to another type"):
-    val response =
-      put(
-        s"/operations/${repotOperation.id.value}",
-        careRequest,
-        buildOperationApi(editOperationResult = EditOperationResult.OperationTypeMismatch)
-      )
+    val url      = s"/operations/${repotOperation.id.value}"
+    val response = put(url, careRequest, buildOperationApi(editOperationResult = EditOperationResult.OperationTypeMismatch))
+
     assertEquals(response.code -> jsonBody(response), StatusCode.Conflict -> json("""{"message":"operation type cannot be changed"}"""))
 
   test("should hide storage failures returned when editing"):
-    val response = put(
-      s"/operations/${repotOperation.id.value}",
-      careRequest,
-      buildOperationApi(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline")))
-    )
+    val url      = s"/operations/${repotOperation.id.value}"
+    val response = put(url, careRequest, buildOperationApi(editOperationResult = EditOperationResult.EditFailed(RuntimeException("offline"))))
+
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be edited"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -198,19 +193,20 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
 
   test("should report when the operation to delete does not exist"):
     val response = delete(s"/operations/${repotOperation.id.value}", buildOperationApi())
+
     assertEquals(response.code -> jsonBody(response), StatusCode.NotFound -> json("""{"message":"operation not found"}"""))
 
   test("should reject deleting a plant's current latest repot with a conflict"):
     val response =
       delete(s"/operations/${repotOperation.id.value}", buildOperationApi(deleteOperationResult = DeleteOperationResult.CannotDeleteLatestRepot))
+
     val expected = StatusCode.Conflict -> json("""{"message":"cannot delete the plant's current latest repot"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
   test("should hide storage failures returned when deleting"):
-    val response = delete(
-      s"/operations/${repotOperation.id.value}",
-      buildOperationApi(deleteOperationResult = DeleteOperationResult.DeleteFailed(RuntimeException("offline")))
-    )
+    val url      = s"/operations/${repotOperation.id.value}"
+    val response = delete(url, buildOperationApi(deleteOperationResult = DeleteOperationResult.DeleteFailed(RuntimeException("offline"))))
+
     val expected = StatusCode.InternalServerError -> json("""{"message":"operation could not be deleted"}""")
     assertEquals(response.code -> jsonBody(response), expected)
 
@@ -249,9 +245,7 @@ class OperationApiSeamIntegrationTest extends munit.FunSuite:
   private type TestServer = SttpBackend[Identity, Any]
 
   private def getOperations(server: TestServer, offset: Int = 3, pageSize: Int = 10) =
-    basicRequest
-      .get(uri"http://test/operations?plantId=${plantId.value}&offset=$offset&pageSize=$pageSize")
-      .send(server)
+    basicRequest.get(uri"http://test/operations?plantId=${plantId.value}&offset=$offset&pageSize=$pageSize").send(server)
 
   private def get(path: String, server: TestServer) =
     basicRequest.get(Uri.unsafeParse(s"http://test$path")).send(server)

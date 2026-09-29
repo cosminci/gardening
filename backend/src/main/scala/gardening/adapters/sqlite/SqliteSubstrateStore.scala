@@ -58,7 +58,7 @@ object SqliteSubstrateStore:
     private def updateComponentRow(component: SubstrateComponent) =
       val data = component.data
       sql"""update substrate_component set name = ${data.name.value}, info = ${data.maybeInfo.map(_.value)},
-           status = ${component.status.toString} where id = ${component.id.value.toString}"""
+            status = ${component.status.toString} where id = ${component.id.value.toString}"""
 
     private def toComponent(row: ComponentRow) =
       for

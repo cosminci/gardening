@@ -61,7 +61,8 @@ object PlantApi:
     plantEndpoint.get.in("plants").in(query[PlantStatus]("status").default(PlantStatus.Active))
       .out(jsonBody[Vector[Plant]]).summary("List plants by status")
   private val getArchivedCountEndpoint =
-    plantEndpoint.get.in("plants" / "archived" / "count").out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
+    plantEndpoint.get.in("plants" / "archived" / "count")
+      .out(jsonBody[ArchivedPlantCount]).summary("Count archived plants")
   private val patchPlantEndpoint =
     endpoint.patch.in("plants" / path[String]("plantId")).in(extractFromRequest(_.contentTypeParsed)).in(plantPatchBody)
       .errorOut(plantPatchErrors).out(statusCode(StatusCode.NoContent)).summary("Patch a plant")
@@ -75,16 +76,16 @@ object PlantApi:
         plants.createPlant(input.species, input.maybeNickname, input.location, input.substrate) match
           case CreatePlantResult.Created(plant)       => plant.asRight
           case CreatePlantResult.UnknownComponent     => unknownComponent.asLeft
-          case CreatePlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
-          case CreatePlantResult.CreateFailed(_)      => plantCreationFailed.asLeft,
+          case _: CreatePlantResult.CatalogReadFailed => catalogReadFailed.asLeft
+          case _: CreatePlantResult.CreateFailed      => plantCreationFailed.asLeft,
       getPlantsEndpoint.handle: status =>
         plants.getPlants(status) match
           case GetPlantsResult.Read(found)   => found.asRight
-          case GetPlantsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
+          case _: GetPlantsResult.ReadFailed => (StatusCode.InternalServerError, ApiError("plants could not be read")).asLeft,
       getArchivedCountEndpoint.handle: _ =>
         plants.getArchivedCount match
           case ArchivedCountResult.Counted(count) => ArchivedPlantCount(count).asRight
-          case ArchivedCountResult.ReadFailed(_)  => (StatusCode.InternalServerError, ApiError("archived count could not be read")).asLeft,
+          case _: ArchivedCountResult.ReadFailed  => (StatusCode.InternalServerError, ApiError("archived count could not be read")).asLeft,
       patchPlantEndpoint.handle: (plantId, contentType, patch) =>
         val isJsonPatch = contentType.exists(mediaType => mediaType.mainType.equals("application") && mediaType.subType.equals("json-patch+json"))
         if !isJsonPatch then unsupportedPatchMediaType.asLeft
@@ -92,7 +93,7 @@ object PlantApi:
           patch match
             case Vector(PlantPatchOperation("replace", "/details/status", value)) if value.equals(Json.fromString("archived")) =>
               plants.editPlant(PlantId(plantId), _.copy(status = PlantStatus.Archived)) match
-                case EditPlantResult.Edited(_)     => attention.refreshAll.pipe(_ => ().asRight)
+                case _: EditPlantResult.Edited     => attention.refreshAll.pipe(_ => ().asRight)
                 case EditPlantResult.PlantMissing  => plantMissing.asLeft
                 case EditPlantResult.PlantArchived => plantArchived.asLeft
                 case _                             => ApiError("plant could not be archived").asLeft
@@ -101,12 +102,12 @@ object PlantApi:
                 case Left(_)     => unsupportedPlantPatch.asLeft
                 case Right(edit) =>
                   plants.editPlant(PlantId(plantId), _.copy(edit.species, edit.maybeNickname, edit.location, edit.substrate)) match
-                    case EditPlantResult.Edited(_)            => ().asRight
+                    case _: EditPlantResult.Edited            => ().asRight
                     case EditPlantResult.PlantMissing         => plantMissing.asLeft
                     case EditPlantResult.PlantArchived        => plantArchived.asLeft
                     case EditPlantResult.UnknownComponent     => unknownComponent.asLeft
-                    case EditPlantResult.CatalogReadFailed(_) => catalogReadFailed.asLeft
-                    case EditPlantResult.EditFailed(_)        => plantEditFailed.asLeft
+                    case _: EditPlantResult.CatalogReadFailed => catalogReadFailed.asLeft
+                    case _: EditPlantResult.EditFailed        => plantEditFailed.asLeft
             case _ => unsupportedPlantPatch.asLeft
     )
 

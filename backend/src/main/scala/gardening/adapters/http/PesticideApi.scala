@@ -53,34 +53,33 @@ object PesticideApi:
       getPesticidesEndpoint.handle: _ =>
         catalog.getPesticides match
           case GetPesticidesResult.Read(pesticides) => pesticides.asRight
-          case GetPesticidesResult.ReadFailed(_)    => (StatusCode.InternalServerError, readFailed).asLeft,
+          case _: GetPesticidesResult.ReadFailed    => (StatusCode.InternalServerError, readFailed).asLeft,
       addPesticideEndpoint.handle: data =>
         catalog.addPesticide(data) match
           case AddPesticideResult.Added(pesticide) => pesticide.asRight
-          case AddPesticideResult.AddFailed(_)     => (StatusCode.InternalServerError, writeFailed).asLeft,
+          case _: AddPesticideResult.AddFailed     => (StatusCode.InternalServerError, writeFailed).asLeft,
       editPesticideEndpoint.handle: (encodedId, data) =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.editPesticide(id, data) match
             case PesticideUpdateResult.Updated(pesticide) => pesticide.asRight
             case PesticideUpdateResult.PesticideMissing   => recordMissing.asLeft
             case PesticideUpdateResult.PesticideArchived  => pesticideArchived.asLeft
-            case PesticideUpdateResult.UpdateFailed(_)    => writeFailed.asLeft,
+            case _: PesticideUpdateResult.UpdateFailed    => writeFailed.asLeft,
       archivePesticideEndpoint.handle: encodedId =>
         PesticideId.parse(encodedId).fold(invalidId.asLeft): id =>
           catalog.archivePesticide(id) match
             case PesticideUpdateResult.Updated(pesticide) => pesticide.asRight
             case PesticideUpdateResult.PesticideMissing   => recordMissing.asLeft
             case PesticideUpdateResult.PesticideArchived  => alreadyArchived.asLeft
-            case PesticideUpdateResult.UpdateFailed(_)    => archiveFailed.asLeft
+            case _: PesticideUpdateResult.UpdateFailed    => archiveFailed.asLeft
     )
 
-  private given CirceConfiguration = CirceConfiguration.default
-    .withTransformMemberNames {
-      case "maybeInfo" => "info"
-      case "kind"      => "type"
-      case name        => name
-    }
-    .withTransformConstructorNames(lowerCamel)
+  private given CirceConfiguration = CirceConfiguration.default.withTransformMemberNames {
+    case "maybeInfo" => "info"
+    case "kind"      => "type"
+    case name        => name
+  }.withTransformConstructorNames(lowerCamel)
+
   private given TapirConfiguration = TapirConfiguration.default.copy(toEncodedName = {
     case "maybeInfo" => "info"
     case "kind"      => "type"
@@ -90,7 +89,7 @@ object PesticideApi:
   private given Codec[PesticideName] = Codec.from(Decoder.decodeString.map(PesticideName.apply), Encoder.encodeString.contramap(_.value))
   private given Codec[PesticideInfo] = Codec.from(Decoder.decodeString.map(PesticideInfo.apply), Encoder.encodeString.contramap(_.value))
   private given Codec[PesticideId]   = Codec.from(
-    // Pesticide identifiers appear only in response bodies.
+    // No endpoint accepts a PesticideId in a request body, so this Decoder branch is never invoked.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => PesticideId.parse(value).toRight(s"invalid pesticide id: $value")),
     // $COVERAGE-ON$

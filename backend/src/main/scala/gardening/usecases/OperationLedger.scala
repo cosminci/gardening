@@ -35,9 +35,9 @@ object OperationLedger:
       log: Logger^,
       metrics: OperationLedgerMetricsApi^
   ): OperationLedger^{store, plantStore, substrateStore, pesticideStore, idGen, lock, log, metrics} =
-    new LiveOperations
+    new LiveOperationLedger
 
-  private class LiveOperations(using
+  private class LiveOperationLedger(using
       store: OperationStore^,
       plantStore: PlantStore^,
       substrateStore: SubstrateStore^,

@@ -70,14 +70,12 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     val archivedResponse = get("/plants?status=archived", buildPlantApi(archivedRefs, plantsResult = GetPlantsResult.Read(Vector(archived))))
     val invalidResponse  = get("/plants?status=unknown", buildPlantApi(activeRefs))
 
-    val expectedActive =
-      json(
-        s"""[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}]"""
-      )
-    val expectedArchived =
-      json(
-        s"""[{"id":"archived","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"archived"}}]"""
-      )
+    val expectedActive = json(
+      s"""[{"id":"p1","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"active"}}]"""
+    )
+    val expectedArchived = json(
+      s"""[{"id":"archived","details":{"species":"Ficus lyrata","nickname":"Fern","location":"Balcony","substrate":[{"componentId":"${perliteId.value}","share":100}],"status":"archived"}}]"""
+    )
     assertEquals(activeResponse.code, StatusCode.Ok)
     assertEquals(archivedResponse.code, StatusCode.Ok)
     assertEquals(jsonBody(activeResponse), expectedActive)
@@ -114,13 +112,9 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     val archived = patch(archivePath, archivePatch, buildPlantApi(refs))
     val missing  = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
     val repeat   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
-    val failed   =
-      patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
-    val refreshedLate = patch(
-      archivePath,
-      archivePatch,
-      buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
-    )
+    val server   = buildPlantApi(refs, refreshResult = RefreshAttentionResult.RefreshFailed(RuntimeException("attention unavailable")))
+    val failed   = patch(archivePath, archivePatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
+    val refreshedLate = patch(archivePath, archivePatch, server)
 
     val expectedMissing = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
     val expectedRepeat  = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
@@ -167,17 +161,15 @@ class PlantApiSeamIntegrationTest extends munit.FunSuite:
     val missing  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantMissing))
     val archived = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.PlantArchived))
     val unknown  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.UnknownComponent))
-    val catalog  =
-      patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.CatalogReadFailed(RuntimeException("secret"))))
-    val failed = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
+    val catalog  = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.CatalogReadFailed(RuntimeException("secret"))))
+    val failed   = patch(editPath, editPatch, buildPlantApi(refs, editPlantResult = EditPlantResult.EditFailed(RuntimeException("secret"))))
 
     val expectedMissing  = StatusCode.NotFound            -> json("""{"message":"plant not found"}""")
     val expectedArchived = StatusCode.Conflict            -> json("""{"message":"plant already archived"}""")
     val expectedUnknown  = StatusCode.UnprocessableEntity -> json("""{"message":"unknown substrate component"}""")
     val expectedCatalog  = StatusCode.ServiceUnavailable  -> json("""{"message":"substrate catalog could not be read"}""")
     val expectedFailed   = StatusCode.InternalServerError -> json("""{"message":"plant could not be edited"}""")
-    val expectedDetails  =
-      PlantDetails(Species("Monstera deliciosa"), Nickname("Monty").some, Location("Living room"), substrate, PlantStatus.Active)
+    val expectedDetails  = PlantDetails(Species("Monstera deliciosa"), Nickname("Monty").some, Location("Living room"), substrate, PlantStatus.Active)
     assertEquals(edited.code, StatusCode.NoContent)
     assertEquals(missing.code  -> jsonBody(missing), expectedMissing)
     assertEquals(archived.code -> jsonBody(archived), expectedArchived)

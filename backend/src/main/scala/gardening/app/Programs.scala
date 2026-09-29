@@ -3,7 +3,6 @@ package gardening.app
 import gardening.adapters.sqlite.{SqliteOperationStore, SqlitePesticideStore, SqlitePhotoStore, SqlitePhotoWriteJournal, SqlitePlantStore, SqliteSubstrateStore}
 import gardening.adapters.prometheus.*
 import gardening.adapters.file.FilePhotoContentStore
-import gardening.domain.plants.PhotoThumbnail
 import gardening.adapters.system.{SystemClock, UuidIdGenerator}
 import gardening.capabilities.{Logger, PlantUpdateLock}
 import gardening.usecases.PlantAttentionMonitor
@@ -13,7 +12,7 @@ import gardening.ports.OperationLedgerMetricsApi
 import gardening.usecases.PesticideCatalog
 import gardening.ports.PesticideCatalogMetricsApi
 import gardening.usecases.PlantManager
-import gardening.usecases.{PhotoManager, PhotoWriteRecovery}
+import gardening.usecases.{PhotoManager, PhotoThumbnailGenerator, PhotoWriteRecovery}
 import gardening.ports.PlantManagerMetricsApi
 import gardening.usecases.SubstrateCatalog
 import gardening.ports.SubstrateCatalogMetricsApi
@@ -57,7 +56,7 @@ object Programs:
         Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
         PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
-        PhotoManager.make(using photoStore, contentStore, photoWriteJournal, PhotoThumbnail.make, UuidIdGenerator, SystemClock),
+        PhotoManager.make(using photoStore, contentStore, photoWriteJournal, PhotoThumbnailGenerator.make, UuidIdGenerator, SystemClock),
         OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),

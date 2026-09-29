@@ -13,8 +13,7 @@ class StaticSiteSeamIntegrationTest extends munit.FunSuite:
     Files.writeString(directory.resolve("index.html"), "<!doctype html><title>Gardening</title>")
 
     val response = supervised {
-      val binding =
-        NettySyncServer().host("127.0.0.1").port(0).addEndpoint(StaticSite.endpoint(directory.toString)).start()
+      val binding = NettySyncServer().host("127.0.0.1").port(0).addEndpoint(StaticSite.endpoint(directory.toString)).start()
       basicRequest.get(uri"http://127.0.0.1:${binding.port}/index.html").send(HttpClientSyncBackend())
     }
 

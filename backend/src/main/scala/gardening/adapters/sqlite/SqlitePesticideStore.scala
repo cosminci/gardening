@@ -30,28 +30,26 @@ object SqlitePesticideStore:
 
     override def addPesticide(pesticide: Pesticide): AddPesticideResult =
       try
-        val id   = pesticide.id.value.toString
-        val data = pesticide.data
+        val (id, data)           = (pesticide.id.value.toString, pesticide.data)
+        val (name, status, info) = (data.name.value, pesticide.status.toString, data.maybeInfo.map(_.value))
         transact(transactor):
-          sql"insert into pesticide (id, name, type, info, status) values ($id, ${data.name.value}, ${data.kind.toString}, ${data.maybeInfo.map(_.value)}, ${pesticide.status.toString})"
-            .update.run()
+          val query = sql"insert into pesticide (id, name, type, info, status) values ($id, $name, ${data.kind.toString}, $info, $status)"
+          query.update.run()
         AddPesticideResult.Added(pesticide)
       catch case error: SqlException => AddPesticideResult.AddFailed(error)
 
     override def updatePesticide(pesticide: Pesticide): UpdatePesticideResult =
       try
-        transact(transactor)(updatePesticideRow(pesticide).update.run()) match
+        val data                     = pesticide.data
+        val (id, name, status, info) = (pesticide.id.value.toString, data.name.value, pesticide.status.toString, data.maybeInfo.map(_.value))
+        val command = sql"""update pesticide set name = $name, type = ${data.kind.toString}, info = $info, status = $status where id = $id"""
+        transact(transactor)(command.update.run()) match
           case 1 => UpdatePesticideResult.Updated
           case _ => UpdatePesticideResult.UpdateFailed(RuntimeException(s"pesticide not found while updating: ${pesticide.id.value}"))
       catch case error: SqlException => UpdatePesticideResult.UpdateFailed(error)
 
     private def selectPesticide(id: String) =
       sql"select id, name, type, info, status from pesticide where id = $id"
-
-    private def updatePesticideRow(pesticide: Pesticide) =
-      val data = pesticide.data
-      sql"""update pesticide set name = ${data.name.value}, type = ${data.kind.toString}, info = ${data.maybeInfo.map(_.value)},
-           status = ${pesticide.status.toString} where id = ${pesticide.id.value.toString}"""
 
     private def toPesticide(row: PesticideRow) =
       for

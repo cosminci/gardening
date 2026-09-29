@@ -28,19 +28,10 @@ enum PhotoVariant:
 
 final case class PhotoContent(bytes: ByteVector, mediaType: PhotoMediaType)
 
-enum PhotoWriteOperation:
-  case Add, Remove
-
 enum PhotoWriteIntentStatus:
   case Pending, Done
 
-// plantId/capturedAt are set only for Add (needed to finish a write metadata can't be reconstructed
-// from elsewhere); Remove keys the row by the PhotoId itself and needs neither.
-final case class PhotoWriteIntent(
-    key: String,
-    operation: PhotoWriteOperation,
-    status: PhotoWriteIntentStatus,
-    photoId: Option[PhotoId],
-    plantId: Option[PlantId],
-    capturedAt: Option[Instant]
-)
+enum PhotoWriteIntent(val key: String, val status: PhotoWriteIntentStatus):
+  case Add(override val key: String, override val status: PhotoWriteIntentStatus, plantId: PlantId, capturedAt: Instant, photoId: PhotoId)
+      extends PhotoWriteIntent(key, status)
+  case Remove(override val key: String, override val status: PhotoWriteIntentStatus, photoId: PhotoId) extends PhotoWriteIntent(key, status)

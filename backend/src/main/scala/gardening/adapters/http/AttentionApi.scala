@@ -20,6 +20,7 @@ import sttp.tapir.server.netty.sync.OxStreams
 import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration.*
+import scala.util.chaining.*
 import scala.util.Try
 
 object AttentionApi:
@@ -39,7 +40,8 @@ object AttentionApi:
 
   private val getAttentionEndpoint = endpoint.get.in("attention").out(jsonBody[AttentionProjection]).summary("Read plant attention")
 
-  val attentionFeedEndpoint = endpoint.get
+  private type WebsocketEndpoint = Endpoint[Unit, Unit, Unit, Flow[String] => Flow[AttentionProjection], OxStreams & WebSockets]
+  val attentionFeedEndpoint: WebsocketEndpoint = endpoint.get
     .in("attention" / "feed")
     .out(webSocketBody[String, CodecFormat.TextPlain, AttentionProjection, CodecFormat.Json](OxStreams))
     .summary("Push plant attention updates")
@@ -65,16 +67,14 @@ object AttentionApi:
     // $COVERAGE-ON$
 
   private[http] def attentionFeed(
-      attention: PlantAttentionMonitor,
+      monitor: PlantAttentionMonitor,
       pollInterval: FiniteDuration,
       heartbeats: ConnectionHeartbeats
-  ): OxStreams.Pipe[String, AttentionProjection] =
-    incoming =>
-      val connection = UUID.randomUUID()
-      Flow.tick(pollInterval).map { _ => heartbeats.touch(connection); attention.current }.debounceBy(_.measuredAt).merge(
-        incoming.drain(),
-        propagateDoneRight = true
-      )
+  ): OxStreams.Pipe[String, AttentionProjection] = incoming =>
+    Flow.tick(pollInterval)
+      .map(_ => heartbeats.touch(connection = UUID.randomUUID()).pipe(_ => monitor.current))
+      .debounceBy(_.measuredAt)
+      .merge(incoming.drain(), propagateDoneRight = true)
 
   private given circeConfiguration: CirceConfiguration =
     CirceConfiguration.default.withTransformMemberNames(encodedFieldName).withTransformConstructorNames(lowerCamel).withDiscriminator("kind")

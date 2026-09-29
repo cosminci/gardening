@@ -5,9 +5,9 @@ import com.augustnagro.magnum.Transactor
 import gardening.domain.*
 import gardening.domain.pesticide.{AddPesticideResult, GetPesticideResult, GetPesticidesResult, UpdatePesticideResult}
 import gardening.ports.PesticideStore
+import gardening.adapters.sqlite.SqliteHelpers.{execute, makeReadOnly}
 import org.flywaydb.core.Flyway
 
-import java.sql.Connection
 import java.util.UUID
 import javax.sql.DataSource
 import scala.util.Using
@@ -15,7 +15,7 @@ import scala.util.Using
 class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
 
   private val pesticideId   = PesticideId(UUID.fromString("10000000-0000-4000-8000-000000000002"))
-  private val pesticideData = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, none[PesticideInfo])
+  private val pesticideData = PesticideData(PesticideName("Sulfur"), PesticideType.Fungicide, PesticideInfo("apply weekly").some)
   private val pesticide     = Pesticide(pesticideId, pesticideData, PesticideStatus.Active)
 
   test("should persist additions, edits, and archiving"):
@@ -107,17 +107,3 @@ class SqlitePesticideStoreSeamIntegrationTest extends munit.FunSuite:
 
   private def buildStore(connection: SqliteConnection) =
     SqlitePesticideStore.make(connection.transactor)
-
-  private def makeReadOnly(connection: Connection) =
-    val statement = connection.createStatement()
-    val _         = statement.execute("PRAGMA query_only = ON")
-    statement.close()
-
-  private def execute(dataSource: DataSource, sql: String) =
-    val connection = dataSource.getConnection()
-    try
-      val statement = connection.prepareStatement(sql)
-      try
-        val _ = statement.executeUpdate()
-      finally statement.close()
-    finally connection.close()

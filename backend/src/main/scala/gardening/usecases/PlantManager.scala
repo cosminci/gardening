@@ -30,9 +30,9 @@ object PlantManager:
       log: Logger^,
       metrics: PlantManagerMetricsApi^
   ): PlantManager^{store, substrateStore, idGen, lock, log, metrics} =
-    new LivePlants
+    new LivePlantManager
 
-  private class LivePlants(using
+  private class LivePlantManager(using
       store: PlantStore^,
       substrateStore: SubstrateStore^,
       idGen: IdGenerator^,
