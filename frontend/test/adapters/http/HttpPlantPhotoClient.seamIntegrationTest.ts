@@ -143,7 +143,11 @@ describe("HttpPlantPhotoClient", () => {
     expect(result).toEqual({ kind: "removeFailed", reason });
   });
 
-  it("should derive a photo content URL from a photo id", () => {
-    expect(photoContentUrl(photoId1)).toBe("/photos/ph1/content");
+  it("should derive a thumbnail photo content URL from a photo id", () => {
+    expect(photoContentUrl(photoId1, "thumbnail")).toBe("/photos/ph1/content?variant=thumbnail");
+  });
+
+  it("should derive an original photo content URL from a photo id", () => {
+    expect(photoContentUrl(photoId1, "original")).toBe("/photos/ph1/content?variant=original");
   });
 });
