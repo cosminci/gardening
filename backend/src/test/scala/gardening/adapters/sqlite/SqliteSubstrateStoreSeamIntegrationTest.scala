@@ -6,9 +6,9 @@ import com.augustnagro.magnum.Transactor
 import gardening.domain.*
 import gardening.domain.substrate.{AddSubstrateComponentResult, DeleteSubstrateMixResult, GetSubstrateComponentResult, GetSubstrateComponentsResult, GetSubstrateMixesResult, SaveSubstrateMixResult, UpdateSubstrateComponentResult}
 import gardening.ports.SubstrateStore
+import gardening.adapters.sqlite.SqliteHelpers.{execute, makeReadOnly}
 import org.flywaydb.core.Flyway
 
-import java.sql.Connection
 import java.util.UUID
 import javax.sql.DataSource
 import scala.util.Using
@@ -183,17 +183,3 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
 
   private def buildStore(connection: SqliteConnection) =
     SqliteSubstrateStore.make(connection.transactor)
-
-  private def makeReadOnly(connection: Connection) =
-    val statement = connection.createStatement()
-    val _         = statement.execute("PRAGMA query_only = ON")
-    statement.close()
-
-  private def execute(dataSource: DataSource, sql: String) =
-    val connection = dataSource.getConnection()
-    try
-      val statement = connection.prepareStatement(sql)
-      try
-        val _ = statement.executeUpdate()
-      finally statement.close()
-    finally connection.close()

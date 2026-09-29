@@ -54,13 +54,11 @@ object SqliteOperationStore:
       catch case error: SqlException => GetOperationDateRangeResult.ReadFailed(error)
 
     private def selectOperationsForPlant(plantId: String, window: OperationWindow) =
-      val readSize: Int = window.size + 1
-      val offset: Int   = window.offset
       sql"""select id, plant_id, date, kind, payload
             from operation
             where plant_id = $plantId
             order by date desc, id desc
-            limit $readSize offset $offset"""
+            limit ${window.size + 1} offset ${window.offset}"""
 
     override def getLatestRepot(plant: PlantId): GetLatestRepotResult =
       try
@@ -129,9 +127,8 @@ object SqliteOperationStore:
     override def updateOperation(operation: OperationId, details: OperationDetails): EditOperationResult =
       try
         transact(transactor):
-          val queryResult = updateOperationRow(operation.value, details).query[OperationRow].run().headOption
-          queryResult.fold[EditOperationResult](OperationMissing): row =>
-            Edited(trust(toOperation(row)))
+          updateOperationRow(operation.value, details).query[OperationRow].run().headOption
+            .fold[EditOperationResult](OperationMissing)(row => Edited(trust(toOperation(row))))
       catch case e: SqlException => EditFailed(e)
 
     override def editRepot(operation: OperationId, details: OperationDetails.Repot): EditOperationResult =

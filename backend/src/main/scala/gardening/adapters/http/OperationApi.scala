@@ -82,33 +82,34 @@ object OperationApi:
       getOperationsEndpoint.handle: (plantId, offset, pageSize) =>
         operations.getOperations(PlantId(plantId), OperationWindow(offset, pageSize)) match
           case GetOperationsResult.Read(page)    => page.asRight
-          case GetOperationsResult.ReadFailed(_) => (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
+          case _: GetOperationsResult.ReadFailed => (StatusCode.InternalServerError, ApiError("journal could not be read")).asLeft,
       getOperationDateRangeEndpoint.handle: plantId =>
         operations.getOperationDateRange(PlantId(plantId)) match
           case GetOperationDateRangeResult.Read(range)   => range.asRight
           case GetOperationDateRangeResult.PlantMissing  => plantMissing.asLeft
-          case GetOperationDateRangeResult.ReadFailed(_) => ApiError("operation dates could not be read").asLeft,
+          case _: GetOperationDateRangeResult.ReadFailed => ApiError("operation dates could not be read").asLeft,
       logOperationEndpoint.handle: request =>
         operations.logOperation(PlantId(request.plantId), request.date, request.details) match
           case LogOperationResult.Logged(id)       => LoggedOperation(id.value).asRight
           case LogOperationResult.PlantMissing     => plantMissing.asLeft
           case LogOperationResult.PlantArchived    => plantArchived.asLeft
-          case LogOperationResult.LoggingFailed(_) => ApiError("operation could not be logged").asLeft,
+          case _: LogOperationResult.LoggingFailed => ApiError("operation could not be logged").asLeft,
       editOperationEndpoint.handle: (operationId, details) =>
         operations.editOperation(OperationId(operationId), details) match
           case EditOperationResult.Edited(edited)        => edited.asRight
           case EditOperationResult.OperationMissing      => operationMissing.asLeft
           case EditOperationResult.OperationTypeMismatch => operationTypeMismatch.asLeft
-          case EditOperationResult.EditFailed(_)         => editFailed.asLeft,
+          case _: EditOperationResult.EditFailed         => editFailed.asLeft,
       deleteOperationEndpoint.handle: operationId =>
         operations.deleteOperation(OperationId(operationId)) match
           case DeleteOperationResult.Deleted                 => ().asRight
           case DeleteOperationResult.OperationMissing        => operationMissing.asLeft
           case DeleteOperationResult.CannotDeleteLatestRepot => cannotDeleteLatestRepot.asLeft
-          case DeleteOperationResult.DeleteFailed(_)         => deleteFailed.asLeft
+          case _: DeleteOperationResult.DeleteFailed         => deleteFailed.asLeft
     )
 
-  // Tapir validates query offsets with the plain codec, not this schema's inverse mapping.
+  // value => value is identity (nothing to verify); the forward function only re-derives a Schema
+  // `.default` value for docs, which none of these schemas set, so it's unreachable either way.
   // $COVERAGE-OFF$
   private lazy val operationOffsetSchema   = Schema.schemaForInt.validate(Validator.min(0)).map(_.refineOption[GreaterEqual[0]])(value => value)
   private lazy val operationPageSizeSchema =
@@ -127,7 +128,7 @@ object OperationApi:
       case None       => DecodeResult.Error(value.toString, IllegalArgumentException("page size must be between 1 and 10"))
   )(value => value).schema(operationPageSizeSchema)
 
-  // Operation identifiers are output-only in JSON bodies.
+  // No endpoint accepts an OperationId in a request body, so this Decoder branch is never invoked.
   // $COVERAGE-OFF$
   private given Codec[OperationId] = Codec.from(Decoder.decodeString.map(OperationId.apply), Encoder.encodeString.contramap(_.value))
   // $COVERAGE-ON$

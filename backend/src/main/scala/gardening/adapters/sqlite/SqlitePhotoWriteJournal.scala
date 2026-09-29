@@ -19,11 +19,12 @@ object SqlitePhotoWriteJournal:
 
   private class LiveSqlitePhotoWriteJournal(transactor: Transactor) extends PhotoWriteJournal:
 
-    override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant): PhotoJournalWriteResult =
+    override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant, photo: PhotoId): PhotoJournalWriteResult =
       try
         transact(transactor):
-          sql"""insert into photo_write_intent (key, operation, status, plant_id, captured_at)
-                values ($idempotencyKey, 'Add', 'Pending', ${plant.value}, ${timestampFormatter.format(capturedAt)})""".update.run()
+          sql"""insert into photo_write_intent (key, operation, status, plant_id, captured_at, photo_id)
+                values ($idempotencyKey, 'Add', 'Pending', ${plant.value}, ${timestampFormatter.format(capturedAt)}, ${photo.value.toString})"""
+            .update.run()
         PhotoJournalWriteResult.Recorded
       catch case error: SqlException => PhotoJournalWriteResult.RecordFailed(error)
 
@@ -33,13 +34,6 @@ object SqlitePhotoWriteJournal:
           val key = photo.value.toString
           sql"""insert into photo_write_intent (key, operation, status, photo_id)
                 values ($key, 'Remove', 'Pending', $key)""".update.run()
-        PhotoJournalWriteResult.Recorded
-      catch case error: SqlException => PhotoJournalWriteResult.RecordFailed(error)
-
-    override def attachPhoto(idempotencyKey: String, photo: PhotoId): PhotoJournalWriteResult =
-      try
-        transact(transactor):
-          sql"update photo_write_intent set photo_id = ${photo.value.toString} where key = $idempotencyKey".update.run()
         PhotoJournalWriteResult.Recorded
       catch case error: SqlException => PhotoJournalWriteResult.RecordFailed(error)
 
@@ -80,27 +74,44 @@ object SqlitePhotoWriteJournal:
 
     private def toIntent(row: PhotoWriteIntentRow): Either[Throwable, PhotoWriteIntent] =
       for
-        operation <- row.operation match
-          case "Add"    => Right(PhotoWriteOperation.Add)
-          case "Remove" => Right(PhotoWriteOperation.Remove)
+        status <- parseWriteStatus(row.status)
+        intent <- row.operation match
+          case "Add"    => toAddIntent(row, status)
+          case "Remove" => toRemoveIntent(row, status)
           // A CHECK constraint on this column makes every other stored value unreachable.
           // $COVERAGE-OFF$
           case other => Left(RuntimeException(s"invalid stored photo write intent operation: $other"))
           // $COVERAGE-ON$
-        status <- row.status match
-          case "Pending" => Right(PhotoWriteIntentStatus.Pending)
-          case "Done"    => Right(PhotoWriteIntentStatus.Done)
-          // A CHECK constraint on this column makes every other stored value unreachable.
-          // $COVERAGE-OFF$
-          case other => Left(RuntimeException(s"invalid stored photo write intent status: $other"))
-          // $COVERAGE-ON$
-        photoId <- row.photoId.traverse(value =>
-          Try(UUID.fromString(value)).toEither.left.map(_ => RuntimeException(s"invalid stored photo write intent photo id: $value"))
-        )
-        capturedAt <- row.capturedAt.traverse(value =>
-          Try(Instant.parse(value)).toEither.left.map(_ => RuntimeException(s"invalid stored photo write intent capturedAt: $value"))
-        )
-      yield PhotoWriteIntent(row.key, operation, status, photoId.map(PhotoId.apply), row.plantId.map(PlantId.apply), capturedAt)
+      yield intent
+
+    private def toAddIntent(row: PhotoWriteIntentRow, status: PhotoWriteIntentStatus): Either[Throwable, PhotoWriteIntent] =
+      for
+        plantId    <- requireColumn(row.plantId, s"add photo write intent ${row.key} is missing plant_id").map(PlantId.apply)
+        capturedAt <- requireColumn(row.capturedAt, s"add photo write intent ${row.key} is missing captured_at").flatMap(parseCapturedAt)
+        photoId    <- requireColumn(row.photoId, s"add photo write intent ${row.key} is missing photo_id").flatMap(parsePhotoId)
+      yield PhotoWriteIntent.Add(row.key, status, plantId, capturedAt, photoId)
+
+    private def toRemoveIntent(row: PhotoWriteIntentRow, status: PhotoWriteIntentStatus): Either[Throwable, PhotoWriteIntent] =
+      requireColumn(row.photoId, s"remove photo write intent ${row.key} is missing photo_id")
+        .flatMap(parsePhotoId)
+        .map(PhotoWriteIntent.Remove(row.key, status, _))
+
+    private def requireColumn(value: Option[String], message: String): Either[Throwable, String] =
+      value.toRight(RuntimeException(message))
+
+    private def parseWriteStatus(value: String): Either[Throwable, PhotoWriteIntentStatus] = value match
+      case "Pending" => Right(PhotoWriteIntentStatus.Pending)
+      case "Done"    => Right(PhotoWriteIntentStatus.Done)
+      // A CHECK constraint on this column makes every other stored value unreachable.
+      // $COVERAGE-OFF$
+      case other => Left(RuntimeException(s"invalid stored photo write intent status: $other"))
+      // $COVERAGE-ON$
+
+    private def parsePhotoId(value: String): Either[Throwable, PhotoId] =
+      Try(PhotoId(UUID.fromString(value))).toEither.left.map(_ => RuntimeException(s"invalid stored photo write intent photo id: $value"))
+
+    private def parseCapturedAt(value: String): Either[Throwable, Instant] =
+      Try(Instant.parse(value)).toEither.left.map(_ => RuntimeException(s"invalid stored photo write intent capturedAt: $value"))
 
   private case class PhotoWriteIntentRow(
       key: String,

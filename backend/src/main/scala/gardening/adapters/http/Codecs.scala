@@ -18,6 +18,7 @@ private[http] object Codecs:
       .withTransformMemberNames(encodedFieldName)
       .withTransformConstructorNames(lowerCamel)
       .withDiscriminator("kind")
+
   given TapirConfiguration =
     TapirConfiguration.default.copy(
       toEncodedName = encodedFieldName,
@@ -25,7 +26,7 @@ private[http] object Codecs:
       toDiscriminatorValue = name => lowerCamel(name.fullName.split('.').last.stripSuffix("$"))
     )
 
-  // Plant identifiers are output-only in JSON bodies.
+  // No endpoint accepts a PlantId in a request body, so this Decoder branch is never invoked.
   // $COVERAGE-OFF$
   given Codec[PlantId] = Codec.from(Decoder.decodeString.map(PlantId.apply), Encoder.encodeString.contramap(_.value))
   // $COVERAGE-ON$
@@ -48,18 +49,22 @@ private[http] object Codecs:
   // $COVERAGE-OFF$
   given Schema[SubstrateComponentId] = Schema.string.map(SubstrateComponentId.parse)(_.value.toString).format("uuid")
   // $COVERAGE-ON$
+  // value => value is identity (nothing to verify); the forward function only re-derives a Schema
+  // `.default` value for docs, which none of these schemas set, so it's unreachable either way.
+  // $COVERAGE-OFF$
   given Schema[Percentage] = Schema.schemaForInt
     .validate(Validator.min(1).and(Validator.max(100)))
-    // JSON bodies use Circe rather than this percentage schema's inverse mapping.
-    // $COVERAGE-OFF$
     .map(_.refineOption[Interval.Closed[1, 100]])(value => value)
   // $COVERAGE-ON$
   given Schema[Substrate] = summon[Schema[List[SubstratePart]]]
     .validate(Validator.minSize(1))
-    // JSON bodies use Circe rather than this substrate schema's inverse mapping.
-    // $COVERAGE-OFF$
-    .map(parts => Substrate.of(parts).toOption)(_.parts)
-  // $COVERAGE-ON$
+    .map(
+      // Only re-derives a Schema `.default` value for docs; none of these schemas set one, so this is unreachable.
+      // $COVERAGE-OFF$
+      parts =>
+        Substrate.of(parts).toOption
+        // $COVERAGE-ON$
+    )(_.parts) // tapir replays the attached Validator against this on every decode, after Circe parses the value
 
   inline def enumSchema[A <: Product]: Schema[A] = Schema.derivedEnumeration[A].apply(encode = Some(value => lowerCamel(value.productPrefix)))
 

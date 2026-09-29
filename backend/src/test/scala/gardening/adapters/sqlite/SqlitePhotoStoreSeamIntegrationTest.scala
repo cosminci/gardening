@@ -1,15 +1,14 @@
 package gardening.adapters.sqlite
 
-import cats.syntax.option.*
 import gardening.domain.*
 import gardening.domain.plants.*
 import gardening.ports.PhotoStore
+import gardening.adapters.sqlite.SqliteHelpers.{execute, makeReadOnly, seedPlant}
 import com.augustnagro.magnum.Transactor
 import io.github.iltotore.iron.autoRefine
 import munit.FunSuite
 import org.flywaydb.core.Flyway
 
-import java.sql.Connection
 import java.time.Instant
 import java.util.UUID
 import javax.sql.DataSource
@@ -18,7 +17,6 @@ import scala.util.Using
 class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
 
   private val date            = Instant.parse("2026-01-01T00:00:00Z")
-  private val perliteId       = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
   private val fullPhotoWindow = PhotoWindow(offset = 0, size = 10)
   private val photoId         = PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000001"))
 
@@ -132,13 +130,8 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
       val photoStore = resource.photoStore
       seedPlant(dataSource, id = "p1")
       val invalidId = "z" * 36
-      execute(
-        dataSource,
-        "insert into plant_photo (id, plant_id, captured_at) values (?, ?, ?)",
-        invalidId,
-        "p1",
-        date.toString
-      )
+      val command   = "insert into plant_photo (id, plant_id, captured_at) values (?, ?, ?)"
+      execute(dataSource, command, invalidId, "p1", date.toString)
 
       photoStore.getPhotos(PlantId("p1"), fullPhotoWindow) match
         case GetPhotosResult.ReadFailed(DatabaseCorruption(reason)) =>
@@ -157,41 +150,3 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
     val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, SqlitePhotoStore.make(connection.transactor))
-
-  private def makeReadOnly(connection: Connection) =
-    val statement = connection.createStatement()
-    val _         = statement.execute("PRAGMA query_only = ON")
-    statement.close()
-
-  private def seedPlant(
-      dataSource: DataSource,
-      id: String,
-      species: String = "Ficus lyrata",
-      maybeNickname: Option[String] = none,
-      location: String = "Balcony",
-      status: PlantStatus = PlantStatus.Active,
-      substrate: List[(SubstrateComponentId, Int)] = List(perliteId -> 100)
-  ) =
-    val connection = dataSource.getConnection()
-    try
-      val statement = connection.prepareStatement("insert into plant (id, species, nickname, location, status, substrate) values (?, ?, ?, ?, ?, ?)")
-      statement.setString(1, id)
-      statement.setString(2, species)
-      maybeNickname.fold(statement.setNull(3, java.sql.Types.VARCHAR))(nickname => statement.setString(3, nickname))
-      statement.setString(4, location)
-      statement.setString(5, status.toString)
-      val substrateJson = substrate.map((component, share) => s"""{"component":"${component.value}","share":$share}""").mkString("[", ",", "]")
-      statement.setString(6, substrateJson)
-      val _ = statement.executeUpdate()
-      statement.close()
-    finally connection.close()
-
-  private def execute(dataSource: DataSource, sql: String, parameters: String*) =
-    val connection = dataSource.getConnection()
-    try
-      val statement = connection.prepareStatement(sql)
-      try
-        parameters.zipWithIndex.foreach((parameter, index) => statement.setString(index + 1, parameter))
-        val _ = statement.executeUpdate()
-      finally statement.close()
-    finally connection.close()

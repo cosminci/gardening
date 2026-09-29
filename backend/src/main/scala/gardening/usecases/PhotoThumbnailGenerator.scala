@@ -1,5 +1,6 @@
-package gardening.domain.plants
+package gardening.usecases
 
+import gardening.domain.plants.*
 import scodec.bits.ByteVector
 import squants.information.Information
 import squants.information.InformationConversions.*
@@ -11,19 +12,19 @@ import javax.imageio.metadata.IIOMetadata
 import javax.imageio.{IIOImage, ImageIO, ImageWriteParam}
 import scala.util.Try
 
-trait PhotoThumbnail:
+trait PhotoThumbnailGenerator:
   def derive(original: PhotoContent): ThumbnailDerivationResult
 
-object PhotoThumbnail:
+object PhotoThumbnailGenerator:
 
-  def make: PhotoThumbnail = LivePhotoThumbnail
+  def make: PhotoThumbnailGenerator = LivePhotoThumbnailGenerator
 
   val maxThumbnailSize: Information = 100.kibibytes
 
   private val ladder: Vector[(Int, Float)] =
     Vector((1024, 0.8f), (800, 0.8f), (800, 0.6f), (600, 0.6f), (600, 0.4f), (400, 0.4f))
 
-  private object LivePhotoThumbnail extends PhotoThumbnail:
+  private object LivePhotoThumbnailGenerator extends PhotoThumbnailGenerator:
 
     override def derive(original: PhotoContent): ThumbnailDerivationResult =
       Option(ImageIO.read(ByteArrayInputStream(original.bytes.toArray))) match

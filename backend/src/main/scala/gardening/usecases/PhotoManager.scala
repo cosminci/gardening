@@ -22,7 +22,7 @@ object PhotoManager:
       store: PhotoStore^,
       contentStore: PhotoContentStore^,
       journal: PhotoWriteJournal^,
-      thumbnail: PhotoThumbnail^,
+      thumbnail: PhotoThumbnailGenerator^,
       idGen: IdGenerator^,
       clock: Clock^
   )(using log: Logger^): PhotoManager^{store, contentStore, journal, thumbnail, idGen, clock, log} =
@@ -32,7 +32,7 @@ object PhotoManager:
       store: PhotoStore^,
       contentStore: PhotoContentStore^,
       journal: PhotoWriteJournal^,
-      thumbnail: PhotoThumbnail^,
+      thumbnail: PhotoThumbnailGenerator^,
       idGen: IdGenerator^,
       clock: Clock^
   )(using log: Logger^) extends PhotoManager:
@@ -41,49 +41,44 @@ object PhotoManager:
       journal.findByKey(idempotencyKey) match
         case PhotoJournalFindResult.FindFailed(reason) =>
           AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
-        case PhotoJournalFindResult.Found(intent) =>
-          intent.status match
+        case PhotoJournalFindResult.Found(add: PhotoWriteIntent.Add) =>
+          add.status match
             case PhotoWriteIntentStatus.Done =>
-              reconstructAddedPhoto(intent) match
-                case Some(added) => AddPhotoResult.Added(added).tap(_ => log.info(s"photo add retried idempotencyKey=$idempotencyKey"))
-                case None        =>
-                  val wrapped = RuntimeException(s"photo write journal entry for idempotency key $idempotencyKey is done but missing metadata")
-                  AddPhotoResult.AddFailed(wrapped).tap(_ => log.error("add photo", wrapped))
+              val added = PlantPhoto(add.photoId, add.plantId, add.capturedAt)
+              AddPhotoResult.Added(added).tap(_ => log.info(s"photo add retried idempotencyKey=$idempotencyKey"))
             case PhotoWriteIntentStatus.Pending =>
               val inProgress = RuntimeException(s"photo upload already in progress for idempotency key $idempotencyKey")
               AddPhotoResult.AddFailed(inProgress).tap(_ => log.error("add photo", inProgress))
+        case PhotoJournalFindResult.Found(_: PhotoWriteIntent.Remove) =>
+          val wrapped = RuntimeException(s"idempotency key $idempotencyKey collides with a remove photo write intent")
+          AddPhotoResult.AddFailed(wrapped).tap(_ => log.error("add photo", wrapped))
         case PhotoJournalFindResult.NotFound =>
           thumbnail.derive(content) match
             case ThumbnailDerivationResult.DerivationFailed(reason) =>
               AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
             case ThumbnailDerivationResult.Derived(derivedThumbnail) =>
               val capturedAt = clock.now()
-              journal.recordAdd(idempotencyKey, plant, capturedAt) match
+              val photo      = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plant, capturedAt)
+              journal.recordAdd(idempotencyKey, plant, capturedAt, photo.id) match
                 case PhotoJournalWriteResult.RecordFailed(reason) =>
                   AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
                 case PhotoJournalWriteResult.Recorded =>
-                  val photo = PlantPhoto(PhotoId(UUID.fromString(idGen.nextId())), plant, capturedAt)
-                  journal.attachPhoto(idempotencyKey, photo.id) match
-                    case PhotoJournalWriteResult.RecordFailed(reason) =>
+                  contentStore.put(photo.id, content, derivedThumbnail) match
+                    case PhotoWriteResult.WriteFailed(reason) =>
                       logJournalFailure("discard photo write intent")(journal.discard(idempotencyKey))
                       AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
-                    case PhotoJournalWriteResult.Recorded =>
-                      contentStore.put(photo.id, content, derivedThumbnail) match
-                        case PhotoWriteResult.WriteFailed(reason) =>
+                    case PhotoWriteResult.Written =>
+                      store.addPhoto(photo) match
+                        case result @ AddPhotoResult.Added(added) =>
+                          logJournalFailure("mark photo write intent done")(journal.markDone(idempotencyKey))
+                          log.info(s"photo added $added mediaType=${content.mediaType}")
+                          result
+                        case AddPhotoResult.PlantMissing =>
                           logJournalFailure("discard photo write intent")(journal.discard(idempotencyKey))
-                          AddPhotoResult.AddFailed(reason).tap(_ => log.error("add photo", reason))
-                        case PhotoWriteResult.Written =>
-                          store.addPhoto(photo) match
-                            case result @ AddPhotoResult.Added(added) =>
-                              logJournalFailure("mark photo write intent done")(journal.markDone(idempotencyKey))
-                              log.info(s"photo added $added mediaType=${content.mediaType}")
-                              result
-                            case AddPhotoResult.PlantMissing =>
-                              logJournalFailure("discard photo write intent")(journal.discard(idempotencyKey))
-                              compensateContentDeleteAfterMissingPlant(photo.id)
-                            case AddPhotoResult.AddFailed(reason) =>
-                              logJournalFailure("discard photo write intent")(journal.discard(idempotencyKey))
-                              compensateContentDeleteAfterAddFailed(photo.id, reason)
+                          compensateContentDeleteAfterMissingPlant(photo.id)
+                        case AddPhotoResult.AddFailed(reason) =>
+                          logJournalFailure("discard photo write intent")(journal.discard(idempotencyKey))
+                          compensateContentDeleteAfterAddFailed(photo.id, reason)
 
     override def removePhoto(photo: PhotoId): RemovePhotoResult =
       journal.recordRemove(photo) match
@@ -113,13 +108,6 @@ object PhotoManager:
         case _                                  => ()
 
     override def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult = contentStore.get(photo, variant)
-
-    private def reconstructAddedPhoto(intent: PhotoWriteIntent): Option[PlantPhoto] =
-      for
-        photoId    <- intent.photoId
-        plantId    <- intent.plantId
-        capturedAt <- intent.capturedAt
-      yield PlantPhoto(photoId, plantId, capturedAt)
 
     private def logJournalFailure(operation: String)(result: PhotoJournalWriteResult): Unit = result match
       case PhotoJournalWriteResult.RecordFailed(reason) => log.error(operation, reason)

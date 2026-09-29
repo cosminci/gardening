@@ -59,12 +59,8 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
     val edited   = put(s"/substrates/components/${componentId.value}", componentDataJson, server)
     val invalid  = put("/substrates/components/not-a-uuid", componentDataJson, server)
     val missing  = put(s"/substrates/components/${componentId.value}", componentDataJson, buildServer())
-    val archived =
-      put(
-        s"/substrates/components/${componentId.value}",
-        componentDataJson,
-        buildServer(editResult = SubstrateComponentUpdateResult.ComponentArchived)
-      )
+    val url      = s"/substrates/components/${componentId.value}"
+    val archived = put(url, componentDataJson, buildServer(editResult = SubstrateComponentUpdateResult.ComponentArchived))
 
     assertResponse(edited, StatusCode.Ok, componentJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid substrate component id"}""")
@@ -79,11 +75,8 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
     val archived        = post(s"/substrates/components/${componentId.value}/archive", "", server)
     val invalid         = post("/substrates/components/not-a-uuid/archive", "", server)
     val missing         = post(s"/substrates/components/${componentId.value}/archive", "", buildServer())
-    val alreadyArchived = post(
-      s"/substrates/components/${componentId.value}/archive",
-      "",
-      buildServer(archiveResult = SubstrateComponentUpdateResult.ComponentArchived)
-    )
+    val url             = s"/substrates/components/${componentId.value}/archive"
+    val alreadyArchived = post(url, body = "", buildServer(archiveResult = SubstrateComponentUpdateResult.ComponentArchived))
 
     assertResponse(archived, StatusCode.Ok, archivedComponentJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid substrate component id"}""")
@@ -210,5 +203,5 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
-  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
+  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String): Unit =
     assertEquals(response.code -> jsonBody(response), status -> json(body))

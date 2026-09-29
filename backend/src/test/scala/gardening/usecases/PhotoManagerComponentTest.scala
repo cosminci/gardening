@@ -40,8 +40,7 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(result, AddPhotoResult.Added(expectedPhoto))
     assertEquals(refs.putPhotoContents.get(), Vector((PhotoId(photoUuid), photoContent, expectedThumbnail)))
     assertEquals(refs.addedPhotos.get(), Vector(expectedPhoto))
-    assertEquals(refs.recordedAdds.get(), Vector((idempotencyKey, plantId, captureInstant)))
-    assertEquals(refs.attachedPhotos.get(), Vector((idempotencyKey, PhotoId(photoUuid))))
+    assertEquals(refs.recordedAdds.get(), Vector((idempotencyKey, plantId, captureInstant, PhotoId(photoUuid))))
     assertEquals(refs.markedDoneKeys.get(), Vector(idempotencyKey))
     assertEquals(refs.discardedKeys.get(), Vector.empty)
 
@@ -118,7 +117,7 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
       case other => fail(s"expected AddFailed, got $other")
 
   test("should return the existing photo without repeating any writes when retried with a completed idempotency key"):
-    val doneIntent = PhotoWriteIntent(idempotencyKey, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Done, Some(photo.id), Some(plantId), Some(date))
+    val doneIntent = PhotoWriteIntent.Add(idempotencyKey, PhotoWriteIntentStatus.Done, plantId, date, photo.id)
     val refs       = Refs()
 
     val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(doneIntent)).addPhoto(plantId, photoContent, idempotencyKey)
@@ -128,20 +127,20 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
     assertEquals(refs.addedPhotos.get(), Vector.empty)
     assertEquals(refs.recordedAdds.get(), Vector.empty)
 
-  test("should fail the upload as a corrupt journal entry when a done record is missing its metadata"):
-    val corruptIntent = PhotoWriteIntent(idempotencyKey, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Done, None, Some(plantId), Some(date))
+  test("should fail the upload when a duplicate idempotency key is still in flight"):
+    val pendingIntent = PhotoWriteIntent.Add(idempotencyKey, PhotoWriteIntentStatus.Pending, plantId, date, photo.id)
     val refs          = Refs()
 
-    val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(corruptIntent)).addPhoto(plantId, photoContent, idempotencyKey)
+    val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(pendingIntent)).addPhoto(plantId, photoContent, idempotencyKey)
 
     assertEquals(result.getClass, classOf[AddPhotoResult.AddFailed])
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
 
-  test("should fail the upload when a duplicate idempotency key is still in flight"):
-    val pendingIntent = PhotoWriteIntent(idempotencyKey, PhotoWriteOperation.Add, PhotoWriteIntentStatus.Pending, None, Some(plantId), Some(date))
-    val refs          = Refs()
+  test("should fail the upload when the idempotency key collides with a remove photo write intent"):
+    val removeIntent = PhotoWriteIntent.Remove(idempotencyKey, PhotoWriteIntentStatus.Pending, photo.id)
+    val refs         = Refs()
 
-    val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(pendingIntent)).addPhoto(plantId, photoContent, idempotencyKey)
+    val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(removeIntent)).addPhoto(plantId, photoContent, idempotencyKey)
 
     assertEquals(result.getClass, classOf[AddPhotoResult.AddFailed])
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
@@ -160,15 +159,6 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
     val refs  = Refs()
 
     val result = buildManager(refs, recordAddResult = PhotoJournalWriteResult.RecordFailed(cause)).addPhoto(plantId, photoContent, idempotencyKey)
-
-    assertEquals(result, AddPhotoResult.AddFailed(cause))
-    assertEquals(refs.putPhotoContents.get(), Vector.empty)
-
-  test("should fail the upload without writing content when attaching the photo id fails"):
-    val cause = RuntimeException("journal write failed")
-    val refs  = Refs()
-
-    val result = buildManager(refs, attachPhotoResult = PhotoJournalWriteResult.RecordFailed(cause)).addPhoto(plantId, photoContent, idempotencyKey)
 
     assertEquals(result, AddPhotoResult.AddFailed(cause))
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
@@ -297,9 +287,8 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
     val putPhotoContents: AtomicReference[Vector[(PhotoId, PhotoContent, PhotoContent)]] = AtomicReference(Vector.empty)
     val deletedPhotoContentIds: AtomicReference[Vector[PhotoId]]                         = AtomicReference(Vector.empty)
     val requestedContentVariants: AtomicReference[Vector[PhotoVariant]]                  = AtomicReference(Vector.empty)
-    val recordedAdds: AtomicReference[Vector[(String, PlantId, Instant)]]                = AtomicReference(Vector.empty)
+    val recordedAdds: AtomicReference[Vector[(String, PlantId, Instant, PhotoId)]]       = AtomicReference(Vector.empty)
     val recordedRemoves: AtomicReference[Vector[PhotoId]]                                = AtomicReference(Vector.empty)
-    val attachedPhotos: AtomicReference[Vector[(String, PhotoId)]]                       = AtomicReference(Vector.empty)
     val markedDoneKeys: AtomicReference[Vector[String]]                                  = AtomicReference(Vector.empty)
     val discardedKeys: AtomicReference[Vector[String]]                                   = AtomicReference(Vector.empty)
 
@@ -316,7 +305,6 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
       findByKeyResult: PhotoJournalFindResult = PhotoJournalFindResult.NotFound,
       recordAddResult: PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded,
       recordRemoveResult: PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded,
-      attachPhotoResult: PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded,
       markDoneResult: PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded,
       discardResult: PhotoJournalWriteResult = PhotoJournalWriteResult.Recorded
   ) =
@@ -335,18 +323,16 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
       override def delete(photo: PhotoId): PhotoWriteResult =
         refs.deletedPhotoContentIds.updateAndGet(_ :+ photo).pipe(_ => deleteContentResult)
     val journal = new PhotoWriteJournal:
-      override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant): PhotoJournalWriteResult =
-        refs.recordedAdds.updateAndGet(_ :+ (idempotencyKey, plant, capturedAt)).pipe(_ => recordAddResult)
+      override def recordAdd(idempotencyKey: String, plant: PlantId, capturedAt: Instant, photo: PhotoId): PhotoJournalWriteResult =
+        refs.recordedAdds.updateAndGet(_ :+ (idempotencyKey, plant, capturedAt, photo)).pipe(_ => recordAddResult)
       override def recordRemove(photo: PhotoId): PhotoJournalWriteResult =
         refs.recordedRemoves.updateAndGet(_ :+ photo).pipe(_ => recordRemoveResult)
-      override def attachPhoto(idempotencyKey: String, photo: PhotoId): PhotoJournalWriteResult =
-        refs.attachedPhotos.updateAndGet(_ :+ (idempotencyKey, photo)).pipe(_ => attachPhotoResult)
       override def markDone(key: String): PhotoJournalWriteResult =
         refs.markedDoneKeys.updateAndGet(_ :+ key).pipe(_ => markDoneResult)
       override def discard(key: String): PhotoJournalWriteResult =
         refs.discardedKeys.updateAndGet(_ :+ key).pipe(_ => discardResult)
       override def findByKey(key: String): PhotoJournalFindResult = findByKeyResult
       override def list(): PhotoJournalListResult                 = PhotoJournalListResult.Listed(Vector.empty)
-    val thumbnail = new PhotoThumbnail:
+    val thumbnail = new PhotoThumbnailGenerator:
       override def derive(original: PhotoContent): ThumbnailDerivationResult = thumbnailResult
     PhotoManager.make(using store, contentStore, journal, thumbnail, () => photoUuid.toString, () => captureTime)

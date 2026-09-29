@@ -79,39 +79,39 @@ object SubstrateApi:
       getCompEndpoint.handle: _ =>
         catalog.getSubstrateComponents match
           case GetSubstrateComponentsResult.Read(components) => components.asRight
-          case GetSubstrateComponentsResult.ReadFailed(_)    => (StatusCode.InternalServerError, componentsReadFailed).asLeft,
+          case _: GetSubstrateComponentsResult.ReadFailed    => (StatusCode.InternalServerError, componentsReadFailed).asLeft,
       addCompEndpoint.handle: data =>
         catalog.addSubstrateComponent(data) match
           case AddSubstrateComponentResult.Added(component) => component.asRight
-          case AddSubstrateComponentResult.AddFailed(_)     => (StatusCode.InternalServerError, componentWriteFailed).asLeft,
+          case _: AddSubstrateComponentResult.AddFailed     => (StatusCode.InternalServerError, componentWriteFailed).asLeft,
       editCompEndpoint.handle: (encodedId, data) =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.editSubstrateComponent(id, data) match
             case SubstrateComponentUpdateResult.Updated(component) => component.asRight
             case SubstrateComponentUpdateResult.ComponentMissing   => componentMissing.asLeft
             case SubstrateComponentUpdateResult.ComponentArchived  => componentArchived.asLeft
-            case SubstrateComponentUpdateResult.UpdateFailed(_)    => componentWriteFailed.asLeft,
+            case _: SubstrateComponentUpdateResult.UpdateFailed    => componentWriteFailed.asLeft,
       archiveCompEndpoint.handle: encodedId =>
         SubstrateComponentId.parse(encodedId).fold(invalidComponentId.asLeft): id =>
           catalog.archiveSubstrateComponent(id) match
             case SubstrateComponentUpdateResult.Updated(component) => component.asRight
             case SubstrateComponentUpdateResult.ComponentMissing   => componentMissing.asLeft
             case SubstrateComponentUpdateResult.ComponentArchived  => alreadyArchived.asLeft
-            case SubstrateComponentUpdateResult.UpdateFailed(_)    => archiveFailed.asLeft,
+            case _: SubstrateComponentUpdateResult.UpdateFailed    => archiveFailed.asLeft,
       getMixesEndpoint.handle: _ =>
         catalog.getSubstrateMixes match
           case GetSubstrateMixesResult.Read(mixes)   => mixes.asRight
-          case GetSubstrateMixesResult.ReadFailed(_) => (StatusCode.InternalServerError, mixesReadFailed).asLeft,
+          case _: GetSubstrateMixesResult.ReadFailed => (StatusCode.InternalServerError, mixesReadFailed).asLeft,
       addMixEndpoint.handle: data =>
         catalog.addSubstrateMix(data.name, data.maybeNotes, data.substrate) match
           case AddSubstrateMixResult.Added(mix)         => mix.asRight
           case AddSubstrateMixResult.DuplicateSubstrate => duplicateSubstrate.asLeft
-          case AddSubstrateMixResult.AddFailed(_)       => mixWriteFailed.asLeft,
+          case _: AddSubstrateMixResult.AddFailed       => mixWriteFailed.asLeft,
       deleteMixEndpoint.handle: encodedId =>
         Try(UUID.fromString(encodedId)).toOption.fold(invalidMixId.asLeft): id =>
           catalog.deleteSubstrateMix(id) match
             case DeleteSubstrateMixResult.Deleted         => ().asRight
-            case DeleteSubstrateMixResult.DeleteFailed(_) => mixDeleteFailed.asLeft
+            case _: DeleteSubstrateMixResult.DeleteFailed => mixDeleteFailed.asLeft
     )
 
   private case class SubstrateMixData(name: SubstrateMixName, maybeNotes: Option[SubstrateMixNotes], substrate: Substrate)
@@ -134,7 +134,7 @@ object SubstrateApi:
   private given Codec[SubstrateComponentInfo] =
     Codec.from(Decoder.decodeString.map(SubstrateComponentInfo.apply), Encoder.encodeString.contramap(_.value))
   private given Codec[SubstrateComponentId] = Codec.from(
-    // Component identifiers appear only in response bodies.
+    // No endpoint accepts a SubstrateComponentId in a request body, so this Decoder branch is never invoked.
     // $COVERAGE-OFF$
     Decoder.decodeString.emap(value => SubstrateComponentId.parse(value).toRight(s"invalid substrate component id: $value")),
     // $COVERAGE-ON$
@@ -173,10 +173,11 @@ object SubstrateApi:
   private given Schema[SubstrateComponentData] = Schema.derived[SubstrateComponentData]
     .modify(_.maybeInfo)(_.copy(isOptional = false).nullable)
 
+  // value => value is identity (nothing to verify); the forward function only re-derives a Schema
+  // `.default` value for docs, which none of these schemas set, so it's unreachable either way.
+  // $COVERAGE-OFF$
   private given Schema[Percentage] = Schema.schemaForInt
     .validate(Validator.min(1).and(Validator.max(100)))
-    // JSON bodies use Circe rather than this percentage schema's inverse mapping.
-    // $COVERAGE-OFF$
     .map(_.refineOption[Interval.Closed[1, 100]])(value => value)
   // $COVERAGE-ON$
   private given Schema[SubstrateMixName]  = Schema.string
@@ -184,10 +185,13 @@ object SubstrateApi:
   private given Schema[SubstratePart]     = Schema.derived[SubstratePart]
   private given Schema[Substrate]         = summon[Schema[List[SubstratePart]]]
     .validate(Validator.minSize(1))
-    // JSON bodies use Circe rather than this substrate schema's inverse mapping.
-    // $COVERAGE-OFF$
-    .map(parts => Substrate.of(parts).toOption)(_.parts)
-  // $COVERAGE-ON$
+    .map(
+      // Only re-derives a Schema `.default` value for docs; none of these schemas set one, so this is unreachable.
+      // $COVERAGE-OFF$
+      parts =>
+        Substrate.of(parts).toOption
+        // $COVERAGE-ON$
+    )(_.parts) // tapir replays the attached Validator against this on every decode, after Circe parses the value
   private given Schema[SubstrateMixData] = Schema.derived[SubstrateMixData]
     .modify(_.maybeNotes)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))

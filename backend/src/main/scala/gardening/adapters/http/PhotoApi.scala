@@ -9,6 +9,8 @@ import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
 import scodec.bits.ByteVector
+import squants.information.{Information, Mebibytes}
+import squants.information.InformationConversions.*
 import sttp.model.{HeaderNames, StatusCode}
 import sttp.model.Part
 import sttp.shared.Identity
@@ -28,13 +30,13 @@ import Codecs.given
 
 object PhotoApi:
 
-  private val MaxPhotoBytes: Long = 20L * 1024 * 1024
+  private val MaxPhotoBytes: Information = 20.mebibytes
 
   private val plantMissing    = ApiError("plant not found")
   private val photoMissing    = ApiError("photo not found")
   private val contentMissing  = ApiError("photo content not found")
   private val unsupportedType = ApiError("unsupported media type: only image/jpeg and image/png are accepted")
-  private val photoTooLarge   = ApiError(s"photo exceeds the ${MaxPhotoBytes / (1024 * 1024)} MiB size limit")
+  private val photoTooLarge   = ApiError(s"photo exceeds the ${MaxPhotoBytes.toString(Mebibytes, "%.0f")} size limit")
   private val addPhotoErrors  = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
     oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedType),
@@ -88,46 +90,36 @@ object PhotoApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(addPhotoEndpoint, getPhotosEndpoint, removePhotoEndpoint, photoContentEndpoint)
 
-  def serverEndpoints(using photos: PhotoManager): List[ServerEndpoint[Any, Identity]] =
-    List(
-      addPhotoEndpoint.handle: (plantId, upload) =>
-        val part = upload.file
-        try
-          if part.body.length() > MaxPhotoBytes then photoTooLarge.asLeft
-          else
-            val bytes = Files.readAllBytes(part.body.toPath)
-            sniffPhotoMediaType(bytes) match
-              case None            => unsupportedType.asLeft
-              case Some(mediaType) =>
-                photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType), upload.idempotencyKey.body) match
-                  case AddPhotoResult.Added(photo) => AddedPhoto(photo.id.value.toString, photo.capturedAt).asRight
-                  case AddPhotoResult.PlantMissing => plantMissing.asLeft
-                  case AddPhotoResult.AddFailed(_) => ApiError("photo could not be added").asLeft
-        finally part.body.delete(): Unit
-      ,
-      getPhotosEndpoint.handle: (plantId, offset, pageSize) =>
-        photos.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
-          case GetPhotosResult.Read(page) =>
-            PhotoPageResponse(
-              page.photos.map(p => PhotoItem(p.id.value.toString, p.capturedAt)),
-              page.hasNextPage
-            ).asRight
-          case GetPhotosResult.ReadFailed(_) => ApiError("photos could not be read").asLeft,
-      removePhotoEndpoint.handle: photoId =>
-        photos.removePhoto(PhotoId(UUID.fromString(photoId))) match
-          case RemovePhotoResult.Removed(_)      => ().asRight
-          case RemovePhotoResult.PhotoMissing    => photoMissing.asLeft
-          case RemovePhotoResult.RemoveFailed(_) => ApiError("photo could not be removed").asLeft,
-      photoContentEndpoint.handle: (photoId, variant) =>
-        photos.getPhotoContent(PhotoId(UUID.fromString(photoId)), variant) match
-          case PhotoReadResult.Read(content) =>
-            val contentType = content.mediaType match
-              case PhotoMediaType.Jpeg => "image/jpeg"
-              case PhotoMediaType.Png  => "image/png"
-            (content.bytes.toArray, contentType).asRight
-          case PhotoReadResult.ContentMissing => contentMissing.asLeft
-          case PhotoReadResult.ReadFailed(_)  => ApiError("photo content could not be read").asLeft
-    )
+  def serverEndpoints(using photos: PhotoManager): List[ServerEndpoint[Any, Identity]] = List(
+    addPhotoEndpoint.handle: (plantId, upload) =>
+      try
+        for
+          _         <- Either.cond(upload.file.body.length() <= MaxPhotoBytes.toBytes.toLong, (), photoTooLarge)
+          bytes     <- Files.readAllBytes(upload.file.body.toPath).asRight
+          mediaType <- sniffPhotoMediaType(bytes).toRight(unsupportedType)
+          photo     <- photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType), upload.idempotencyKey.body).toEither
+        yield AddedPhoto(photo.id.value.toString, photo.capturedAt)
+      finally upload.file.body.delete(): Unit,
+    getPhotosEndpoint.handle: (plantId, offset, pageSize) =>
+      photos.getPhotos(PlantId(plantId), PhotoWindow(offset, pageSize)) match
+        case GetPhotosResult.Read(page) =>
+          PhotoPageResponse(page.photos.map(p => PhotoItem(p.id.value.toString, p.capturedAt)), page.hasNextPage).asRight
+        case _: GetPhotosResult.ReadFailed => ApiError("photos could not be read").asLeft,
+    removePhotoEndpoint.handle: photoId =>
+      photos.removePhoto(PhotoId(UUID.fromString(photoId))) match
+        case _: RemovePhotoResult.Removed      => ().asRight
+        case RemovePhotoResult.PhotoMissing    => photoMissing.asLeft
+        case _: RemovePhotoResult.RemoveFailed => ApiError("photo could not be removed").asLeft,
+    photoContentEndpoint.handle: (photoId, variant) =>
+      photos.getPhotoContent(PhotoId(UUID.fromString(photoId)), variant) match
+        case PhotoReadResult.Read(content) =>
+          val contentType = content.mediaType match
+            case PhotoMediaType.Jpeg => "image/jpeg"
+            case PhotoMediaType.Png  => "image/png"
+          (content.bytes.toArray, contentType).asRight
+        case PhotoReadResult.ContentMissing => contentMissing.asLeft
+        case _: PhotoReadResult.ReadFailed  => ApiError("photo content could not be read").asLeft
+  )
 
   // The client's declared Content-Type is never trusted for validation (and tapir's multipart
   // decoder doesn't even surface it for Part[File] parts) - the media type is sniffed from the
@@ -139,7 +131,14 @@ object PhotoApi:
     else if prefixMatches(0x89, 0x50, 0x4e, 0x47) then Some(PhotoMediaType.Png)
     else None
 
-  // Tapir validates query params with the plain codec, not this schema's inverse mapping.
+  extension (result: AddPhotoResult)
+    private def toEither: Either[ApiError, PlantPhoto] = result match
+      case AddPhotoResult.Added(photo) => photo.asRight
+      case AddPhotoResult.PlantMissing => plantMissing.asLeft
+      case _: AddPhotoResult.AddFailed => ApiError("photo could not be added").asLeft
+
+  // value => value is identity (nothing to verify); the forward function only re-derives a Schema
+  // `.default` value for docs, which none of these schemas set, so it's unreachable either way.
   // $COVERAGE-OFF$
   private lazy val photoOffsetSchema   = Schema.schemaForInt.validate(Validator.min(0)).map(_.refineOption[GreaterEqual[0]])(value => value)
   private lazy val photoPageSizeSchema =
@@ -170,7 +169,8 @@ object PhotoApi:
     // $COVERAGE-ON$
   }
 
-  // Photo timestamps are server-assigned and output-only in JSON bodies.
+  // capturedAt only appears in response bodies (AddedPhoto, PhotoItem); no request in this API
+  // decodes an Instant, so this Codec's Decoder branch is never invoked.
   // $COVERAGE-OFF$
   private given Codec[Instant] =
     Codec.from(Decoder.decodeString.emapTry(v => Try(Instant.parse(v))), Encoder.encodeString.contramap(_.toString))

@@ -72,8 +72,7 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
     val archived        = post(s"/pesticides/${pesticideId.value}/archive", "", server)
     val invalid         = post("/pesticides/not-a-uuid/archive", "", server)
     val missing         = post(s"/pesticides/${pesticideId.value}/archive", "", buildServer())
-    val alreadyArchived =
-      post(s"/pesticides/${pesticideId.value}/archive", "", buildServer(archiveResult = PesticideUpdateResult.PesticideArchived))
+    val alreadyArchived = post(s"/pesticides/${pesticideId.value}/archive", "", buildServer(archiveResult = PesticideUpdateResult.PesticideArchived))
 
     assertResponse(archived, StatusCode.Ok, archivedPesticideJson)
     assertResponse(invalid, StatusCode.BadRequest, """{"message":"invalid pesticide id"}""")
@@ -138,5 +137,5 @@ class PesticideApiSeamIntegrationTest extends munit.FunSuite:
 
   private def jsonBody(response: Response[Either[String, String]]) = json(response.body.merge)
   private def json(value: String)                                  = parse(value).fold(error => fail(error.message), identity)
-  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String) =
+  private def assertResponse(response: Response[Either[String, String]], status: StatusCode, body: String): Unit =
     assertEquals(response.code -> jsonBody(response), status -> json(body))

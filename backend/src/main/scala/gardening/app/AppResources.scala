@@ -6,6 +6,7 @@ import gardening.adapters.sqlite.{Sqlite, SqliteConnection, SqliteLocation}
 import javax.sql.DataSource
 
 final class AppResources private (connection: SqliteConnection) extends AutoCloseable:
+
   val dataSource: DataSource = connection.dataSource
   val transactor: Transactor = connection.transactor
 
