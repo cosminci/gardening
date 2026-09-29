@@ -7,7 +7,7 @@
 
 **Classification:** feature
 
-**Grounded in:** Spiked two ways to load configuration: hand-written parsing on top of Typesafe Config, versus PureConfig's declarative case-class mapping. Confirmed PureConfig's squants and Iron integration modules cover every value shape in use today, including the refined watering-count bound — reused directly instead of declaring a second one.
+**Grounded in:** Spiked two ways to load configuration: hand-written parsing on top of Typesafe Config, versus PureConfig's declarative case-class mapping. PureConfig's squants and Iron integration modules covered every value shape in use today, including the refined watering-count bound, with no hand-written glue.
 
 One validated configuration surface replaces hardcoded thresholds and scattered, ad hoc environment parsing.
 
@@ -16,15 +16,17 @@ One validated configuration surface replaces hardcoded thresholds and scattered,
 Today:
 
 - Watering min/max sample count, the overdue grace period, the attention recompute interval, and photo upload/thumbnail size caps are hardcoded. Changing any needs a code change and a rebuild.
-- The watering history behind that average is capped at 20 records; there is no way to widen or narrow it.
+- The watering history behind that average is capped at 20 records, with no way to widen or narrow it.
 - Network host/port and deployment paths are each read from their own environment variable, parsed ad hoc, with an inline fallback.
+- `/health` reports a build version alongside its liveness status, coupling an operational liveness check to release tracking.
 
 New:
 
 - Every threshold above gets a named environment variable with a fallback default matching today's value.
 - The 20-record cap is removed. An operator can configure any window of 2 or more records.
-- Every environment-sourced setting is validated once, together, at startup — not parsed case by case as each is first needed.
+- Every environment-sourced setting is validated once, together, at startup, not parsed case by case as each is first needed.
 - Every environment variable name drops its current app-name prefix; the app has nothing else to disambiguate from.
+- `/health` reports liveness only. The application-version concept is removed outright, not folded into the configuration surface.
 
 ## Domain / Design Notes
 
@@ -53,15 +55,10 @@ Configuration fields fall into two tiers.
 - Minimum's floor is 2: averaging needs at least two dates to produce one interval.
 - Below the minimum, watering is reported unavailable, not computed from too little data.
 - The window is otherwise unbounded — it holds whatever the configured maximum requests.
-- Loaded with PureConfig, via its squants and Iron integration modules: no field needs hand-written conversion or validation code.
 
 ## Alternatives Considered
 
-- Keeping the existing 20-record cap, with only the value within it configurable: rejected. The cap has no documented technical reason to exist at that specific size, and a lower bound of 1 instead of 2 would let an operator configure a value that crashes the average calculation.
 - Typesafe Config, used directly with hand-written per-field parsing: rejected. Every field would need its own hand-written conversion and validation code.
-- Making the most-recent-operations count configurable: rejected. That count (distinct from the operation history page size, which is not addressed by this change) is fixed by how many fit legibly in the current layout, not a deployment concern.
-- Making the photo list's page size configurable: rejected. The frontend always sends an explicit page size; the server default is never read. The unused default is raised to the page-size ceiling instead of left arbitrary.
-- Including the running application version in this surface: rejected. It's build metadata stamped by CI, not a value an operator tunes; it stays exactly as read today.
 
 ## Acceptance Criteria
 
@@ -71,10 +68,13 @@ Configuration fields fall into two tiers.
 - A configured maximum sample count above 20 is honored exactly, with no upper limit.
 - Every renamed environment variable (host, port, database path, photos directory, static assets directory) keeps its current default and override behavior under its new name.
 - Setting none of the new environment variables changes nothing observable — this change alone is a no-op until an operator opts in.
+- `/health`'s response body reports only a liveness status; it carries no version field.
+- No environment variable, config field, or response body reports an application version anywhere.
 
 ## Doc Sync
 
 - `specs/operational.md` — Runtime dependencies: name every environment-variable configuration input (renamed deployment paths/host/port, plus the new watering/attention/photo thresholds) with its current default and bound.
+- `unraid/README.md` — post-update verification: replace the `/health` version check in the verification and recovery steps, since the response no longer carries a version.
 
 ## Out of Scope
 
