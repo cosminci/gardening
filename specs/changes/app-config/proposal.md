@@ -17,7 +17,7 @@ Today:
 
 - Watering min/max sample count, the overdue grace period, the attention recompute interval, and photo upload/thumbnail size caps are hardcoded. Changing any needs a code change and a rebuild.
 - The watering history behind that average is capped at 20 records; there is no way to widen or narrow it.
-- Network host/port, deployment paths, and the running version are each read from their own environment variable, parsed ad hoc, with an inline fallback.
+- Network host/port and deployment paths are each read from their own environment variable, parsed ad hoc, with an inline fallback.
 
 New:
 
@@ -46,7 +46,6 @@ Configuration fields fall into two tiers.
 | Attention recompute interval | `ATTENTION_RECOMPUTE_INTERVAL` | 30s | greater than zero |
 | Photo maximum upload size | `PHOTO_MAX_UPLOAD_SIZE` | 20MiB | greater than zero |
 | Photo maximum thumbnail size | `PHOTO_MAX_THUMBNAIL_SIZE` | 100KiB | greater than zero |
-| Application version | `APP_VERSION` | `0.0.0-dev` | non-empty (unchanged) |
 | Database file path | `DB_PATH` | `gardening.db` | non-empty (unchanged) |
 | Photos directory | `PHOTOS_DIR` | `photos` | non-empty (unchanged) |
 | Static assets directory | `STATIC_DIR` | `static` | non-empty (unchanged) |
@@ -62,6 +61,7 @@ Configuration fields fall into two tiers.
 - Typesafe Config, used directly with hand-written per-field parsing: rejected. Every field would need its own hand-written conversion and validation code.
 - Making the most-recent-operations count configurable: rejected. That count (distinct from the operation history page size, which is not addressed by this change) is fixed by how many fit legibly in the current layout, not a deployment concern.
 - Making the photo list's page size configurable: rejected. The frontend always sends an explicit page size; the server default is never read. The unused default is raised to the page-size ceiling instead of left arbitrary.
+- Including the running application version in this surface: rejected. It's build metadata stamped by CI, not a value an operator tunes; it stays exactly as read today.
 
 ## Acceptance Criteria
 
@@ -69,12 +69,12 @@ Configuration fields fall into two tiers.
 - An override outside its bound fails startup, naming the field and the rejected value. A minimum sample count below 2 is one such rejected value.
 - Minimum sample count above the configured maximum (or vice versa) fails startup, regardless of either value's own bound.
 - A configured maximum sample count above 20 is honored exactly, with no upper limit.
-- Every renamed environment variable (host, port, version, database path, photos directory, static assets directory) keeps its current default and override behavior under its new name.
+- Every renamed environment variable (host, port, database path, photos directory, static assets directory) keeps its current default and override behavior under its new name.
 - Setting none of the new environment variables changes nothing observable — this change alone is a no-op until an operator opts in.
 
 ## Doc Sync
 
-- `specs/operational.md` — Runtime dependencies: name every environment-variable configuration input (renamed deployment paths/version/host/port, plus the new watering/attention/photo thresholds) with its current default and bound.
+- `specs/operational.md` — Runtime dependencies: name every environment-variable configuration input (renamed deployment paths/host/port, plus the new watering/attention/photo thresholds) with its current default and bound.
 
 ## Out of Scope
 
