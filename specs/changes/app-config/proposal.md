@@ -5,23 +5,32 @@
 
 **Date:** 2026-09-29
 
-**Grounded in:** Spiked configuration loading against the value shapes actually in use today — a bounded integer count, a byte size, and a duration — including the one value that already carries a domain-level bound (the watering sample count's existing 1–20 ceiling). Confirmed every shape can be sourced from an environment variable with a documented fallback default and validated at load time, reusing an existing bound rather than declaring a second one, and surfacing an out-of-bound override as a startup failure naming the offending value.
+**Grounded in:** Spiked configuration loading for the value shapes in use today: a bounded integer count, a byte size, a duration. Confirmed each can be sourced from an environment variable with a fallback default, validated at load time. The bounded count reuses the watering sample count's existing 1–20 ceiling instead of declaring a new one. An out-of-bound override fails startup, naming the offending value.
 
-Replace hardcoded thresholds and scattered, individually-parsed environment lookups with one validated configuration surface: values an operator might legitimately tune become overridable with a documented default, and values that must never vary in this single-container deployment become fixed.
+One validated configuration surface replaces hardcoded thresholds and scattered, ad hoc environment parsing. Operator-tunable values become overridable with a documented default. Values that must never vary in this single-container deployment stay fixed.
 
 ## What & Why
 
-- Today: the minimum and maximum number of past waterings considered when assessing a plant's attention, the grace period added before an overdue plant escalates to the most urgent alert level, the interval between attention recomputation passes, and the maximum accepted photo upload and thumbnail sizes are all hardcoded literals with no way to change them short of a code change and rebuild. Separately, the network bind host and port, and a handful of deployment paths and the running version, are each read from an individually-named environment variable with its own inline fallback, parsed ad hoc wherever it's needed.
-- New: every business threshold above is overridable by a documented, individually-named environment variable, each with a fallback default equal to today's hardcoded value; an out-of-range override prevents startup with a message naming the offending value. The network bind host and port become fixed values with no environment override. Every environment-sourced setting — the existing deployment paths and version, and the new thresholds — is validated together, once, at startup, rather than parsed case by case as each is first needed.
+Today:
+
+- Watering min/max sample count, the overdue grace period, the attention recompute interval, and photo upload/thumbnail size caps are hardcoded. Changing any needs a code change and a rebuild.
+- Network host/port, deployment paths, and the running version are each read from their own environment variable, parsed ad hoc, with an inline fallback.
+
+New:
+
+- Every threshold above gets a named environment variable with a fallback default matching today's value.
+- An out-of-range override fails startup, naming the offending value.
+- Host and port become fixed; no environment override.
+- Every environment-sourced setting is validated once, together, at startup — not parsed case by case as each is first needed.
 
 ## Domain / Design Notes
 
 Configuration fields fall into two tiers.
 
-**Fixed** — a literal value, not sourced from the environment in this single-container deployment:
+**Fixed** — not sourced from the environment in this single-container deployment:
 
-- Network bind host and port — `0.0.0.0`, `8080`, matching today's values (see Acceptance Criteria for the environment-variable behavior change).
-- The storage layer's internal lock-contention timeout and the attention feed's connection-staleness threshold (used to expire an idle WebSocket connection) — unchanged from their current values.
+- Network bind host and port: `0.0.0.0`, `8080`. Unchanged from today.
+- Storage lock-contention timeout and attention-feed connection-staleness threshold: unchanged from today.
 
 **Overridable** — sourced from the named environment variable when present and non-empty, otherwise the documented default:
 
@@ -38,36 +47,36 @@ Configuration fields fall into two tiers.
 | Photos directory | `GARDENING_PHOTOS_DIR` | `photos` | non-empty (unchanged) |
 | Static assets directory | `GARDENING_STATIC_DIR` | `static` | non-empty (unchanged) |
 
-The watering sample count bound (1–20) is the same domain bound the rolling watering-sample window already enforces (see Invariants) — an override is rejected using that existing bound, not a separately declared one.
+The 1–20 bound reuses the existing watering-sample-window ceiling (see Invariants), not a new one.
 
 ## Alternatives Considered
 
-- Making the photo list's page size configurable too: rejected — the frontend always sends an explicit page size and never relies on the server-side default, so making it operator-tunable would tune a value nothing observes. The unused default is instead raised to the page-size ceiling rather than left at an arbitrary smaller number.
-- Making the operation history's page size configurable: rejected — the number of operations shown together is fixed by how many fit legibly in the current layout, not a deployment concern; varying it independently of that layout would break the display it was tuned for.
-- Allowing an environment override for the network bind host and port: rejected — this service always runs as one container on one deployment target with one fixed port mapping; nothing in the deployment ever needs a second value.
+- Photo list page size configurable: rejected. The frontend always sends an explicit page size; the server default is never read. The unused default is raised to the page-size ceiling instead of left arbitrary.
+- Operation history page size configurable: rejected. The count shown together is fixed by the current layout, not a deployment concern.
+- Environment override for host/port: rejected. One container, one deployment target, one port mapping.
 
 ## Invariants
 
-- The rolling watering-sample window never holds more than 20 samples, regardless of the configured maximum sample count.
+- The rolling watering-sample window caps at 20 samples, regardless of the configured maximum.
 
 ## Tradeoffs Accepted
 
-- An operator who still has `GARDENING_HOST` or `GARDENING_PORT` set from before this change gets no warning that it no longer does anything; diagnosing an unexpected bind address means noticing the variable stopped mattering, not seeing a startup failure. Borne by whoever operates such a deployment; today's production deployment sets neither.
+- An operator still setting `GARDENING_HOST`/`GARDENING_PORT` gets no warning it's ignored — no startup failure, just a silently wrong assumption about which host/port is bound. Borne by whoever operates such a deployment; today's production deployment sets neither.
 
 ## Acceptance Criteria
 
-- Every overridable field takes its documented default when its environment variable is unset or empty, exactly matching today's hardcoded behavior.
-- Setting an overridable field's environment variable to a value outside its bound prevents the service from starting, and the failure names the field and the rejected value.
-- Setting the watering minimum sample count above the configured maximum (or the maximum below the configured minimum) prevents the service from starting, independent of either value's own individual bound.
-- `GARDENING_HOST` and `GARDENING_PORT` are no longer read; setting either has no effect, and the service always binds to its fixed host and port.
-- The application version, database file path, photos directory, and static assets directory environment variables keep their current names, defaults, and override behavior unchanged.
-- A deployment that sets none of the new environment variables sees no change in watering attention, attention recomputation cadence, or accepted photo/thumbnail sizes — this change alone alters no runtime behavior until an operator opts in.
+- Every overridable field takes its default when its environment variable is unset or empty — matches today's behavior exactly.
+- An override outside its bound fails startup, naming the field and the rejected value.
+- Minimum sample count above the configured maximum (or vice versa) fails startup, regardless of either value's own bound.
+- `GARDENING_HOST`/`GARDENING_PORT` are no longer read. Setting either has no effect; the service always binds to its fixed host and port.
+- Version, database path, photos directory, and static assets directory keep their current names, defaults, and override behavior.
+- Setting none of the new environment variables changes nothing observable — this change alone is a no-op until an operator opts in.
 
 ## Doc Sync
 
-- `specs/operational.md` — Runtime dependencies: name every environment-variable configuration input (the existing deployment paths and version, plus the new watering, attention, and photo thresholds) with its default and bound, and state that `GARDENING_HOST`/`GARDENING_PORT` no longer have any effect.
+- `specs/operational.md` — Runtime dependencies: name every environment-variable configuration input (existing deployment paths/version, plus the new watering/attention/photo thresholds) with its default and bound; state that `GARDENING_HOST`/`GARDENING_PORT` no longer have any effect.
 
 ## Out of Scope
 
-- Frontend-side limits that duplicate these backend values (upload size, accepted image types, photo page size) are not addressed here; they continue to be maintained independently.
-- Changing any of these values still requires restarting the service; no runtime reconfiguration path is introduced.
+- Frontend-side limits that duplicate these backend values (upload size, accepted image types, photo page size) — maintained independently, not addressed here.
+- No runtime reconfiguration path; changing any value still requires restarting the service.
