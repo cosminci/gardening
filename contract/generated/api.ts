@@ -4,1750 +4,1743 @@
  */
 
 export interface paths {
-  "/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liveness probe */
+        get: operations["getHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Liveness probe */
-    get: operations["getHealth"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/plants": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/plants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List plants by status */
+        get: operations["getPlants"];
+        put?: never;
+        /** Create an active plant */
+        post: operations["postPlants"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List plants by status */
-    get: operations["getPlants"];
-    put?: never;
-    /** Create an active plant */
-    post: operations["postPlants"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/plants/archived/count": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/plants/archived/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count archived plants */
+        get: operations["getPlantsArchivedCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Count archived plants */
-    get: operations["getPlantsArchivedCount"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/plants/{plantId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/plants/{plantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch a plant */
+        patch: operations["patchPlantsPlantid"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /** Patch a plant */
-    patch: operations["patchPlantsPlantid"];
-    trace?: never;
-  };
-  "/attention": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read plant attention */
+        get: operations["getAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Read plant attention */
-    get: operations["getAttention"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/operations": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded page of plant operations */
+        get: operations["getOperations"];
+        put?: never;
+        /** Log a plant operation */
+        post: operations["postOperations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List a bounded page of plant operations */
-    get: operations["getOperations"];
-    put?: never;
-    /** Log a plant operation */
-    post: operations["postOperations"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/operations/date-range": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/operations/date-range": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the first and last recorded operation dates */
+        get: operations["getOperationsDate-range"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Read the first and last recorded operation dates */
-    get: operations["getOperationsDate-range"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/operations/{operationId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a plant operation */
+        put: operations["putOperationsOperationid"];
+        post?: never;
+        /** Delete a plant operation */
+        delete: operations["deleteOperationsOperationid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /** Edit a plant operation */
-    put: operations["putOperationsOperationid"];
-    post?: never;
-    /** Delete a plant operation */
-    delete: operations["deleteOperationsOperationid"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/pesticides": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/pesticides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List pesticides */
+        get: operations["getPesticides"];
+        put?: never;
+        /** Add a pesticide */
+        post: operations["postPesticides"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List pesticides */
-    get: operations["getPesticides"];
-    put?: never;
-    /** Add a pesticide */
-    post: operations["postPesticides"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/pesticides/{pesticideId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/pesticides/{pesticideId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a pesticide */
+        put: operations["putPesticidesPesticideid"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /** Edit a pesticide */
-    put: operations["putPesticidesPesticideid"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/pesticides/{pesticideId}/archive": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/pesticides/{pesticideId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a pesticide */
+        post: operations["postPesticidesPesticideidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Archive a pesticide */
-    post: operations["postPesticidesPesticideidArchive"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/substrates/components": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/substrates/components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List substrate components */
+        get: operations["getSubstratesComponents"];
+        put?: never;
+        /** Add a substrate component */
+        post: operations["postSubstratesComponents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List substrate components */
-    get: operations["getSubstratesComponents"];
-    put?: never;
-    /** Add a substrate component */
-    post: operations["postSubstratesComponents"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/substrates/components/{componentId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/substrates/components/{componentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a substrate component */
+        put: operations["putSubstratesComponentsComponentid"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    /** Edit a substrate component */
-    put: operations["putSubstratesComponentsComponentid"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/substrates/components/{componentId}/archive": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/substrates/components/{componentId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a substrate component */
+        post: operations["postSubstratesComponentsComponentidArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Archive a substrate component */
-    post: operations["postSubstratesComponentsComponentidArchive"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/substrates/mixes": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/substrates/mixes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List substrate mixes */
+        get: operations["getSubstratesMixes"];
+        put?: never;
+        /** Save a substrate mix */
+        post: operations["postSubstratesMixes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List substrate mixes */
-    get: operations["getSubstratesMixes"];
-    put?: never;
-    /** Save a substrate mix */
-    post: operations["postSubstratesMixes"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/substrates/mixes/{mixId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/substrates/mixes/{mixId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a substrate mix */
+        delete: operations["deleteSubstratesMixesMixid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete a substrate mix */
-    delete: operations["deleteSubstratesMixesMixid"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/plants/{plantId}/photos": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/plants/{plantId}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded page of plant photos */
+        get: operations["getPlantsPlantidPhotos"];
+        put?: never;
+        /** Upload a photo for a plant */
+        post: operations["postPlantsPlantidPhotos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List a bounded page of plant photos */
-    get: operations["getPlantsPlantidPhotos"];
-    put?: never;
-    /** Upload a photo for a plant */
-    post: operations["postPlantsPlantidPhotos"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/photos/{photoId}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a photo */
+        delete: operations["deletePhotosPhotoid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Remove a photo */
-    delete: operations["deletePhotosPhotoid"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/photos/{photoId}/content": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/photos/{photoId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve the raw photo content */
+        get: operations["getPhotosPhotoidContent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Retrieve the raw photo content */
-    get: operations["getPhotosPhotoidContent"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /**
-     * ActionType
-     * @enum {string}
-     */
-    ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "watered";
-    /** AddedPhoto */
-    AddedPhoto: {
-      id: string;
-      /** Format: date-time */
-      capturedAt: string;
+    schemas: {
+        /**
+         * ActionType
+         * @enum {string}
+         */
+        ActionType: "fertilized" | "noAction" | "pesticide" | "pruned" | "watered";
+        /** AddedPhoto */
+        AddedPhoto: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
+        /** ApiError */
+        ApiError: {
+            message: string;
+        };
+        /** ArchivedPlantCount */
+        ArchivedPlantCount: {
+            /** Format: int64 */
+            count: number;
+        };
+        /** AttentionProjection */
+        AttentionProjection: {
+            /** Format: date-time */
+            measuredAt: string;
+            plants: components["schemas"]["PlantAttention"][];
+        };
+        /** Care */
+        Care: {
+            actions: components["schemas"]["ActionType"][];
+            pesticides: string[];
+            moisture: components["schemas"]["MoistureLevel"];
+            notes: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "care";
+        };
+        /** Empty */
+        Empty: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "empty";
+        };
+        /** HealthResponse */
+        HealthResponse: {
+            status: string;
+            version: string;
+        };
+        /** LogOperationRequest */
+        LogOperationRequest: {
+            plantId: string;
+            /** Format: date-time */
+            date: string;
+            details: components["schemas"]["OperationDetails"];
+        };
+        /** LoggedOperation */
+        LoggedOperation: {
+            id: string;
+        };
+        /**
+         * MoistureLevel
+         * @enum {string}
+         */
+        MoistureLevel: "dry" | "moderateMinus" | "moderatePlus" | "noReading" | "wet";
+        /** Operation */
+        Operation: {
+            id: string;
+            plantId: string;
+            /** Format: date-time */
+            date: string;
+            details: components["schemas"]["OperationDetails"];
+        };
+        /** OperationDateRange */
+        OperationDateRange: components["schemas"]["Empty"] | components["schemas"]["Recorded"];
+        /** OperationDetails */
+        OperationDetails: components["schemas"]["Care"] | components["schemas"]["Repot"];
+        /** OperationPage */
+        OperationPage: {
+            operations: components["schemas"]["Operation"][];
+            hasNextPage: boolean;
+        };
+        /** Pesticide */
+        Pesticide: {
+            /** Format: uuid */
+            id: string;
+            data: components["schemas"]["PesticideData"];
+            status: components["schemas"]["PesticideStatus"];
+        };
+        /** PesticideData */
+        PesticideData: {
+            name: string;
+            type: components["schemas"]["PesticideType"];
+            info: string | null;
+        };
+        /**
+         * PesticideStatus
+         * @enum {string}
+         */
+        PesticideStatus: "active" | "archived";
+        /**
+         * PesticideType
+         * @enum {string}
+         */
+        PesticideType: "fungicide" | "insecticide" | "treatment";
+        /** PhotoItem */
+        PhotoItem: {
+            id: string;
+            /** Format: date-time */
+            capturedAt: string;
+        };
+        /** PhotoPageResponse */
+        PhotoPageResponse: {
+            photos: components["schemas"]["PhotoItem"][];
+            hasNextPage: boolean;
+        };
+        /** PhotoUploadPart */
+        PhotoUploadPart: {
+            /** Format: binary */
+            file: string;
+            idempotencyKey: string;
+        };
+        /** Plant */
+        Plant: {
+            id: string;
+            details: components["schemas"]["PlantDetails"];
+        };
+        /** PlantAttention */
+        PlantAttention: {
+            plantId: string;
+            watering: components["schemas"]["WateringAttention"];
+        };
+        /** PlantCreation */
+        PlantCreation: {
+            species: string;
+            nickname: string | null;
+            location: string;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
+        /** PlantDetails */
+        PlantDetails: {
+            species: string;
+            nickname: string | null;
+            location: string;
+            substrate: components["schemas"]["SubstratePart"][];
+            status: components["schemas"]["PlantStatus"];
+        };
+        /** PlantPatchOperation */
+        PlantPatchOperation: {
+            op: string;
+            path: string;
+            value: unknown;
+        };
+        /**
+         * PlantStatus
+         * @enum {string}
+         */
+        PlantStatus: "active" | "archived";
+        /** Recorded */
+        Recorded: {
+            /** Format: date-time */
+            first: string;
+            /** Format: date-time */
+            last: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "recorded";
+        };
+        /** Repot */
+        Repot: {
+            substrate: components["schemas"]["SubstratePart"][];
+            notes: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "repot";
+        };
+        /** SubstrateComponent */
+        SubstrateComponent: {
+            /** Format: uuid */
+            id: string;
+            data: components["schemas"]["SubstrateComponentData"];
+            status: components["schemas"]["SubstrateComponentStatus"];
+        };
+        /** SubstrateComponentData */
+        SubstrateComponentData: {
+            name: string;
+            info: string | null;
+        };
+        /**
+         * SubstrateComponentStatus
+         * @enum {string}
+         */
+        SubstrateComponentStatus: "active" | "archived";
+        /** SubstrateMix */
+        SubstrateMix: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            notes: string | null;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
+        /** SubstrateMixData */
+        SubstrateMixData: {
+            name: string;
+            notes: string | null;
+            substrate: components["schemas"]["SubstratePart"][];
+        };
+        /** SubstratePart */
+        SubstratePart: {
+            /** Format: uuid */
+            componentId: string;
+            /** Format: int32 */
+            share: number;
+        };
+        /** WateringAttention */
+        WateringAttention: components["schemas"]["WateringCurrent"] | components["schemas"]["WateringOverdue"] | components["schemas"]["WateringRedAlert"] | components["schemas"]["WateringUnavailable"];
+        /** WateringCurrent */
+        WateringCurrent: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "current";
+        };
+        /** WateringOverdue */
+        WateringOverdue: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "overdue";
+        };
+        /** WateringRedAlert */
+        WateringRedAlert: {
+            /** Format: int32 */
+            sampleCount: number;
+            averageIntervalMillis: string;
+            elapsedMillis: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "redAlert";
+        };
+        /** WateringUnavailable */
+        WateringUnavailable: {
+            /** Format: int32 */
+            sampleCount: number;
+            elapsedMillis: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unavailable";
+        };
     };
-    /** ApiError */
-    ApiError: {
-      message: string;
-    };
-    /** ArchivedPlantCount */
-    ArchivedPlantCount: {
-      /** Format: int64 */
-      count: number;
-    };
-    /** AttentionProjection */
-    AttentionProjection: {
-      /** Format: date-time */
-      measuredAt: string;
-      plants: components["schemas"]["PlantAttention"][];
-    };
-    /** Care */
-    Care: {
-      actions: components["schemas"]["ActionType"][];
-      pesticides: string[];
-      moisture: components["schemas"]["MoistureLevel"];
-      notes: string | null;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "care";
-    };
-    /** Empty */
-    Empty: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "empty";
-    };
-    /** HealthResponse */
-    HealthResponse: {
-      status: string;
-      version: string;
-    };
-    /** LogOperationRequest */
-    LogOperationRequest: {
-      plantId: string;
-      /** Format: date-time */
-      date: string;
-      details: components["schemas"]["OperationDetails"];
-    };
-    /** LoggedOperation */
-    LoggedOperation: {
-      id: string;
-    };
-    /**
-     * MoistureLevel
-     * @enum {string}
-     */
-    MoistureLevel:
-      "dry" | "moderateMinus" | "moderatePlus" | "noReading" | "wet";
-    /** Operation */
-    Operation: {
-      id: string;
-      plantId: string;
-      /** Format: date-time */
-      date: string;
-      details: components["schemas"]["OperationDetails"];
-    };
-    /** OperationDateRange */
-    OperationDateRange:
-      components["schemas"]["Empty"] | components["schemas"]["Recorded"];
-    /** OperationDetails */
-    OperationDetails:
-      components["schemas"]["Care"] | components["schemas"]["Repot"];
-    /** OperationPage */
-    OperationPage: {
-      operations: components["schemas"]["Operation"][];
-      hasNextPage: boolean;
-    };
-    /** Pesticide */
-    Pesticide: {
-      /** Format: uuid */
-      id: string;
-      data: components["schemas"]["PesticideData"];
-      status: components["schemas"]["PesticideStatus"];
-    };
-    /** PesticideData */
-    PesticideData: {
-      name: string;
-      type: components["schemas"]["PesticideType"];
-      info: string | null;
-    };
-    /**
-     * PesticideStatus
-     * @enum {string}
-     */
-    PesticideStatus: "active" | "archived";
-    /**
-     * PesticideType
-     * @enum {string}
-     */
-    PesticideType: "fungicide" | "insecticide" | "treatment";
-    /** PhotoItem */
-    PhotoItem: {
-      id: string;
-      /** Format: date-time */
-      capturedAt: string;
-    };
-    /** PhotoPageResponse */
-    PhotoPageResponse: {
-      photos: components["schemas"]["PhotoItem"][];
-      hasNextPage: boolean;
-    };
-    /** PhotoUploadPart */
-    PhotoUploadPart: {
-      /** Format: binary */
-      file: string;
-      idempotencyKey: string;
-    };
-    /** Plant */
-    Plant: {
-      id: string;
-      details: components["schemas"]["PlantDetails"];
-    };
-    /** PlantAttention */
-    PlantAttention: {
-      plantId: string;
-      watering: components["schemas"]["WateringAttention"];
-    };
-    /** PlantCreation */
-    PlantCreation: {
-      species: string;
-      nickname: string | null;
-      location: string;
-      substrate: components["schemas"]["SubstratePart"][];
-    };
-    /** PlantDetails */
-    PlantDetails: {
-      species: string;
-      nickname: string | null;
-      location: string;
-      substrate: components["schemas"]["SubstratePart"][];
-      status: components["schemas"]["PlantStatus"];
-    };
-    /** PlantPatchOperation */
-    PlantPatchOperation: {
-      op: string;
-      path: string;
-      value: unknown;
-    };
-    /**
-     * PlantStatus
-     * @enum {string}
-     */
-    PlantStatus: "active" | "archived";
-    /** Recorded */
-    Recorded: {
-      /** Format: date-time */
-      first: string;
-      /** Format: date-time */
-      last: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "recorded";
-    };
-    /** Repot */
-    Repot: {
-      substrate: components["schemas"]["SubstratePart"][];
-      notes: string | null;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "repot";
-    };
-    /** SubstrateComponent */
-    SubstrateComponent: {
-      /** Format: uuid */
-      id: string;
-      data: components["schemas"]["SubstrateComponentData"];
-      status: components["schemas"]["SubstrateComponentStatus"];
-    };
-    /** SubstrateComponentData */
-    SubstrateComponentData: {
-      name: string;
-      info: string | null;
-    };
-    /**
-     * SubstrateComponentStatus
-     * @enum {string}
-     */
-    SubstrateComponentStatus: "active" | "archived";
-    /** SubstrateMix */
-    SubstrateMix: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      notes: string | null;
-      substrate: components["schemas"]["SubstratePart"][];
-    };
-    /** SubstrateMixData */
-    SubstrateMixData: {
-      name: string;
-      notes: string | null;
-      substrate: components["schemas"]["SubstratePart"][];
-    };
-    /** SubstratePart */
-    SubstratePart: {
-      /** Format: uuid */
-      componentId: string;
-      /** Format: int32 */
-      share: number;
-    };
-    /** WateringAttention */
-    WateringAttention:
-      | components["schemas"]["WateringCurrent"]
-      | components["schemas"]["WateringOverdue"]
-      | components["schemas"]["WateringRedAlert"]
-      | components["schemas"]["WateringUnavailable"];
-    /** WateringCurrent */
-    WateringCurrent: {
-      /** Format: int32 */
-      sampleCount: number;
-      averageIntervalMillis: string;
-      elapsedMillis: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "current";
-    };
-    /** WateringOverdue */
-    WateringOverdue: {
-      /** Format: int32 */
-      sampleCount: number;
-      averageIntervalMillis: string;
-      elapsedMillis: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "overdue";
-    };
-    /** WateringRedAlert */
-    WateringRedAlert: {
-      /** Format: int32 */
-      sampleCount: number;
-      averageIntervalMillis: string;
-      elapsedMillis: string;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "redAlert";
-    };
-    /** WateringUnavailable */
-    WateringUnavailable: {
-      /** Format: int32 */
-      sampleCount: number;
-      elapsedMillis: string | null;
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      kind: "unavailable";
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  getHealth: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    getPlants: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PlantStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["HealthResponse"];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plant"][];
+                };
+            };
+            /** @description Invalid value for: query parameter status */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
     };
-  };
-  getPlants: {
-    parameters: {
-      query?: {
-        status?: components["schemas"]["PlantStatus"];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
+    postPlants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlantCreation"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plant"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    getPlantsArchivedCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Plant"][];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedPlantCount"];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
-      /** @description Invalid value for: query parameter status */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  postPlants: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    patchPlantsPlantid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json-patch+json": components["schemas"]["PlantPatchOperation"][];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PlantCreation"];
-      };
+    getAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionProjection"];
+                };
+            };
+        };
     };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
+    getOperations: {
+        parameters: {
+            query: {
+                plantId: string;
+                offset?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Plant"];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationPage"];
+                };
+            };
+            /** @description Invalid value for: query parameter plantId, Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  getPlantsArchivedCount: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    postOperations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogOperationRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoggedOperation"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    "getOperationsDate-range": {
+        parameters: {
+            query: {
+                plantId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["ArchivedPlantCount"];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationDateRange"];
+                };
+            };
+            /** @description Invalid value for: query parameter plantId */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  patchPlantsPlantid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        plantId: string;
-      };
-      cookie?: never;
+    putOperationsOperationid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationDetails"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Operation"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json-patch+json": components["schemas"]["PlantPatchOperation"][];
-      };
+    deleteOperationsOperationid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    responses: {
-      204: {
-        headers: {
-          [name: string]: unknown;
+    getPesticides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content?: never;
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-        content: {
-          "text/plain": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      415: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  getAttention: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    postPesticides: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PesticideData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    putPesticidesPesticideid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pesticideId: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["AttentionProjection"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PesticideData"];
+            };
         };
-      };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-  };
-  getOperations: {
-    parameters: {
-      query: {
-        plantId: string;
-        offset?: number;
-        pageSize?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
+    postPesticidesPesticideidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pesticideId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pesticide"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    getSubstratesComponents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["OperationPage"];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
-      /** @description Invalid value for: query parameter plantId, Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  postOperations: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    postSubstratesComponents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateComponentData"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LogOperationRequest"];
-      };
+    putSubstratesComponentsComponentid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                componentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateComponentData"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
+    postSubstratesComponentsComponentidArchive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                componentId: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["LoggedOperation"];
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateComponent"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  "getOperationsDate-range": {
-    parameters: {
-      query: {
-        plantId: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
+    getSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"][];
+                };
+            };
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    postSubstratesMixes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["OperationDateRange"];
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubstrateMixData"];
+            };
         };
-      };
-      /** @description Invalid value for: query parameter plantId */
-      400: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstrateMix"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-        content: {
-          "text/plain": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  putOperationsOperationid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        operationId: string;
-      };
-      cookie?: never;
+    deleteSubstratesMixesMixid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                mixId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["OperationDetails"];
-      };
+    getPlantsPlantidPhotos: {
+        parameters: {
+            query?: {
+                offset?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhotoPageResponse"];
+                };
+            };
+            /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
+    postPlantsPlantidPhotos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
         };
-        content: {
-          "application/json": components["schemas"]["Operation"];
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["PhotoUploadPart"];
+            };
         };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedPhoto"];
+                };
+            };
+            /** @description Invalid value for: body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-        content: {
-          "text/plain": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  deleteOperationsOperationid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        operationId: string;
-      };
-      cookie?: never;
+    deletePhotosPhotoid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      204: {
-        headers: {
-          [name: string]: unknown;
+    getPhotosPhotoidContent: {
+        parameters: {
+            query?: {
+                variant?: string;
+            };
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
         };
-        content?: never;
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Type": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
         };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
     };
-  };
-  getPesticides: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Pesticide"][];
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postPesticides: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PesticideData"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Pesticide"];
-        };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  putPesticidesPesticideid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        pesticideId: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PesticideData"];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Pesticide"];
-        };
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postPesticidesPesticideidArchive: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        pesticideId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Pesticide"];
-        };
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  getSubstratesComponents: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateComponent"][];
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postSubstratesComponents: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SubstrateComponentData"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateComponent"];
-        };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  putSubstratesComponentsComponentid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        componentId: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SubstrateComponentData"];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateComponent"];
-        };
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postSubstratesComponentsComponentidArchive: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        componentId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateComponent"];
-        };
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  getSubstratesMixes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateMix"][];
-        };
-      };
-      default: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postSubstratesMixes: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SubstrateMixData"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubstrateMix"];
-        };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      409: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  deleteSubstratesMixesMixid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        mixId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  getPlantsPlantidPhotos: {
-    parameters: {
-      query?: {
-        offset?: number;
-        pageSize?: number;
-      };
-      header?: never;
-      path: {
-        plantId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PhotoPageResponse"];
-        };
-      };
-      /** @description Invalid value for: query parameter offset, Invalid value for: query parameter pageSize */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  postPlantsPlantidPhotos: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        plantId: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "multipart/form-data": components["schemas"]["PhotoUploadPart"];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AddedPhoto"];
-        };
-      };
-      /** @description Invalid value for: body */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/plain": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      413: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      415: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  deletePhotosPhotoid: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        photoId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
-  getPhotosPhotoidContent: {
-    parameters: {
-      query?: {
-        variant?: string;
-      };
-      header?: never;
-      path: {
-        photoId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          "Content-Type": string;
-          [name: string]: unknown;
-        };
-        content: {
-          "application/octet-stream": string;
-        };
-      };
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ApiError"];
-        };
-      };
-    };
-  };
 }
