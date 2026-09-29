@@ -29,7 +29,7 @@ trait PhotoContentStore:
   def get(photo: PhotoId, variant: PhotoVariant): PhotoReadResult
   def delete(photo: PhotoId): PhotoWriteResult
 
-trait PlantManager:
+trait PhotoManager:
   def addPhoto(plant: PlantId, content: PhotoContent, idempotencyKey: String): AddPhotoResult
   def getPhotoContent(photo: PhotoId, variant: PhotoVariant): PhotoReadResult
   // removePhoto, getPhotos unchanged
@@ -37,7 +37,7 @@ trait PlantManager:
 
 - A thumbnail is derived from its original at upload time by downscaling to a bounded longest edge and re-encoding as JPEG, regardless of the original's media type — see Acceptance Criteria for the size target and its boundary case. Derivation is a pure, in-memory step with no side effects of its own; it happens before either blob is written.
 - `put` gains a required second content parameter for the thumbnail and writes both together in one call, since a photo isn't complete with only one of them. `get`/`getPhotoContent` gain a `PhotoVariant` parameter: fetching either is the same operation — a stored blob for this photo — differing only in which one. `delete`'s signature is unchanged; it now removes both stored blobs.
-- The one-time backfill enumerates existing photos through the existing plant/photo listing operations (across active and archived plants) and, for each one missing a thumbnail, reads its original through the existing `get` and writes it back through the same `put` upload uses, now paired with a derived thumbnail. It calls nothing beyond `get`/`put`, which the feature needs anyway — no method is added or changed just for the backfill.
+- The one-time backfill enumerates existing photos through the existing plant/photo listing operations (across active and archived plants) and, for each one missing a thumbnail, reads its original through the existing `get` and writes it back through the same `put` upload uses, now paired with a derived thumbnail. It calls nothing beyond `get`/`put`, which the feature needs anyway — no method is added or changed just for the backfill. It runs as a temporary operator procedure, built and executed once directly against production after this change is deployed, rather than as code that ships permanently in the running application.
 - `PhotoId` remains entirely backend-assigned, exactly as before — `addPhoto` gains an `idempotencyKey` instead, a caller-supplied opaque token used only to recognize a retried request. It never becomes part of a photo's identity and is never returned or exposed as one.
 - Before either blob is written, the journal database durably records an in-flight write against that `idempotencyKey` (not against a `PhotoId`, which doesn't exist yet), in its own transaction ahead of any content write. That record exists on disk before anything risky happens, so it survives a process crash the in-process compensation below could not. Once the backend assigns the `PhotoId` and writes content, that id is recorded against the same in-flight entry.
 - The existing in-process compensation is unchanged and still runs first for a live process: it already deletes stray content immediately on a failed metadata write, without ever consulting the durable record. That record is purely a backstop for the one case compensation can't cover — the process dying before it gets the chance to run.
@@ -72,7 +72,7 @@ trait PlantManager:
 - If a thumbnail cannot be derived from an uploaded original, the upload fails as a whole and no content is persisted.
 - Removing a photo removes its thumbnail along with its original; neither is reachable afterward.
 - The photo grid renders thumbnails; a photo's full original is fetched only once that photo is activated, never before.
-- Running the one-time backfill once gives every existing photo missing a thumbnail one, using the same derivation as upload; running it again afterward changes nothing. A photo whose original can't be processed (including one already stored in a format no longer accepted for upload) is skipped and reported, without stopping the rest of the run.
+- Running the one-time backfill once, as the operator procedure described above, gives every existing photo missing a thumbnail one, using the same derivation as upload; running it again afterward changes nothing. A photo whose original can't be processed (including one already stored in a format no longer accepted for upload) is skipped and reported, without stopping the rest of the run.
 - An interrupted upload or removal (process crash, container restart) resolves on its own without operator intervention: if the content had already been durably written, the operation completes automatically the next time the process starts; otherwise nothing is persisted, and a retried upload carrying the same idempotency key is safe and creates nothing extra.
 
 ## Doc Sync
