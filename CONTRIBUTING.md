@@ -63,7 +63,7 @@ An existing local journal requires typing `replace` to discard local edits (`--y
 
 ## Documentation style
 
-- Short, technical, concise — bullet lists over multi-sentence paragraphs.
+- Short, technical, concise — bullet lists over multi-sentence paragraphs. Max two sentences per prose paragraph; more is multiple facts, so split into bullets.
 - Treat every word as a cost; cut hedging, filler, and restatement.
 - Never repeat a fact — state it once, in one place.
 - Integrate new lessons into the rule that owns them. Refine or replace stale guidance instead of appending a chronology of discoveries.
