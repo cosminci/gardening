@@ -53,7 +53,7 @@ The 1–20 bound reuses the existing watering-sample-window ceiling (see Invaria
 
 ## Alternatives Considered
 
-- Typesafe Config, used directly with hand-written per-field parsing: rejected. Every field would need its own hand-written conversion and validation code; PureConfig needs none, via its own squants and Iron integration modules.
+- PureConfig, with its squants and Iron integration modules: chosen — needs no hand-written conversion or validation code for any field. Typesafe Config, used directly with hand-written per-field parsing: rejected on that basis.
 - Making the most-recent-operations count configurable: rejected. That count (distinct from the operation history page size, which is not addressed by this change) is fixed by how many fit legibly in the current layout, not a deployment concern.
 - Making the photo list's page size configurable: rejected. The frontend always sends an explicit page size; the server default is never read. The unused default is raised to the page-size ceiling instead of left arbitrary.
 
