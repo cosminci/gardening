@@ -14,7 +14,7 @@ Domain terms for the house-plant care journal. Controlled vocabulary is presente
 | **Recorded care range** | The earliest and latest recorded operation dates for a plant, not its archive date or a known date of death. The range is unknown when the plant has no operations. |
 | **Care operation** | An operation recording one moisture-level, zero or more action-types, selected pesticides when applicable, and an optional note. |
 | **Repot operation** | An operation recording the plant's new substrate and an optional note. The latest repot determines the plant's current substrate. |
-| **Action-type** | A fixed English category of care performed, such as watering, fertilizing, pesticide treatment, or pruning. |
+| **Action-type** | A fixed English category of care performed, such as watering, showering, fertilizing, pesticide treatment, or pruning. |
 | **Moisture-level** | A fixed English observation of substrate moisture recorded with a care operation. |
 | **Substrate** | A non-empty component mix describing the growing medium in which a plant currently sits. |
 | **Substrate-component** | An editable catalog entry with a stable identifier, name, and optional usage information, selected into a substrate mix with a percentage share. |
