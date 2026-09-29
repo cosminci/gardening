@@ -4,6 +4,7 @@ import com.augustnagro.magnum.Transactor
 import gardening.adapters.sqlite.{Sqlite, SqliteConnection, SqliteLocation}
 
 import javax.sql.DataSource
+import scala.concurrent.duration.FiniteDuration
 
 final class AppResources private (connection: SqliteConnection) extends AutoCloseable:
 
@@ -14,5 +15,5 @@ final class AppResources private (connection: SqliteConnection) extends AutoClos
 
 object AppResources:
 
-  def acquire(database: SqliteLocation): AppResources =
-    AppResources(Sqlite.make.connect(database))
+  def acquire(database: SqliteLocation, storageLockTimeout: FiniteDuration): AppResources =
+    AppResources(Sqlite.make(storageLockTimeout).connect(database))

@@ -3,6 +3,8 @@ package gardening.usecases
 import gardening.domain.plants.*
 import munit.FunSuite
 import scodec.bits.ByteVector
+import squants.information.Information
+import squants.information.InformationConversions.*
 
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -13,29 +15,32 @@ import scala.util.chaining.scalaUtilChainingOps
 
 class PhotoThumbnailGeneratorTest extends FunSuite:
 
+  private val maxThumbnailSize: Information = 100.kibibytes
+  private val generator                     = PhotoThumbnailGenerator.make(maxThumbnailSize)
+
   test("should derive a jpeg thumbnail at or under the 100KB target from a small original"):
     val original = solidImage(width = 300, height = 200, color = Color.BLUE).pipe(image => encode(image, format = "png"))
 
-    PhotoThumbnailGenerator.make.derive(original) match
+    generator.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
         val actualBytes = thumbnail.bytes.length
         assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
         assert(
-          actualBytes <= PhotoThumbnailGenerator.maxThumbnailSize.toBytes,
-          s"expected <= ${PhotoThumbnailGenerator.maxThumbnailSize}, got $actualBytes bytes"
+          actualBytes <= maxThumbnailSize.toBytes,
+          s"expected <= ${maxThumbnailSize}, got $actualBytes bytes"
         )
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
   test("should derive a jpeg thumbnail at or under the 100KB target from a large, hard-to-compress original"):
     val original = noisyImage(width = 2000, height = 1500).pipe(image => encode(image, format = "jpg"))
 
-    PhotoThumbnailGenerator.make.derive(original) match
+    generator.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
         val actualBytes = thumbnail.bytes.length
         assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
         assert(
-          actualBytes <= PhotoThumbnailGenerator.maxThumbnailSize.toBytes,
-          s"expected <= ${PhotoThumbnailGenerator.maxThumbnailSize}, got $actualBytes bytes"
+          actualBytes <= maxThumbnailSize.toBytes,
+          s"expected <= ${maxThumbnailSize}, got $actualBytes bytes"
         )
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
@@ -49,7 +54,7 @@ class PhotoThumbnailGeneratorTest extends FunSuite:
       }
       .pipe(image => encode(image, format = "png"))
 
-    PhotoThumbnailGenerator.make.derive(original) match
+    generator.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
         val decoded = ImageIO.read(ByteArrayInputStream(thumbnail.bytes.toArray))
         assertEquals(decoded.getRGB(0, 0) & 0x00ffffff, 0x00ffffff)
@@ -58,7 +63,7 @@ class PhotoThumbnailGeneratorTest extends FunSuite:
   test("should fail to derive a thumbnail from content that isn't a decodable image"):
     val garbage = PhotoContent(ByteVector(Array[Byte](1, 2, 3)), PhotoMediaType.Jpeg)
 
-    PhotoThumbnailGenerator.make.derive(garbage) match
+    generator.derive(garbage) match
       case _: ThumbnailDerivationResult.DerivationFailed => ()
       case _: ThumbnailDerivationResult.Derived          => fail("expected derivation to fail for undecodable content")
 

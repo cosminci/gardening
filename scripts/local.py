@@ -163,13 +163,25 @@ def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
 def start() -> None:
     processes: list[subprocess.Popen[bytes]] = []
     backend_port = port()
-    environment = {
+    # host/port are the config's only env overrides (${?HOST}/${?PORT}); the fixed paths carry no env
+    # override, so local dev redirects them off their container defaults with -Dgardening.* system
+    # properties, which Typesafe Config layers over application.conf. JAVA_TOOL_OPTIONS reaches the
+    # backend JVM whether `sbt run` forks or not.
+    backend_environment = {
         **os.environ,
-        "GARDENING_DB_PATH": str(DATABASE),
-        "GARDENING_PHOTOS_DIR": str(DATA / "photos"),
-        "GARDENING_HOST": "127.0.0.1",
-        "GARDENING_PORT": str(backend_port),
-        "GARDENING_STATIC_DIR": str(STATIC_DIR),
+        "HOST": "127.0.0.1",
+        "PORT": str(backend_port),
+        "JAVA_TOOL_OPTIONS": " ".join(
+            filter(
+                None,
+                [
+                    os.environ.get("JAVA_TOOL_OPTIONS", ""),
+                    f"-Dgardening.db-path={DATABASE}",
+                    f"-Dgardening.photos-dir={DATA / 'photos'}",
+                    f"-Dgardening.static-dir={STATIC_DIR}",
+                ],
+            )
+        ),
     }
     try:
         print("Building the frontend and watching for changes…", flush=True)
@@ -179,13 +191,12 @@ def start() -> None:
             subprocess.Popen(
                 ["npm", "run", "build", "--", "--watch"],
                 cwd=ROOT / "frontend",
-                env=environment,
                 start_new_session=True,
             )
         )
         await_frontend(processes[0])
         print("Starting the backend…", flush=True)
-        processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=environment, start_new_session=True))
+        processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=backend_environment, start_new_session=True))
         await_backend(backend_port, processes[1])
         print(f"Local app: http://127.0.0.1:{backend_port}", flush=True)
         print("Frontend edits rebuild automatically; hard-refresh the browser to load them.", flush=True)

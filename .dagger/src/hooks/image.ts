@@ -23,10 +23,8 @@ export function runtimeImage(source: Dagger.Directory, info: ImageInfo): Dagger.
       .withDirectory("/app", app, { owner: "1000:1000" })
       .withDirectory("/app/static", staticAssets, { owner: "1000:1000" })
       .withDirectory("/data", Dagger.dag.directory(), { owner: "1000:1000" })
-      .withEnvVariable("GARDENING_APP_VERSION", info.version)
-      .withEnvVariable("GARDENING_STATIC_DIR", "/app/static")
-      .withEnvVariable("GARDENING_DB_PATH", "/data/gardening.db")
-      .withEnvVariable("GARDENING_PORT", String(BuildEnv.APP_PORT))
+      // Business and deployment config ships in the backend's bundled application.conf; the container
+      // paths (/data/gardening.db, /photos, /app/static) and port 8080 are its baked defaults.
       .withExposedPort(BuildEnv.APP_PORT)
       .withUser("1000:1000")
       // Launch the bundled jlink runtime directly (no shell), so the runtime base can be distroless.

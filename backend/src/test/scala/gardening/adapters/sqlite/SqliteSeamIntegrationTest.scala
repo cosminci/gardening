@@ -50,4 +50,4 @@ class SqliteSeamIntegrationTest extends FunSuite:
       }.orFail
     finally Files.delete(databasePath)
 
-  private def buildSqlite = Sqlite.make
+  private def buildSqlite = Sqlite.make(SqliteHelpers.lockTimeout)

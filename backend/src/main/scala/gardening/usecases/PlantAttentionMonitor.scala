@@ -8,7 +8,6 @@ import gardening.domain.attention.*
 import gardening.ports.{PlantAttentionStore, PlantAttentionMonitorMetricsApi}
 import gardening.capabilities.{Clock, Logger}
 import gardening.domain.attention.WateringHistory.*
-import io.github.iltotore.iron.autoRefine
 
 import language.experimental.captureChecking
 
@@ -24,16 +23,23 @@ trait PlantAttentionMonitor:
 
 object PlantAttentionMonitor:
 
-  def make(using
+  def make(minSampleCount: WateringSampleCount, historySize: WateringSampleSize, overdueGracePeriod: FiniteDuration)(using
       store: PlantAttentionStore^,
       clock: Clock^
   )(using
       log: Logger^,
       metrics: PlantAttentionMonitorMetricsApi^
   ): Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
-    computeProjection.tap(_.foreach(recordWateringMetrics)).map(new LivePlantAttentionMonitor(_))
+    computeProjection(minSampleCount, historySize, overdueGracePeriod)
+      .tap(_.foreach(recordWateringMetrics))
+      .map(new LivePlantAttentionMonitor(_, minSampleCount, historySize, overdueGracePeriod))
 
-  private class LivePlantAttentionMonitor(initialProjection: AttentionProjection)(using
+  private class LivePlantAttentionMonitor(
+      initialProjection: AttentionProjection,
+      minSampleCount: WateringSampleCount,
+      historySize: WateringSampleSize,
+      overdueGracePeriod: FiniteDuration
+  )(using
       store: PlantAttentionStore^,
       clock: Clock^
   )(using log: Logger^, metrics: PlantAttentionMonitorMetricsApi^) extends PlantAttentionMonitor:
@@ -42,7 +48,7 @@ object PlantAttentionMonitor:
     override def current: AttentionProjection = currentProjection.get()
 
     override def refreshAll: RefreshAttentionResult = synchronized:
-      computeProjection match
+      computeProjection(minSampleCount, historySize, overdueGracePeriod) match
         case Left(reason)      => RefreshAttentionResult.RefreshFailed(reason).tap(_ => log.error("refresh attention", reason))
         case Right(projection) =>
           val previousLevels = currentProjection.get().plants.map(p => p.plantId -> p.watering.level).toMap
@@ -64,16 +70,26 @@ object PlantAttentionMonitor:
         metrics.setWateringCadence(plantId, available.averageInterval)
       case _: PlantAttention => ()
 
-  private def computeProjection(using store: PlantAttentionStore^, clock: Clock^) =
-    store.getAttentionSamples(size = 20) match
+  private def computeProjection(minSampleCount: WateringSampleCount, historySize: WateringSampleSize, overdueGracePeriod: FiniteDuration)(using
+      store: PlantAttentionStore^,
+      clock: Clock^
+  ) =
+    store.getAttentionSamples(size = historySize) match
       case GetAttentionSamplesResult.ReadFailed(reason) => reason.asLeft
-      case GetAttentionSamplesResult.Read(samples)      => projectionFor(samples)
+      case GetAttentionSamplesResult.Read(samples)      => projectionFor(samples, minSampleCount, overdueGracePeriod)
 
-  private def projectionFor(samples: Vector[PlantAttentionSample])(using clock: Clock^) =
+  private def projectionFor(samples: Vector[PlantAttentionSample], minSampleCount: WateringSampleCount, overdueGracePeriod: FiniteDuration)(using
+      clock: Clock^
+  ) =
     val measuredAt = clock.now()
-    AttentionProjection(measuredAt, samples.map(attentionFor(_, measuredAt))).asRight
+    AttentionProjection(measuredAt, samples.map(attentionFor(_, measuredAt, minSampleCount, overdueGracePeriod))).asRight
 
-  private def attentionFor(sample: PlantAttentionSample, measuredAt: Instant) =
+  private def attentionFor(
+      sample: PlantAttentionSample,
+      measuredAt: Instant,
+      minSampleCount: WateringSampleCount,
+      overdueGracePeriod: FiniteDuration
+  ) =
     val dates       = sample.wateringDates
     val sampleCount = dates.sampleCount
     val watering    =
@@ -81,15 +97,20 @@ object PlantAttentionMonitor:
         case None                 => WateringAttention.Unavailable(sampleCount, none)
         case Some(latestWatering) =>
           val timeSinceWatering = elapsed(latestWatering, measuredAt)
-          if sampleCount < 5 then WateringAttention.Unavailable(sampleCount, timeSinceWatering.some)
-          else assessWatering(dates, sampleCount, timeSinceWatering)
+          if sampleCount < minSampleCount then WateringAttention.Unavailable(sampleCount, timeSinceWatering.some)
+          else assessWatering(dates, sampleCount, timeSinceWatering, overdueGracePeriod)
     PlantAttention(sample.plantId, watering)
 
-  private def assessWatering(dates: Vector[Instant], sampleCount: WateringSampleCount, timeSinceWatering: FiniteDuration) =
+  private def assessWatering(
+      dates: Vector[Instant],
+      sampleCount: WateringSampleCount,
+      timeSinceWatering: FiniteDuration,
+      overdueGracePeriod: FiniteDuration
+  ) =
     val intervals = dates.reverse.sliding(2).flatMap: window =>
       window.headOption.zip(window.lastOption).map((previous, current) => elapsed(previous, current))
     val average = intervals.foldLeft(Duration.Zero)(_ + _) / (dates.size - 1L)
-    WateringAttention.Current(sampleCount, average, timeSinceWatering).assess
+    WateringAttention.Current(sampleCount, average, timeSinceWatering).assess(overdueGracePeriod)
 
   private def elapsed(previous: Instant, current: Instant) =
     ChronoUnit.MILLIS.between(previous, current).millis

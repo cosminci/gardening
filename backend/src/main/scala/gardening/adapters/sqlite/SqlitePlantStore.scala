@@ -113,14 +113,7 @@ object SqlitePlantStore:
             order by plant.rowid"""
 
     private def toAttentionSample(row: AttentionSampleRow) =
-      val storedDates = decodeWateringDates(row.wateringDates)
-      for
-        wateringDates <- storedDates.traverse(parseTimestamp)
-        // The SQL query limits each history to the maximum representable length.
-        // $COVERAGE-OFF$
-        wateringHistory <- WateringHistory.from(wateringDates).leftMap(msg => DatabaseCorruption(RuntimeException(s"invalid state: $msg")))
-      // $COVERAGE-ON$
-      yield PlantAttentionSample(PlantId(row.id), wateringHistory)
+      decodeWateringDates(row.wateringDates).traverse(parseTimestamp).map(PlantAttentionSample(PlantId(row.id), _))
 
     private def decodeWateringDates(value: String) =
       trust(decode[Vector[String]](value))

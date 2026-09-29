@@ -34,7 +34,7 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
         case other                             => fail(s"expected RemoveFailed, got $other")
 
   test("should return a read failure when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val photoStore = SqlitePhotoStore.make(connection.transactor)
       photoStore.getPhotos(PlantId("p1"), fullPhotoWindow) match
         case GetPhotosResult.ReadFailed(_) => ()
@@ -140,6 +140,6 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
     override def close(): Unit = connection.close()
 
   private def storeResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, SqlitePhotoStore.make(connection.transactor))

@@ -2,21 +2,18 @@ package gardening.domain.attention
 
 import cats.Eq
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.collection.MaxLength
-import io.github.iltotore.iron.constraint.numeric.Interval
+import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Positive}
 
 import java.time.Instant
 import scala.concurrent.duration.*
 
-type WateringSampleSize  = Int :| Interval.Closed[1, 20]
-type WateringSampleCount = Int :| Interval.Closed[0, 20]
-type WateringHistory     = Vector[Instant] :| MaxLength[20]
+type WateringSampleSize  = Int :| Positive
+type WateringSampleCount = Int :| GreaterEqual[0]
+type WateringHistory     = Vector[Instant]
 
 object WateringHistory:
-  def from(dates: Vector[Instant]): Either[String, WateringHistory] = dates.refineEither[MaxLength[20]]
-
   extension (history: WateringHistory)
-    def sampleCount: WateringSampleCount = history.size.assume[Interval.Closed[0, 20]]
+    def sampleCount: WateringSampleCount = history.size.assume[GreaterEqual[0]]
 
 sealed trait WateringAttention:
   def sampleCount: WateringSampleCount
@@ -28,8 +25,8 @@ object WateringAttention:
     def averageInterval: FiniteDuration
     def elapsed: FiniteDuration
 
-    def assess: Available =
-      if elapsed >= averageInterval + 24.hours then RedAlert(sampleCount, averageInterval, elapsed)
+    def assess(overdueGracePeriod: FiniteDuration): Available =
+      if elapsed >= averageInterval + overdueGracePeriod then RedAlert(sampleCount, averageInterval, elapsed)
       else if elapsed > averageInterval then Overdue(sampleCount, averageInterval, elapsed)
       else Current(sampleCount, averageInterval, elapsed)
 

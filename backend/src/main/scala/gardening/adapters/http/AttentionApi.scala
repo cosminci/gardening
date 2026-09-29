@@ -6,7 +6,7 @@ import gardening.usecases.PlantAttentionMonitor
 import io.circe.derivation.{Configuration as CirceConfiguration, ConfiguredCodec}
 import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.Interval
+import io.github.iltotore.iron.constraint.numeric.GreaterEqual
 import ox.flow.Flow
 import sttp.capabilities.WebSockets
 import sttp.shared.Identity
@@ -104,10 +104,10 @@ object AttentionApi:
 
   private given Schema[PlantId]             = Schema.string
   private given Schema[WateringSampleCount] = Schema.schemaForInt
-    .validate(Validator.min(0).and(Validator.max(20)))
+    .validate(Validator.min(0))
     // Tapir never decodes output-only attention sample counts through their schema.
     // $COVERAGE-OFF$
-    .map(_.refineOption[Interval.Closed[0, 20]])(value => value)
+    .map(_.refineOption[GreaterEqual[0]])(value => value)
   // $COVERAGE-ON$
   private given Schema[FiniteDuration] = Schema.schemaForString
     // Tapir only invokes duration schema mappings while generating OpenAPI.

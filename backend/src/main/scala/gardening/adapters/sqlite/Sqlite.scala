@@ -6,6 +6,7 @@ import org.sqlite.SQLiteDataSource
 
 import java.sql.Connection
 import javax.sql.DataSource
+import scala.concurrent.duration.FiniteDuration
 import scala.util.chaining.scalaUtilChainingOps
 
 enum SqliteLocation:
@@ -25,14 +26,15 @@ trait Sqlite:
 
 object Sqlite:
 
-  def make: Sqlite = LiveSqlite()
+  def make(storageLockTimeout: FiniteDuration): Sqlite = LiveSqlite(storageLockTimeout)
 
-  final private class LiveSqlite extends Sqlite:
+  final private class LiveSqlite(storageLockTimeout: FiniteDuration) extends Sqlite:
     override def connect(location: SqliteLocation): SqliteConnection =
       val dataSource     = new SQLiteDataSource().tap(_.setUrl(urlFor(location)))
-      val transactor     = Transactor(dataSource, connectionConfig = configureConnection)
+      val configure      = configureConnection(storageLockTimeout)
+      val transactor     = Transactor(dataSource, connectionConfig = configure)
       val maybeKeepAlive = location match
-        case _: SqliteLocation.InMemory => dataSource.getConnection().tap(configureConnection).some
+        case _: SqliteLocation.InMemory => dataSource.getConnection().tap(configure).some
         case _: SqliteLocation.File     => none
       SqliteConnection(dataSource, transactor, maybeKeepAlive)
 
@@ -41,9 +43,9 @@ object Sqlite:
       case SqliteLocation.InMemory(name) => s"jdbc:sqlite:file:$name?mode=memory&cache=shared"
       case SqliteLocation.File(path)     => s"jdbc:sqlite:$path"
 
-  private def configureConnection(connection: Connection): Unit =
+  private def configureConnection(storageLockTimeout: FiniteDuration)(connection: Connection): Unit =
     val statement = connection.createStatement()
     try
       val _ = statement.execute("PRAGMA foreign_keys = ON")
-      val _ = statement.execute("PRAGMA busy_timeout = 5000")
+      val _ = statement.execute(s"PRAGMA busy_timeout = ${storageLockTimeout.toMillis}")
     finally statement.close()

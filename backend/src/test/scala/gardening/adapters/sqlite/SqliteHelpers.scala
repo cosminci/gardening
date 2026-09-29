@@ -6,8 +6,11 @@ import gardening.domain.plants.PlantStatus
 import java.sql.{Connection, Types}
 import java.util.UUID
 import javax.sql.DataSource
+import scala.concurrent.duration.*
 
 object SqliteHelpers:
+
+  val lockTimeout: FiniteDuration = 5.seconds
 
   val perliteId: SubstrateComponentId = SubstrateComponentId(UUID.fromString("00000000-0000-4000-8000-000000000003"))
 

@@ -16,10 +16,11 @@ import gardening.usecases.{PhotoManager, PhotoThumbnailGenerator, PhotoWriteReco
 import gardening.ports.PlantManagerMetricsApi
 import gardening.usecases.SubstrateCatalog
 import gardening.ports.SubstrateCatalogMetricsApi
+import gardening.domain.attention.{WateringSampleCount, WateringSampleSize}
+import io.github.iltotore.iron.*
+import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Positive}
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 import ox.{Ox, discard, forkDiscard, sleep}
-
-import java.nio.file.Path
 
 final case class Programs(
     plants: PlantManager,
@@ -32,12 +33,12 @@ final case class Programs(
 
 object Programs:
 
-  def make(resources: AppResources, photosDir: Path, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
+  def make(resources: AppResources, config: AppConfig, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
     val plantStore        = SqlitePlantStore.make(resources.transactor)
     val photoStore        = SqlitePhotoStore.make(resources.transactor)
     val photoWriteJournal = SqlitePhotoWriteJournal.make(resources.transactor)
     val operationStore    = SqliteOperationStore.make(resources.transactor)
-    val contentStore      = FilePhotoContentStore.make(photosDir)
+    val contentStore      = FilePhotoContentStore.make(config.photosDir)
     val substrateStore    = SqliteSubstrateStore.make(resources.transactor)
     val pesticideStore    = SqlitePesticideStore.make(resources.transactor)
     val plantLock         = PlantUpdateLock.make
@@ -51,12 +52,23 @@ object Programs:
     given SubstrateCatalogMetricsApi                  = PrometheusSubstrateCatalogMetrics.make(registry)
     given PesticideCatalogMetricsApi                  = PrometheusPesticideCatalogMetrics.make(registry)
 
-    PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
+    // Both counts are `>= 2` in config, so `>= 0` and positive hold without a re-check.
+    val minSampleCount: WateringSampleCount = config.watering.minSampleCount.assume[GreaterEqual[0]]
+    val historySize: WateringSampleSize     = config.watering.maxSampleCount.assume[Positive]
+
+    PlantAttentionMonitor.make(minSampleCount, historySize, config.watering.overdueGracePeriod)(using plantStore, SystemClock).map: attention =>
       forkDiscard:
-        Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
+        Iterator.continually { sleep(config.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
         PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
-        PhotoManager.make(using photoStore, contentStore, photoWriteJournal, PhotoThumbnailGenerator.make, UuidIdGenerator, SystemClock),
+        PhotoManager.make(using
+          photoStore,
+          contentStore,
+          photoWriteJournal,
+          PhotoThumbnailGenerator.make(config.photo.maxThumbnailSize),
+          UuidIdGenerator,
+          SystemClock
+        ),
         OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),

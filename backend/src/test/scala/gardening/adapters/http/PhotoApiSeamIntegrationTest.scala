@@ -8,6 +8,8 @@ import io.circe.parser.parse
 import io.github.iltotore.iron.autoRefine
 import ox.{discard, supervised}
 import scodec.bits.ByteVector
+import squants.information.Information
+import squants.information.InformationConversions.*
 import sttp.client3.testing.SttpBackendStub
 import sttp.client3.{HttpClientSyncBackend, Response, SttpBackend, UriContext, basicRequest, multipart}
 import sttp.model.{HeaderNames, StatusCode, Uri}
@@ -21,6 +23,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.util.chaining.*
 
 class PhotoApiSeamIntegrationTest extends munit.FunSuite:
+
+  private val maxUploadSize: Information = 1.mebibytes
 
   private val date          = Instant.parse("2026-01-01T00:00:00Z")
   private val plantId       = PlantId("p1")
@@ -59,7 +63,7 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
           .modifyConfig(_.noGracefulShutdown)
           .host("127.0.0.1")
           .port(0)
-          .addEndpoints(PhotoApi.serverEndpoints(using photos))
+          .addEndpoints(PhotoApi.serverEndpoints(maxUploadSize)(using photos))
           .start()
       try
         val jpegResponse = uploadPhoto(plantId.value, jpegBytes, "image/jpeg", idempotencyKey = "upload-1")(binding.port)
@@ -82,11 +86,11 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
           StatusCode.UnsupportedMediaType -> json("""{"message":"unsupported media type: only image/jpeg and image/png are accepted"}""")
         )
 
-        val oversized         = Array.fill(20 * 1024 * 1024 + 1)(0.toByte)
+        val oversized         = Array.fill(maxUploadSize.toBytes.toInt + 1)(0.toByte)
         val oversizedResponse = uploadPhoto(plantId.value, oversized, "image/jpeg")(binding.port)
         assertEquals(
           oversizedResponse.code     -> jsonBody(oversizedResponse),
-          StatusCode.PayloadTooLarge -> json("""{"message":"photo exceeds the 20 MiB size limit"}""")
+          StatusCode.PayloadTooLarge -> json("""{"message":"photo exceeds the maximum upload size"}""")
         )
 
         addPhotoResultRef.set(AddPhotoResult.PlantMissing)
@@ -214,7 +218,7 @@ class PhotoApiSeamIntegrationTest extends munit.FunSuite:
   ) =
     val photos = fakePhotos(refs, addPhotoResult, removePhotoResult, getPhotosResult, getContentResult)
     TapirStubInterpreter(SttpBackendStub.synchronous)
-      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(using photos))
+      .whenServerEndpointsRunLogic(PhotoApi.serverEndpoints(maxUploadSize)(using photos))
       .backend()
 
   private type TestServer = SttpBackend[Identity, Any]

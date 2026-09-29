@@ -34,7 +34,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val elapsedSinceWatering = 12.hours
     val latestWatering       = measurementTime - elapsedSinceWatering
     val wateringDates        = Vector.tabulate(4)(index => latestWatering - wateringInterval * index.toLong)
-    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory      = wateringDates
     val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults        = Vector(samplesRead)
 
@@ -65,7 +65,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val actual = cases.map: (elapsedSinceWatering, _) =>
       val latestWatering  = referenceTime - elapsedSinceWatering
       val wateringDates   = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-      val wateringHistory = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+      val wateringHistory = wateringDates
       val sampleResults   = Vector(GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory))))
 
       buildMonitor(now = () => referenceTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed")).current
@@ -82,7 +82,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     assertEquals(monitor.current, expectedProjection)
 
   test(s"should return ${WateringAttention.Unavailable} when a plant has no watering samples"):
-    val wateringHistory = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
+    val wateringHistory = Vector.empty
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
@@ -95,7 +95,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
 
   test(s"should return ${WateringAttention.Current} when watering timestamps and elapsed time are equal"):
     val wateringDates   = Vector.fill(5)(referenceTime)
-    val wateringHistory = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory = wateringDates
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
@@ -109,7 +109,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
   test(s"should return ${WateringAttention.Overdue} when equal watering timestamps have positive elapsed time"):
     val measurementTime = referenceTime + 1.milli
     val wateringDates   = Vector.fill(5)(referenceTime)
-    val wateringHistory = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory = wateringDates
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
@@ -126,7 +126,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val initialElapsed         = 12.hours
     val latestWatering         = initialMeasurementTime - initialElapsed
     val wateringDates          = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-    val wateringHistory        = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory        = wateringDates
     val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults          = Vector(samplesRead)
 
@@ -144,7 +144,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val initialElapsed         = 12.hours
     val latestWatering         = initialMeasurementTime - initialElapsed
     val wateringDates          = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-    val wateringHistory        = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory        = wateringDates
     val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults          = Vector(samplesRead)
 
@@ -177,10 +177,10 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val elapsedSinceWatering  = 12.hours
     val latestWatering        = measurementTime - elapsedSinceWatering
     val beforeWateringDates   = Vector.tabulate(4)(index => latestWatering - averageInterval * index.toLong)
-    val beforeWateringHistory = WateringHistory.from(beforeWateringDates).fold(message => fail(message), identity)
+    val beforeWateringHistory = beforeWateringDates
     val beforeWatering        = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, beforeWateringHistory)))
     val afterWateringDates    = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-    val afterWateringHistory  = WateringHistory.from(afterWateringDates).fold(message => fail(message), identity)
+    val afterWateringHistory  = afterWateringDates
     val afterWatering         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, afterWateringHistory)))
     val sampleResults         = Vector(beforeWatering, afterWatering)
 
@@ -198,10 +198,10 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val elapsedSinceWatering = 12.hours
     val latestWatering       = measurementTime - elapsedSinceWatering
     val beforeRemovalDates   = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-    val beforeRemovalHistory = WateringHistory.from(beforeRemovalDates).fold(message => fail(message), identity)
+    val beforeRemovalHistory = beforeRemovalDates
     val beforeRemoval        = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, beforeRemovalHistory)))
     val afterRemovalDates    = Vector.tabulate(4)(index => latestWatering - averageInterval * index.toLong)
-    val afterRemovalHistory  = WateringHistory.from(afterRemovalDates).fold(message => fail(message), identity)
+    val afterRemovalHistory  = afterRemovalDates
     val afterRemoval         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, afterRemovalHistory)))
     val sampleResults        = Vector(beforeRemoval, afterRemoval)
 
@@ -219,7 +219,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val elapsedSinceWatering = 12.hours
     val latestWatering       = measurementTime - elapsedSinceWatering
     val wateringDates        = Vector.tabulate(5)(index => latestWatering - averageInterval * index.toLong)
-    val wateringHistory      = WateringHistory.from(wateringDates).fold(message => fail(message), identity)
+    val wateringHistory      = wateringDates
     val samplesRead          = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val failure              = RuntimeException("store down")
     val samplesReadFailed    = GetAttentionSamplesResult.ReadFailed(failure)
@@ -234,7 +234,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     assertEquals(monitor.current, initialProjection)
 
   test("should exclude an archived plant after refreshing attention from active samples"):
-    val wateringHistory = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
+    val wateringHistory = Vector.empty
     val remainingPlant  = plant.copy(id = PlantId("still-active"))
     val initialSamples  = GetAttentionSamplesResult.Read(
       Vector(PlantAttentionSample(plant.id, wateringHistory), PlantAttentionSample(remainingPlant.id, wateringHistory))
@@ -271,6 +271,10 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
       getAttentionSamplesRequests: AtomicReference[Vector[WateringSampleSize]] = AtomicReference(Vector.empty)
   )
 
+  private val minSampleCount: WateringSampleCount = 5
+  private val historySize: WateringSampleSize     = 20
+  private val overdueGracePeriod: FiniteDuration  = 24.hours
+
   private def buildMonitor(
       refs: Refs = Refs(),
       now: () => Instant = () => referenceTime,
@@ -284,4 +288,4 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
           .lift(readIndex.getAndIncrement())
           .orElse(getAttentionSamplesResults.lastOption)
           .getOrElse(fail("missing getAttentionSamples result"))
-    PlantAttentionMonitor.make(using store, () => now())
+    PlantAttentionMonitor.make(minSampleCount, historySize, overdueGracePeriod)(using store, () => now())
