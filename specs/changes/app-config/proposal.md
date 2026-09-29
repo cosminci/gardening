@@ -5,9 +5,9 @@
 
 **Date:** 2026-09-29
 
-**Grounded in:** Spiked configuration loading against the value shapes actually in use today — a bounded integer count reusing the watering sample count's existing 1–20 domain bound, a byte size, and a duration. Confirmed each can be sourced from an environment variable with a documented fallback default and validated against its existing bound at load time, surfacing an out-of-bound override as a startup failure naming the offending value, without hand-written per-value conversion code.
+**Grounded in:** Spiked configuration loading against the value shapes actually in use today — a bounded integer count, a byte size, and a duration — including the one value that already carries a domain-level bound (the watering sample count's existing 1–20 ceiling). Confirmed every shape can be sourced from an environment variable with a documented fallback default and validated at load time, reusing an existing bound rather than declaring a second one, and surfacing an out-of-bound override as a startup failure naming the offending value.
 
-Replace scattered hardcoded thresholds and ad hoc, individually-parsed environment lookups with one validated configuration surface, loaded once at startup: values with real deployment-tuning value become overridable by a documented environment variable with a fallback default, and values that must never vary in this single-container deployment become fixed.
+Replace hardcoded thresholds and scattered, individually-parsed environment lookups with one validated configuration surface: values an operator might legitimately tune become overridable with a documented default, and values that must never vary in this single-container deployment become fixed.
 
 ## What & Why
 
@@ -27,12 +27,12 @@ Configuration fields fall into two tiers.
 
 | Field | Environment variable | Default | Bound |
 | --- | --- | --- | --- |
-| Watering minimum sample count | `GARDENING_WATERING_MIN_SAMPLE_COUNT` | 5 | 1–20, and ≤ the maximum sample count |
+| Watering minimum sample count | `GARDENING_WATERING_MIN_SAMPLE_COUNT` | 5 | 1–20 |
 | Watering maximum sample count | `GARDENING_WATERING_MAX_SAMPLE_COUNT` | 20 | 1–20 |
 | Watering overdue grace period | `GARDENING_WATERING_OVERDUE_GRACE_PERIOD` | 24h | greater than zero |
 | Attention recompute interval | `GARDENING_ATTENTION_RECOMPUTE_INTERVAL` | 30s | greater than zero |
-| Photo maximum upload size | `GARDENING_PHOTO_MAX_UPLOAD_SIZE` | 20MB | greater than zero |
-| Photo maximum thumbnail size | `GARDENING_PHOTO_MAX_THUMBNAIL_SIZE` | 100KB | greater than zero |
+| Photo maximum upload size | `GARDENING_PHOTO_MAX_UPLOAD_SIZE` | 20MiB | greater than zero |
+| Photo maximum thumbnail size | `GARDENING_PHOTO_MAX_THUMBNAIL_SIZE` | 100KiB | greater than zero |
 | Application version | `GARDENING_APP_VERSION` | `0.0.0-dev` | non-empty (unchanged) |
 | Database file path | `GARDENING_DB_PATH` | `gardening.db` | non-empty (unchanged) |
 | Photos directory | `GARDENING_PHOTOS_DIR` | `photos` | non-empty (unchanged) |
@@ -52,7 +52,7 @@ The watering sample count bound (1–20) is the same domain bound the rolling wa
 
 ## Tradeoffs Accepted
 
-- Any deployment currently setting `GARDENING_HOST` or `GARDENING_PORT` loses that override silently — the variable is simply ignored rather than rejected at startup. Borne by whoever operates such a deployment; today's production deployment sets neither.
+- An operator who still has `GARDENING_HOST` or `GARDENING_PORT` set from before this change gets no warning that it no longer does anything; diagnosing an unexpected bind address means noticing the variable stopped mattering, not seeing a startup failure. Borne by whoever operates such a deployment; today's production deployment sets neither.
 
 ## Acceptance Criteria
 
