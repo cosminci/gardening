@@ -26,9 +26,9 @@ object PhotoManager:
       idGen: IdGenerator^,
       clock: Clock^
   )(using log: Logger^): PhotoManager^{store, contentStore, journal, thumbnail, idGen, clock, log} =
-    new LivePhotos
+    new LivePhotoManager
 
-  private class LivePhotos(using
+  private class LivePhotoManager(using
       store: PhotoStore^,
       contentStore: PhotoContentStore^,
       journal: PhotoWriteJournal^,
