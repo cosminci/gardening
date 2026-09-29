@@ -40,7 +40,7 @@ export const makeHttpPlantPhotoClient = (
       try {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("idempotencyKey", crypto.randomUUID());
+        formData.append("idempotencyKey", randomIdempotencyKey());
         const { data, error, response } = await client.POST("/plants/{plantId}/photos", {
           params: { path: { plantId: plant } },
           body: formData as never,
@@ -78,3 +78,16 @@ const toPlantPhoto = (value: { id: string; capturedAt: string }): Journal.PlantP
 
 const requestFailure = (error: unknown): Error =>
   error instanceof Error ? error : new Error("photo request failed");
+
+// crypto.randomUUID() is restricted to secure contexts (HTTPS or localhost); this app is also used
+// over plain HTTP on the local network, so the idempotency key is built from getRandomValues, which
+// carries no such restriction, instead.
+const randomIdempotencyKey = (): string => {
+  const bytes = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte, index) => {
+    if (index === 6) return (byte & 0x0f) | 0x40;
+    if (index === 8) return (byte & 0x3f) | 0x80;
+    return byte;
+  });
+  const hex = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
