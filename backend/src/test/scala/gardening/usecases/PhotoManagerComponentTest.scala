@@ -133,7 +133,10 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
 
     val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(pendingIntent)).addPhoto(plantId, photoContent, idempotencyKey)
 
-    assertEquals(result.getClass, classOf[AddPhotoResult.AddFailed])
+    result match
+      case AddPhotoResult.AddFailed(reason) =>
+        assertEquals(reason.getMessage, s"photo upload already in progress for idempotency key $idempotencyKey")
+      case other => fail(s"expected AddFailed, got $other")
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
 
   test("should fail the upload when the idempotency key collides with a remove photo write intent"):
@@ -142,7 +145,10 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
 
     val result = buildManager(refs, findByKeyResult = PhotoJournalFindResult.Found(removeIntent)).addPhoto(plantId, photoContent, idempotencyKey)
 
-    assertEquals(result.getClass, classOf[AddPhotoResult.AddFailed])
+    result match
+      case AddPhotoResult.AddFailed(reason) =>
+        assertEquals(reason.getMessage, s"idempotency key $idempotencyKey collides with a remove photo write intent")
+      case other => fail(s"expected AddFailed, got $other")
     assertEquals(refs.putPhotoContents.get(), Vector.empty)
 
   test("should fail the upload when the journal cannot be read"):
@@ -274,11 +280,11 @@ class PhotoManagerComponentTest extends munit.FunSuite with TestImplicits:
   test("should pass photo content reads through to the content store, thumbnail variant included"):
     val refs         = Refs()
     val originalRead = buildManager(refs).getPhotoContent(photo.id, PhotoVariant.Original)
-    val missingRead  = buildManager(getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id, PhotoVariant.Thumbnail)
+    val missingRead  = buildManager(refs, getContentResult = PhotoReadResult.ContentMissing).getPhotoContent(photo.id, PhotoVariant.Thumbnail)
 
     assertEquals(originalRead, PhotoReadResult.Read(photoContent))
     assertEquals(missingRead, PhotoReadResult.ContentMissing)
-    assertEquals(refs.requestedContentVariants.get(), Vector(PhotoVariant.Original))
+    assertEquals(refs.requestedContentVariants.get(), Vector(PhotoVariant.Original, PhotoVariant.Thumbnail))
 
   final private case class Refs():
     val addedPhotos: AtomicReference[Vector[PlantPhoto]]                                 = AtomicReference(Vector.empty)

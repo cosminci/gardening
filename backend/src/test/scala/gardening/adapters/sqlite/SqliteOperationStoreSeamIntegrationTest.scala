@@ -39,11 +39,15 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "p1")
       val operation = Operation(OperationId("o1"), PlantId("p1"), date, care.copy(pesticides = Set(vertabId, neemOilId)))
 
-      assertEquals(operationStore.addOperation(operation), AddOperationResult.Logged(operation.id))
-      assertEquals(queryString(dataSource, "select kind from operation where id = ?", operation.id.value), "Care")
-      val expectedOpPageResult = GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false))
-      assertEquals(operationStore.getOperations(PlantId("p1"), fullWindow), expectedOpPageResult)
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+      val logged     = operationStore.addOperation(operation)
+      val storedKind = queryString(dataSource, "select kind from operation where id = ?", operation.id.value)
+      val page       = operationStore.getOperations(PlantId("p1"), fullWindow)
+      val plant      = plantStore.getPlant(PlantId("p1"))
+
+      assertEquals(logged, AddOperationResult.Logged(operation.id))
+      assertEquals(storedKind, "Care")
+      assertEquals(page, GetOperationsResult.Read(OperationPage(Vector(operation), hasNextPage = false)))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should page operations by timestamp descending with an identifier tie-breaker"):
     Using.resource(storeResource): resource =>
@@ -186,22 +190,6 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
           assertEquals(reason.getMessage, "invalid stored operation date: 2026-01-01T00:00:00BAD")
         case other => fail(s"expected ReadFailed, got $other")
 
-  test("should support operations against a freshly migrated operation schema"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      seedPlant(connection.dataSource, id = "p1")
-
-      val details        = OperationDetails.Care(Set.empty, Set.empty, MoistureLevel.Wet, none)
-      val older          = Operation(OperationId("o1"), PlantId("p1"), date, details)
-      val newer          = Operation(OperationId("o2"), PlantId("p1"), date.plusMillis(100), details)
-      val operationStore = SqliteOperationStore.make(connection.transactor)
-      assertEquals(operationStore.addOperation(older), AddOperationResult.Logged(older.id))
-      assertEquals(operationStore.addOperation(newer), AddOperationResult.Logged(newer.id))
-      assertEquals(
-        operationStore.getOperations(PlantId("p1"), fullWindow),
-        GetOperationsResult.Read(OperationPage(Vector(newer, older), hasNextPage = false))
-      )
-
   test("should round-trip a care observation without actions"):
     Using.resource(storeResource): resource =>
       val dataSource     = resource.dataSource
@@ -209,9 +197,11 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "p1")
       val observation = Operation(OperationId("o1"), PlantId("p1"), date, OperationDetails.Care(Set.empty, Set.empty, care.moisture, none))
 
-      assertEquals(operationStore.addOperation(observation), AddOperationResult.Logged(observation.id))
-      val expected = GetOperationsResult.Read(OperationPage(Vector(observation), hasNextPage = false))
-      assertEquals(operationStore.getOperations(PlantId("p1"), fullWindow), expected)
+      val logged = operationStore.addOperation(observation)
+      val page   = operationStore.getOperations(PlantId("p1"), fullWindow)
+
+      assertEquals(logged, AddOperationResult.Logged(observation.id))
+      assertEquals(page, GetOperationsResult.Read(OperationPage(Vector(observation), hasNextPage = false)))
 
   test("should persist a repot without changing the plant"):
     Using.resource(storeResource): resource =>
@@ -221,10 +211,15 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "p1")
       val operation = Operation(OperationId("o1"), PlantId("p1"), date, OperationDetails.Repot(sand3to5Substrate, Note("new mix").some))
 
-      assertEquals(operationStore.addOperation(operation), AddOperationResult.Logged(operation.id))
-      assertEquals(queryString(dataSource, "select kind from operation where id = ?", operation.id.value), "Repot")
-      assertEquals(operationStore.getOperation(operation.id), GetOperationResult.Read(operation))
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+      val logged     = operationStore.addOperation(operation)
+      val storedKind = queryString(dataSource, "select kind from operation where id = ?", operation.id.value)
+      val found      = operationStore.getOperation(operation.id)
+      val plant      = plantStore.getPlant(PlantId("p1"))
+
+      assertEquals(logged, AddOperationResult.Logged(operation.id))
+      assertEquals(storedKind, "Repot")
+      assertEquals(found, GetOperationResult.Read(operation))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   private val insertQuery = "insert into operation (id, plant_id, date, kind, payload) values (?, ?, ?, ?, ?)"
   test("should reject unknown operation kinds and malformed JSON payloads"):
@@ -246,9 +241,12 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
   test("should return no operation for an unknown id"):
     Using.resource(storeResource): resource =>
       val operationStore = resource.operationStore
-      assertEquals(operationStore.getOperation(OperationId("missing")), GetOperationResult.RecordMissing)
-      val expected = GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false))
-      assertEquals(operationStore.getOperations(PlantId("missing"), fullWindow), expected)
+
+      val found = operationStore.getOperation(OperationId("missing"))
+      val page  = operationStore.getOperations(PlantId("missing"), fullWindow)
+
+      assertEquals(found, GetOperationResult.RecordMissing)
+      assertEquals(page, GetOperationsResult.Read(OperationPage(Vector.empty, hasNextPage = false)))
 
   test("should fail when stored operation data is corrupt"):
     Using.resource(storeResource): resource =>
@@ -286,8 +284,11 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       val amended      = OperationDetails.Repot(newSubstrate, maybeNote = none)
       assertEquals(operationStore.addOperation(operation), AddOperationResult.Logged(operation.id))
 
-      assertEquals(operationStore.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+      val edited = operationStore.updateOperation(operation.id, amended)
+      val plant  = plantStore.getPlant(PlantId("p1"))
+
+      assertEquals(edited, EditOperationResult.Edited(operation.copy(details = amended)))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should remove an operation, idempotently"):
     Using.resource(storeResource): resource =>
@@ -297,9 +298,13 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       val original = Operation(OperationId("o1"), PlantId("p1"), date, care)
       assertEquals(operationStore.addOperation(original), AddOperationResult.Logged(original.id))
 
-      assertEquals(operationStore.removeOperation(original.id), OperationCompensationResult.Compensated)
-      assertEquals(operationStore.getOperation(original.id), GetOperationResult.RecordMissing)
-      assertEquals(operationStore.removeOperation(original.id), OperationCompensationResult.Compensated)
+      val firstRemove  = operationStore.removeOperation(original.id)
+      val afterRemove  = operationStore.getOperation(original.id)
+      val secondRemove = operationStore.removeOperation(original.id)
+
+      assertEquals(firstRemove, OperationCompensationResult.Compensated)
+      assertEquals(afterRemove, GetOperationResult.RecordMissing)
+      assertEquals(secondRemove, OperationCompensationResult.Compensated)
 
   test("should sync the plant's substrate when logging the latest repot, atomically with the write"):
     Using.resource(storeResource): resource =>
@@ -323,14 +328,16 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       seedPlant(dataSource, id = "p1")
       val laterRepot   = OperationDetails.Repot(lecaSubstrate, none)
       val earlierRepot = OperationDetails.Repot(sand3to5Substrate, none)
-
-      val expected = AddOperationResult.Logged(OperationId("o1"))
-      assertEquals(operationStore.logRepot(OperationId("o1"), PlantId("p1"), date.plusSeconds(60), laterRepot), expected)
+      assertEquals(
+        operationStore.logRepot(OperationId("o1"), PlantId("p1"), date.plusSeconds(60), laterRepot),
+        AddOperationResult.Logged(OperationId("o1"))
+      )
 
       val result = operationStore.logRepot(OperationId("o2"), PlantId("p1"), date, earlierRepot)
+      val plant  = plantStore.getPlant(PlantId("p1"))
 
       assertEquals(result, AddOperationResult.Logged(OperationId("o2")))
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails.copy(substrate = lecaSubstrate))))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails.copy(substrate = lecaSubstrate))))
 
   test("should report a logging failure when logRepot's referenced plant is unknown"):
     Using.resource(storeResource): resource =>
@@ -366,9 +373,10 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       assertEquals(operationStore.addOperation(latest), AddOperationResult.Logged(latest.id))
 
       val result = operationStore.editRepot(older.id, amended)
+      val plant  = plantStore.getPlant(PlantId("p1"))
 
       assertEquals(result, EditOperationResult.Edited(older.copy(details = amended)))
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should report a missing operation when editRepot targets an unknown id"):
     Using.resource(storeResource): resource =>
@@ -423,8 +431,11 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       val amended   = OperationDetails.Care(care.actions, care.pesticides, MoistureLevel.Dry, none)
       assertEquals(operationStore.addOperation(operation), AddOperationResult.Logged(operation.id))
 
-      assertEquals(operationStore.updateOperation(operation.id, amended), EditOperationResult.Edited(operation.copy(details = amended)))
-      assertEquals(plantStore.getPlant(PlantId("p1")), GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
+      val edited = operationStore.updateOperation(operation.id, amended)
+      val plant  = plantStore.getPlant(PlantId("p1"))
+
+      assertEquals(edited, EditOperationResult.Edited(operation.copy(details = amended)))
+      assertEquals(plant, GetPlantResult.Read(Plant(PlantId("p1"), defaultPlantDetails)))
 
   test("should report write failures for operations when the database is read-only"):
     Using.resource(storeResource): resource =>
@@ -460,19 +471,15 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
       operationStore.getLatestRepot(PlantId("p1")) match
         case GetLatestRepotResult.ReadFailed(_) => ()
         case other                              => fail(s"expected ReadFailed, got $other")
+      operationStore.getOperationDateRange(PlantId("p1")) match
+        case GetOperationDateRangeResult.ReadFailed(_) => ()
+        case other                                     => fail(s"expected ReadFailed, got $other")
       operationStore.logRepot(OperationId("o1"), PlantId("p1"), date, OperationDetails.Repot(sand3to5Substrate, none)) match
         case AddOperationResult.LoggingFailed(_) => ()
         case other                               => fail(s"expected LoggingFailed, got $other")
       operationStore.editRepot(OperationId("o1"), OperationDetails.Repot(sand3to5Substrate, none)) match
         case EditOperationResult.EditFailed(_) => ()
         case other                             => fail(s"expected EditFailed, got $other")
-
-  test("should report a date-range read failure when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val operationStore = SqliteOperationStore.make(connection.transactor)
-      operationStore.getOperationDateRange(PlantId("p1")) match
-        case GetOperationDateRangeResult.ReadFailed(_) => ()
-        case other                                     => fail(s"expected ReadFailed, got $other")
 
   final private case class StoreResource(
       connection: SqliteConnection,

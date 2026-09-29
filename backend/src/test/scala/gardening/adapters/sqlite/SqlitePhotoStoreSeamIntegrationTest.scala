@@ -20,16 +20,6 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
   private val fullPhotoWindow = PhotoWindow(offset = 0, size = 10)
   private val photoId         = PhotoId(UUID.fromString("00000000-0000-4000-8002-000000000001"))
 
-  test("should support photos against a freshly migrated plant schema"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
-      val _ = Flyway.configure().dataSource(connection.dataSource).load().migrate()
-      seedPlant(connection.dataSource, id = "p1")
-
-      val photo      = PlantPhoto(photoId, PlantId("p1"), date)
-      val photoStore = SqlitePhotoStore.make(connection.transactor)
-      assertEquals(photoStore.addPhoto(photo), AddPhotoResult.Added(photo))
-      assertEquals(photoStore.getPhotos(PlantId("p1"), fullPhotoWindow), GetPhotosResult.Read(PhotoPage(Vector(photo), hasNextPage = false)))
-
   test("should report a write failure when the database is read-only"):
     Using.resource(storeResource): resource =>
       val dataSource = resource.dataSource
@@ -76,11 +66,12 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
       val photoStore = resource.photoStore
       seedPlant(dataSource, id = "p1")
       val photo = PlantPhoto(photoId, PlantId("p1"), date)
-      assertEquals(photoStore.addPhoto(photo), AddPhotoResult.Added(photo))
 
+      val added     = photoStore.addPhoto(photo)
       val removed   = photoStore.removePhoto(photoId)
       val afterList = photoStore.getPhotos(PlantId("p1"), fullPhotoWindow)
 
+      assertEquals(added, AddPhotoResult.Added(photo))
       assertEquals(removed, RemovePhotoResult.Removed(photo))
       assertEquals(afterList, GetPhotosResult.Read(PhotoPage(Vector.empty, hasNextPage = false)))
 
@@ -112,9 +103,11 @@ class SqlitePhotoStoreSeamIntegrationTest extends FunSuite:
       val photoStore = resource.photoStore
       seedPlant(dataSource, id = "p1")
       val photo = PlantPhoto(photoId, PlantId("p1"), date)
-      assertEquals(photoStore.addPhoto(photo), AddPhotoResult.Added(photo))
+
+      val added = photoStore.addPhoto(photo)
       execute(dataSource, "update plant_photo set captured_at = ? where id = ?", "not-an-instant", photoId.value.toString)
 
+      assertEquals(added, AddPhotoResult.Added(photo))
       photoStore.getPhotos(PlantId("p1"), fullPhotoWindow) match
         case GetPhotosResult.ReadFailed(DatabaseCorruption(reason)) =>
           assertEquals(reason.getMessage, "invalid stored photo capturedAt: not-an-instant")

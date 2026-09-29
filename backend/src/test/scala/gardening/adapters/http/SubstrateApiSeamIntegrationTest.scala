@@ -55,11 +55,11 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
   test("should edit substrate components and reject invalid, missing, or archived identifiers"):
     val refs   = Refs()
     val server = buildServer(refs, editResult = SubstrateComponentUpdateResult.Updated(component))
+    val url    = s"/substrates/components/${componentId.value}"
 
-    val edited   = put(s"/substrates/components/${componentId.value}", componentDataJson, server)
+    val edited   = put(url, componentDataJson, server)
     val invalid  = put("/substrates/components/not-a-uuid", componentDataJson, server)
-    val missing  = put(s"/substrates/components/${componentId.value}", componentDataJson, buildServer())
-    val url      = s"/substrates/components/${componentId.value}"
+    val missing  = put(url, componentDataJson, buildServer())
     val archived = put(url, componentDataJson, buildServer(editResult = SubstrateComponentUpdateResult.ComponentArchived))
 
     assertResponse(edited, StatusCode.Ok, componentJson)
@@ -71,11 +71,11 @@ class SubstrateApiSeamIntegrationTest extends munit.FunSuite:
   test("should archive substrate components and reject unknown, already-archived, or invalid identifiers"):
     val refs   = Refs()
     val server = buildServer(refs, archiveResult = SubstrateComponentUpdateResult.Updated(archivedComponent))
+    val url    = s"/substrates/components/${componentId.value}/archive"
 
-    val archived        = post(s"/substrates/components/${componentId.value}/archive", "", server)
+    val archived        = post(url, "", server)
     val invalid         = post("/substrates/components/not-a-uuid/archive", "", server)
-    val missing         = post(s"/substrates/components/${componentId.value}/archive", "", buildServer())
-    val url             = s"/substrates/components/${componentId.value}/archive"
+    val missing         = post(url, "", buildServer())
     val alreadyArchived = post(url, body = "", buildServer(archiveResult = SubstrateComponentUpdateResult.ComponentArchived))
 
     assertResponse(archived, StatusCode.Ok, archivedComponentJson)
