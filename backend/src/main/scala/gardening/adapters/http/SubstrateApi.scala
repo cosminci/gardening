@@ -185,13 +185,10 @@ object SubstrateApi:
   private given Schema[SubstratePart]     = Schema.derived[SubstratePart]
   private given Schema[Substrate]         = summon[Schema[List[SubstratePart]]]
     .validate(Validator.minSize(1))
-    .map(
-      // Only re-derives a Schema `.default` value for docs; none of these schemas set one, so this is unreachable.
-      // $COVERAGE-OFF$
-      parts =>
-        Substrate.of(parts).toOption
-        // $COVERAGE-ON$
-    )(_.parts) // tapir replays the attached Validator against this on every decode, after Circe parses the value
+    // Only re-derives a Schema `.default` value for docs; none of these schemas set one, so this is unreachable.
+    // $COVERAGE-OFF$
+    .map(parts => Substrate.of(parts).toOption)(_.parts)
+  // $COVERAGE-ON$
   private given Schema[SubstrateMixData] = Schema.derived[SubstrateMixData]
     .modify(_.maybeNotes)(_.copy(isOptional = false).nullable)
     .modify(_.substrate)(_.copy(isOptional = false))
