@@ -26,3 +26,9 @@ enum PhotoReadResult:
 enum ThumbnailDerivationResult:
   case Derived(thumbnail: PhotoContent)
   case DerivationFailed(reason: Throwable)
+
+final case class PhotoBackfillSkip(photo: PhotoId, reason: Throwable)
+
+enum PhotoBackfillResult:
+  case Completed(processed: Vector[PhotoId], skipped: Vector[PhotoBackfillSkip])
+  case BackfillFailed(reason: Throwable)
