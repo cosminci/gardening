@@ -190,6 +190,20 @@ describe("WsPlantAttentionFeed", () => {
     expect(sockets[0]?.close).toHaveBeenCalledOnce();
   });
 
+  it("should not reconnect when unsubscribed after a disconnect scheduled a reconnect", () => {
+    const { factory, sockets } = makeFakeWsFactory();
+    const feed = makeWsPlantAttentionFeed(factory);
+
+    const unsubscribe = feed.subscribe(() => undefined);
+    sockets[0]?.onopen?.(new Event("open"));
+    sockets[0]?.onclose?.(new CloseEvent("close"));
+    unsubscribe();
+
+    vi.advanceTimersByTime(5_000);
+
+    expect(sockets).toHaveLength(1);
+  });
+
   it("should decode unavailable watering with null and non-null elapsed", () => {
     const { factory, sockets } = makeFakeWsFactory();
     const feed = makeWsPlantAttentionFeed(factory);

@@ -12,6 +12,7 @@ export const makeWsPlantAttentionFeed = (
     let socket: WebSocket;
 
     const connect = () => {
+      if (stopped) return;
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       socket = wsFactory(`${proto}//${location.host}/attention/feed`);
       listener({ kind: "connectionState", state: "connecting" });

@@ -5,6 +5,7 @@ import type { PlantPhotoClient } from "../domain/PlantPhoto";
 import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { formatLocalDateTime, plantDisplayName } from "./JournalLabels";
 import { PhotoRemoveConfirmation, removePhotoControlId } from "./PhotoRemoveConfirmation";
+import { plantPhotosControlId } from "./PlantCard";
 import { photoContentUrl } from "../adapters/http/HttpPlantPhotoClient";
 import "./sheet.css";
 import "./plant-photos-sheet.css";
@@ -146,7 +147,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
 
   onCleanup(() => {
     window.removeEventListener("keydown", onKeyDown);
-    document.getElementById(`plant-photos-${String(props.plant.id)}`)?.focus();
+    document.getElementById(plantPhotosControlId(props.plant.id))?.focus();
   });
 
   const loadedPage = () => {
