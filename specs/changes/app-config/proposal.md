@@ -51,7 +51,10 @@ Configuration fields fall into two tiers.
 | Photos directory | `PHOTOS_DIR` | `photos` | non-empty (unchanged) |
 | Static assets directory | `STATIC_DIR` | `static` | non-empty (unchanged) |
 
-The minimum's floor of 2 exists because averaging needs at least two dates to produce one interval; below that, watering is reported unavailable rather than computed from too little data. The window itself is otherwise unbounded — it holds however many records the configured maximum requests. Loaded with PureConfig, using its squants and Iron integration modules: no field needs hand-written conversion or validation code.
+- Minimum's floor is 2: averaging needs at least two dates to produce one interval.
+- Below the minimum, watering is reported unavailable, not computed from too little data.
+- The window is otherwise unbounded — it holds whatever the configured maximum requests.
+- Loaded with PureConfig, via its squants and Iron integration modules: no field needs hand-written conversion or validation code.
 
 ## Alternatives Considered
 
