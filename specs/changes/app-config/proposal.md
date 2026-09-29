@@ -55,6 +55,44 @@ Every configuration field is declared in one place. Only some are overridable; t
 - Below the minimum, watering is reported unavailable, not computed from too little data.
 - The window is otherwise unbounded — it holds whatever the configured maximum requests.
 
+`application.conf`, in full:
+
+```hocon
+gardening {
+  host = "0.0.0.0"
+  host = ${?HOST}
+  port = 8080
+  port = ${?PORT}
+
+  db-path = "gardening.db"
+  photos-dir = "photos"
+  static-dir = "static"
+  storage-lock-timeout = 5s
+  attention-feed-staleness-threshold = 5s
+  attention-recompute-interval = 30s
+  attention-recompute-interval = ${?ATTENTION_RECOMPUTE_INTERVAL}
+
+  watering {
+    min-sample-count = 5
+    min-sample-count = ${?WATERING_MIN_SAMPLE_COUNT}
+    max-sample-count = 20
+    max-sample-count = ${?WATERING_MAX_SAMPLE_COUNT}
+    overdue-grace-period = 24h
+    overdue-grace-period = ${?WATERING_OVERDUE_GRACE_PERIOD}
+  }
+
+  photo {
+    max-upload-size = 20MiB
+    max-upload-size = ${?PHOTO_MAX_UPLOAD_SIZE}
+    max-thumbnail-size = 100KiB
+    max-thumbnail-size = ${?PHOTO_MAX_THUMBNAIL_SIZE}
+  }
+}
+```
+
+- The unqualified line is the fixed default; the `${?VAR}` line beneath an overridable field replaces it only when that variable is set — HOCON's own optional-substitution rule, not custom code.
+- Fixed fields have no matching line, so no variable can influence them.
+
 ## Alternatives Considered
 
 - Typesafe Config, used directly with hand-written per-field parsing: rejected. Every field would need its own hand-written conversion and validation code.
