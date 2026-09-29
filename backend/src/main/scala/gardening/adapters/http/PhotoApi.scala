@@ -57,7 +57,7 @@ object PhotoApi:
   // circe JSON codec over the raw byte-array part codec once tapir-json-circe is in scope (Array[Byte]
   // has an implicit circe Codec; File does not), corrupting binary uploads. File also avoids
   // buffering the whole upload in memory.
-  final private case class PhotoUploadPart(file: Part[File])
+  final private case class PhotoUploadPart(file: Part[File], idempotencyKey: Part[String])
   final private case class AddedPhoto(id: String, capturedAt: Instant) derives Codec.AsObject
   final private case class PhotoItem(id: String, capturedAt: Instant) derives Codec.AsObject
   final private case class PhotoPageResponse(photos: Vector[PhotoItem], hasNextPage: Boolean) derives Codec.AsObject
@@ -99,7 +99,7 @@ object PhotoApi:
             sniffPhotoMediaType(bytes) match
               case None            => unsupportedType.asLeft
               case Some(mediaType) =>
-                photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType)) match
+                photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType), upload.idempotencyKey.body) match
                   case AddPhotoResult.Added(photo) => AddedPhoto(photo.id.value.toString, photo.capturedAt).asRight
                   case AddPhotoResult.PlantMissing => plantMissing.asLeft
                   case AddPhotoResult.AddFailed(_) => ApiError("photo could not be added").asLeft

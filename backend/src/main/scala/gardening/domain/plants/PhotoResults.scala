@@ -26,3 +26,16 @@ enum PhotoReadResult:
 enum ThumbnailDerivationResult:
   case Derived(thumbnail: PhotoContent)
   case DerivationFailed(reason: Throwable)
+
+enum PhotoJournalWriteResult:
+  case Recorded
+  case RecordFailed(reason: Throwable)
+
+enum PhotoJournalFindResult:
+  case NotFound
+  case Found(intent: PhotoWriteIntent)
+  case FindFailed(reason: Throwable)
+
+enum PhotoJournalListResult:
+  case Listed(intents: Vector[PhotoWriteIntent])
+  case ListFailed(reason: Throwable)

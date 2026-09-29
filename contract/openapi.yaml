@@ -1153,10 +1153,13 @@ components:
       type: object
       required:
       - file
+      - idempotencyKey
       properties:
         file:
           type: string
           format: binary
+        idempotencyKey:
+          type: string
     Plant:
       title: Plant
       type: object
