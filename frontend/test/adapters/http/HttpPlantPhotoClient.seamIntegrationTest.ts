@@ -84,6 +84,32 @@ describe("HttpPlantPhotoClient", () => {
     expect(request.body).not.toBeNull();
   });
 
+  it("should add a photo even where crypto.randomUUID is unavailable, as on an insecure origin", async () => {
+    const originalRandomUUID = crypto.randomUUID.bind(crypto);
+    // crypto.randomUUID is restricted to secure contexts (HTTPS or localhost); this app is also
+    // used over plain HTTP on the local network, where a browser leaves it undefined.
+    // @ts-expect-error -- simulating an insecure context, where this member doesn't exist
+    delete crypto.randomUUID;
+    try {
+      const client = makeHttpPlantPhotoClient(
+        respondingWith([jsonResponse({ id: "ph-new", capturedAt: "2026-09-26T12:00:00Z" }, 201)]),
+      );
+      const file = new File(["jpeg"], "photo.jpg", { type: "image/jpeg" });
+
+      const result = await client.addPhoto(plantId, file);
+
+      expect(result).toEqual({
+        kind: "added",
+        photo: {
+          id: Journal.photoId("ph-new"),
+          capturedAt: Journal.instant("2026-09-26T12:00:00Z"),
+        },
+      });
+    } finally {
+      crypto.randomUUID = originalRandomUUID;
+    }
+  });
+
   it("should translate photo upload failures into explicit domain results", async () => {
     const reason = new Error("offline");
     const client = makeHttpPlantPhotoClient(
