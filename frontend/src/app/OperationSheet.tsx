@@ -9,6 +9,7 @@ import type { DeleteAction } from "./OperationForm";
 import { PesticideArchiveConfirmation } from "./PesticideArchiveConfirmation";
 import { PesticideEditor } from "./PesticideEditor";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
+import { waitForSheetTransition } from "./SheetTransition";
 import { SubstrateComponentArchiveConfirmation } from "./SubstrateComponentArchiveConfirmation";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import "./sheet.css";
@@ -81,8 +82,6 @@ type SecondarySheet =
 
 type Sheet = "editor" | "operation";
 
-const sheetTransitionMilliseconds = 180;
-
 const secondarySheetLabels: Record<SecondarySheet["kind"], string> = {
   substrate: "Substrate component editor",
   pesticide: "Pesticide editor",
@@ -103,11 +102,6 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
   const initial = () => (props.target.kind === "edit" ? props.target.operation.details : undefined);
   const returnFocusId = () => operationControlId(props.target);
   useBackgroundBarrier();
-
-  const waitForSheetTransition = () =>
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, sheetTransitionMilliseconds);
-    });
 
   const restoreFocus = (controlId: string) => {
     queueMicrotask(() => {

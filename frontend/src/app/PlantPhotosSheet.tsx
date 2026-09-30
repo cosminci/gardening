@@ -6,6 +6,7 @@ import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { formatLocalDateTime, plantDisplayName } from "./JournalLabels";
 import { PhotoRemoveConfirmation, removePhotoControlId } from "./PhotoRemoveConfirmation";
 import { plantPhotosControlId } from "./PlantCard";
+import { waitForSheetTransition } from "./SheetTransition";
 import { photoContentUrl } from "../adapters/http/HttpPlantPhotoClient";
 import "./sheet.css";
 import "./plant-photos-sheet.css";
@@ -42,11 +43,6 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
   let requestedPage = 1;
 
   useBackgroundBarrier();
-
-  const waitForSheetTransition = () =>
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 180);
-    });
 
   const closeSheet = async () => {
     if (closing()) return;

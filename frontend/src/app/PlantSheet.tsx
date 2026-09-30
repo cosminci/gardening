@@ -5,6 +5,7 @@ import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
+import { waitForSheetTransition } from "./SheetTransition";
 import { SubstrateComponentArchiveConfirmation } from "./SubstrateComponentArchiveConfirmation";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
@@ -86,11 +87,6 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const [archiveTarget, setArchiveTarget] = createSignal<Journal.SubstrateComponent>();
   const [archiveCompleted, setArchiveCompleted] = createSignal(false);
   useBackgroundBarrier();
-
-  const waitForSheetTransition = () =>
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 180);
-    });
 
   const closeSheets = async (target: "editor" | "plant") => {
     if (closingSheet() !== undefined) return;
