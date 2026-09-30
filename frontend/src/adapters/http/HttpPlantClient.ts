@@ -3,6 +3,7 @@ import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PlantClient } from "../../domain/Plant";
 import { fromWireSubstrate, toWireSubstrate } from "./Codecs";
+import { coerceToError } from "./HttpError";
 
 type Wire = components["schemas"];
 
@@ -118,5 +119,4 @@ const toPlant = (value: Wire["Plant"]): Journal.Plant => ({
   },
 });
 
-const requestFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("plant request failed");
+const requestFailure = (error: unknown): Error => coerceToError(error, "plant request failed");

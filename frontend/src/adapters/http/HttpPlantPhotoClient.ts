@@ -2,6 +2,7 @@ import type { paths } from "@contract";
 import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PlantPhotoClient } from "../../domain/PlantPhoto";
+import { coerceToError } from "./HttpError";
 
 export type PhotoVariant = "original" | "thumbnail";
 
@@ -76,8 +77,7 @@ const toPlantPhoto = (value: { id: string; capturedAt: string }): Journal.PlantP
   capturedAt: Journal.instant(value.capturedAt),
 });
 
-const requestFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("photo request failed");
+const requestFailure = (error: unknown): Error => coerceToError(error, "photo request failed");
 
 // crypto.randomUUID() is restricted to secure contexts (HTTPS or localhost); this app is also used
 // over plain HTTP on the local network, so the idempotency key is built from getRandomValues, which
