@@ -18,30 +18,31 @@ class PhotoThumbnailGeneratorTest extends FunSuite:
   private val maxThumbnailSize: Information = 100.kibibytes
   private val generator                     = PhotoThumbnailGenerator.make(maxThumbnailSize)
 
-  test("should derive a jpeg thumbnail at or under the 100KB target from a small original"):
+  private val budgetCases = Seq(
+    "small, easily-compressed" -> solidImage(width = 300, height = 200, color = Color.BLUE).pipe(image => encode(image, format = "png")),
+    "large, hard-to-compress"  -> noisyImage(width = 2000, height = 1500).pipe(image => encode(image, format = "jpg"))
+  )
+
+  for (description, original) <- budgetCases do
+    test(s"should derive a jpeg thumbnail at or under the 100KB target from a $description original"):
+      generator.derive(original) match
+        case ThumbnailDerivationResult.Derived(thumbnail) =>
+          val actualBytes = thumbnail.bytes.length
+          assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
+          assert(
+            actualBytes <= maxThumbnailSize.toBytes,
+            s"expected <= ${maxThumbnailSize}, got $actualBytes bytes"
+          )
+        case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
+
+  test("should not enlarge a source already smaller than every thumbnail size in the ladder"):
     val original = solidImage(width = 300, height = 200, color = Color.BLUE).pipe(image => encode(image, format = "png"))
 
     generator.derive(original) match
       case ThumbnailDerivationResult.Derived(thumbnail) =>
-        val actualBytes = thumbnail.bytes.length
-        assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
-        assert(
-          actualBytes <= maxThumbnailSize.toBytes,
-          s"expected <= ${maxThumbnailSize}, got $actualBytes bytes"
-        )
-      case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
-
-  test("should derive a jpeg thumbnail at or under the 100KB target from a large, hard-to-compress original"):
-    val original = noisyImage(width = 2000, height = 1500).pipe(image => encode(image, format = "jpg"))
-
-    generator.derive(original) match
-      case ThumbnailDerivationResult.Derived(thumbnail) =>
-        val actualBytes = thumbnail.bytes.length
-        assertEquals(thumbnail.mediaType, PhotoMediaType.Jpeg)
-        assert(
-          actualBytes <= maxThumbnailSize.toBytes,
-          s"expected <= ${maxThumbnailSize}, got $actualBytes bytes"
-        )
+        val decoded = ImageIO.read(ByteArrayInputStream(thumbnail.bytes.toArray))
+        assertEquals(decoded.getWidth, 300)
+        assertEquals(decoded.getHeight, 200)
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
   test("should flatten a transparent original onto an opaque background"):
@@ -58,6 +59,17 @@ class PhotoThumbnailGeneratorTest extends FunSuite:
       case ThumbnailDerivationResult.Derived(thumbnail) =>
         val decoded = ImageIO.read(ByteArrayInputStream(thumbnail.bytes.toArray))
         assertEquals(decoded.getRGB(0, 0) & 0x00ffffff, 0x00ffffff)
+      case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
+
+  test("should orient the thumbnail to match how a browser renders the original, not how the camera stored it"):
+    // real phone photo, stored landscape (4000x3000) with EXIF orientation 6; a browser renders it
+    // portrait (3000x4000), and the thumbnail must match that, not the raw stored bytes
+    val original = PhotoContent(ByteVector(readResource("rozmarin-orientation-6.jpg")), PhotoMediaType.Jpeg)
+
+    generator.derive(original) match
+      case ThumbnailDerivationResult.Derived(thumbnail) =>
+        val decoded = ImageIO.read(ByteArrayInputStream(thumbnail.bytes.toArray))
+        assert(decoded.getWidth < decoded.getHeight, s"expected a portrait thumbnail, got ${decoded.getWidth}x${decoded.getHeight}")
       case ThumbnailDerivationResult.DerivationFailed(reason) => fail(s"expected a derived thumbnail, got $reason")
 
   test("should fail to derive a thumbnail from content that isn't a decodable image"):
@@ -91,3 +103,6 @@ class PhotoThumbnailGeneratorTest extends FunSuite:
       case "png" => PhotoMediaType.Png
       case _     => PhotoMediaType.Jpeg
     PhotoContent(ByteVector(output.toByteArray), mediaType)
+
+  private def readResource(name: String): Array[Byte] =
+    getClass.getResourceAsStream(name).readAllBytes()
