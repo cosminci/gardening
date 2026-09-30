@@ -15,6 +15,7 @@ import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
 import type { PlantPhotoClient } from "../domain/PlantPhoto";
 import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
+import { isAttentionProjectionValid } from "../domain/PlantAttention";
 import type { SubstrateClient } from "../domain/SubstrateCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
 import { PlantPhotosSheet } from "./PlantPhotosSheet";
@@ -123,16 +124,6 @@ export const App: Component<AppProps> = (props) => {
       : undefined,
   );
 
-  const isProjectionValid = (
-    proj: Journal.AttentionProjection,
-    ids: Set<Journal.PlantId>,
-  ): boolean => {
-    const samples = proj.plants;
-    if (samples.length !== new Set(samples.map((s) => s.plant)).size) return false;
-    const filtered = samples.filter((s) => !recentlyArchived.has(s.plant));
-    return !filtered.some((s) => !ids.has(s.plant));
-  };
-
   const loadJournal = async (animate = false) => {
     const version = ++loadVersion;
     const plants = props.plants;
@@ -162,7 +153,7 @@ export const App: Component<AppProps> = (props) => {
 
     const newActiveIds = new Set(plantsResult.plants.map((plant) => plant.id));
     const proj = attentionProjection();
-    if (proj !== undefined && !isProjectionValid(proj, newActiveIds)) {
+    if (proj !== undefined && !isAttentionProjectionValid(proj, newActiveIds, recentlyArchived)) {
       setView("failed");
       return;
     }
@@ -459,7 +450,7 @@ export const App: Component<AppProps> = (props) => {
         for (const id of recentlyArchived)
           if (!proj.plants.some((s) => s.plant === id)) recentlyArchived.delete(id);
         if (activePlantIdsLoaded) {
-          if (!isProjectionValid(proj, activeIds)) {
+          if (!isAttentionProjectionValid(proj, activeIds, recentlyArchived)) {
             setView("failed");
             return;
           }
