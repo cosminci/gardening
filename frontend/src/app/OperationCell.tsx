@@ -75,7 +75,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
                 </>
               }
             >
-              <Match when={detail.label === "Moisture" && moisture}>
+              <Match when={detail.kind === "moisture" && moisture}>
                 {(level) => (
                   <>
                     <dt class="operation__detail-label--compact">{detail.label}</dt>
@@ -86,7 +86,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
                   </>
                 )}
               </Match>
-              <Match when={detail.label === "Actions" && actions}>
+              <Match when={detail.kind === "actions" && actions}>
                 {(actionSet) => (
                   <>
                     <dt class="operation__detail-label--compact">{detail.label}</dt>
@@ -119,7 +119,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
                   </>
                 )}
               </Match>
-              <Match when={detail.label === "Pesticides"}>
+              <Match when={detail.kind === "pesticides"}>
                 <dt class="operation__detail-label--compact">{detail.label}</dt>
                 <dd class="operation__detail-value--compact">
                   <span class="operation__detail-value--compact-text">{detail.value}</span>
