@@ -228,6 +228,18 @@ export const App: Component<AppProps> = (props) => {
     setView("loaded");
   };
 
+  // A reload can be superseded by a newer one; only the latest may report
+  // failure, so capture the version before awaiting and re-check it on rejection.
+  const guardReload = (reload: Promise<void>): Promise<void> => {
+    const version = loadVersion;
+    return reload.catch(() => {
+      if (version === loadVersion) setView("failed");
+    });
+  };
+
+  const refreshCurrentView = (animate = false): Promise<void> =>
+    selected() === "garden" ? loadJournal(animate) : loadCemetery(true);
+
   const selectView = (next: PlantView, updateUrl = true) => {
     setSearchQuery("");
     if (updateUrl) {
@@ -243,11 +255,7 @@ export const App: Component<AppProps> = (props) => {
       setView("loaded");
     } else if (selected() !== "cemetery" || view() !== "loaded") {
       setSelected("cemetery");
-      const pending = loadCemetery();
-      const version = loadVersion;
-      void pending.catch(() => {
-        if (version === loadVersion) setView("failed");
-      });
+      void guardReload(loadCemetery());
     }
   };
 
@@ -362,12 +370,7 @@ export const App: Component<AppProps> = (props) => {
       setFormTarget(undefined);
       setSaveError(undefined);
     }
-    const refresh =
-      selected() === "garden" ? loadJournal(target.kind === "log") : loadCemetery(true);
-    const version = loadVersion;
-    await refresh.catch(() => {
-      if (version === loadVersion) setView("failed");
-    });
+    await guardReload(refreshCurrentView(target.kind === "log"));
     setOperationChange(
       editedOperation === undefined
         ? { kind: "logged" }
@@ -391,11 +394,7 @@ export const App: Component<AppProps> = (props) => {
     setDeleteTarget(undefined);
     setFormTarget(undefined);
     setSaveError(undefined);
-    const refresh = selected() === "garden" ? loadJournal() : loadCemetery(true);
-    const version = loadVersion;
-    await refresh.catch(() => {
-      if (version === loadVersion) setView("failed");
-    });
+    await guardReload(refreshCurrentView());
     setOperationChange({ kind: "deleted" });
     return undefined;
   };
@@ -433,11 +432,7 @@ export const App: Component<AppProps> = (props) => {
     if (!ready() || initialViewLoaded) return;
     initialViewLoaded = true;
     if (selected() === "cemetery") {
-      const pending = loadCemetery();
-      const version = loadVersion;
-      void pending.catch(() => {
-        if (version === loadVersion) setView("failed");
-      });
+      void guardReload(loadCemetery());
     }
   });
 
