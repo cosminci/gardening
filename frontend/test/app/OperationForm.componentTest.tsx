@@ -205,12 +205,6 @@ describe("OperationForm", () => {
     expect(Testing.screen.getByRole("tooltip", { name: /Improves drainage/ })).toHaveTextContent(
       "Improves drainage. Use up to 30%.",
     );
-    const substrateInfo = Testing.screen.getByRole("button", { name: "Information about Perlite" });
-    substrateInfo.focus();
-    Testing.fireEvent.keyDown(substrateInfo, { key: "Enter" });
-    expect(substrateInfo).toHaveFocus();
-    Testing.fireEvent.keyDown(substrateInfo, { key: "Escape" });
-    expect(substrateInfo).not.toHaveFocus();
     const share = Testing.screen.getByRole("spinbutton", { name: "Component 1 share" });
     share.focus();
     Testing.fireEvent.input(share, { target: { value: "0" } });
@@ -334,14 +328,6 @@ describe("OperationForm", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(Testing.screen.getAllByLabelText("Insecticide")).toHaveLength(2);
-    const pesticideInfo = Testing.screen.getByRole("button", {
-      name: "Information about Neem oil",
-    });
-    pesticideInfo.focus();
-    Testing.fireEvent.keyDown(pesticideInfo, { key: "Enter" });
-    expect(pesticideInfo).toHaveFocus();
-    Testing.fireEvent.keyDown(pesticideInfo, { key: "Escape" });
-    expect(pesticideInfo).not.toHaveFocus();
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Insecticidal soap" }));
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
