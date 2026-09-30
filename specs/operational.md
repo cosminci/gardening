@@ -34,7 +34,7 @@ Each domain service logs its own outcome as a single line: info for a successful
 | `gardening_storage_photos_bytes`       | Gauge |
 
 - `gardening_attention_feed_connections` is heartbeat/TTL-based (`ConnectionHeartbeats`), not incremented on open and decremented on close, so a missed close can't leak it: it's recomputed as "connections heartbeated within the last 5s" on every scrape, so a missed event self-corrects on the next heartbeat instead of leaking forever. This is also the only reliable way to track the attention feed's concurrency — see below.
-- The two storage gauges walk `GARDENING_DB_PATH`'s file and `GARDENING_PHOTOS_DIR`'s tree fresh on every scrape; neither is cached or incremented.
+- The two storage gauges walk the configured database file and photos directory fresh on every scrape; neither is cached or incremented.
 
 **HTTP RED** (`PrometheusMetrics(...).addRequestsTotal().addRequestsDuration()`, namespace `gardening`):
 
@@ -53,9 +53,24 @@ The single-household service serializes journal mutations in one process. Openin
 
 ## Runtime dependencies
 
-- A writable SQLite file (`GARDENING_DB_PATH`, default `gardening.db`). A failed connection or migration prevents startup; back up data before recreating a database migrated with superseded versions.
+Every operator-tunable setting is an environment variable, validated together at startup; an override outside its bound fails startup naming the field and value. Each is optional — unset or empty takes the default — so a stock deployment sets none.
+
+| Environment variable            | Default   | Bound                                     |
+| ------------------------------- | --------- | ----------------------------------------- |
+| `HOST`                          | `0.0.0.0` | non-empty                                 |
+| `PORT`                          | `8080`    | non-empty                                 |
+| `WATERING_MIN_SAMPLE_COUNT`     | `5`       | 2 or more                                 |
+| `WATERING_HISTORY_SIZE`         | `20`      | ≥ the configured minimum, no upper limit  |
+| `WATERING_OVERDUE_GRACE_PERIOD` | `24h`     | greater than zero                         |
+| `ATTENTION_RECOMPUTE_INTERVAL`  | `30s`     | greater than zero                         |
+| `PHOTO_MAX_UPLOAD_SIZE`         | `20MiB`   | greater than zero                         |
+| `PHOTO_MAX_THUMBNAIL_SIZE`      | `100KiB`  | greater than zero                         |
+
+The database file path, photos directory, and static assets directory are fixed in the bundled `application.conf`, not environment-configurable — each is a container-internal path only its volume mount can vary, redirected in local development with `-Dgardening.*` system properties. The storage lock-contention timeout and attention-feed staleness threshold are likewise fixed.
+
+- A writable SQLite file at `/data/gardening.db`. A failed connection or migration prevents startup; back up data before recreating a database migrated with superseded versions.
 - A writable photo content directory, separate from the SQLite file: the NAS array in production, a local directory in local development. Photo volume never grows the SQLite file or its backup path.
-- Built static assets (`GARDENING_STATIC_DIR`, default `static`) share the API origin; missing assets return not found.
+- Built static assets served from `/app/static` share the API origin; missing assets return not found.
 - [Local development](../CONTRIBUTING.md#local-development) binds both unauthenticated services to workstation loopback. Its journal persists locally; edits never sync back to the NAS. `--refresh` pulls only the SQLite journal from the NAS; local photo content is separate and is never seeded or synced by it.
 - Optional SSH refresh uses SQLite's online backup for a consistent snapshot without stopping NAS writes. After validation, atomic replacement leaves either the old or new complete journal on failure or interruption; abandoned snapshots are removed on the next start.
 - `GET /metrics` (Prometheus exposition, see [Metrics](#metrics) above) is always exposed; nothing in the app depends on anything scraping it, and startup/behavior are identical whether or not a scraper exists. The same Victoria Metrics/Grafana pair can run standalone for local development, pointed at the local backend's `/metrics`, with no code or config change to the app itself.

@@ -15,7 +15,7 @@ One validated configuration surface replaces hardcoded thresholds and scattered,
 
 Today:
 
-- Watering min/max sample count, the overdue grace period, the attention recompute interval, and photo upload/thumbnail size caps are hardcoded. Changing any needs a code change and a rebuild.
+- Watering minimum sample count and history size, the overdue grace period, the attention recompute interval, and photo upload/thumbnail size caps are hardcoded. Changing any needs a code change and a rebuild.
 - The watering history behind that average is capped at 20 records, with no way to widen or narrow it.
 - Network host/port and deployment paths are each read from their own environment variable, parsed ad hoc, with an inline fallback, even where the path can never vary independently of the container it ships in.
 - `/health` reports a build version alongside its liveness status, coupling an operational liveness check to release tracking.
@@ -45,7 +45,7 @@ Every configuration field is declared in one place. Only some are overridable; t
 | Network bind host | `HOST` | `0.0.0.0` | non-empty (unchanged) |
 | Network bind port | `PORT` | `8080` | non-empty (unchanged) |
 | Watering minimum sample count | `WATERING_MIN_SAMPLE_COUNT` | 5 | 2 or more |
-| Watering maximum sample count | `WATERING_MAX_SAMPLE_COUNT` | 20 | ≥ the configured minimum, no upper limit |
+| Watering history size | `WATERING_HISTORY_SIZE` | 20 | ≥ the configured minimum, no upper limit |
 | Watering overdue grace period | `WATERING_OVERDUE_GRACE_PERIOD` | 24h | greater than zero |
 | Attention recompute interval | `ATTENTION_RECOMPUTE_INTERVAL` | 30s | greater than zero |
 | Photo maximum upload size | `PHOTO_MAX_UPLOAD_SIZE` | 20MiB | greater than zero |
@@ -53,32 +53,39 @@ Every configuration field is declared in one place. Only some are overridable; t
 
 - Minimum's floor is 2: averaging needs at least two dates to produce one interval.
 - Below the minimum, watering is reported unavailable, not computed from too little data.
-- The window is otherwise unbounded — it holds whatever the configured maximum requests.
+- The window is otherwise unbounded — it holds whatever the configured history size requests.
 
 `application.conf`, in full:
 
 ```hocon
 gardening {
-  host = "0.0.0.0"
-  host = ${?HOST}
-  port = 8080
-  port = ${?PORT}
+  server {
+    host = "0.0.0.0"
+    host = ${?HOST}
+    port = 8080
+    port = ${?PORT}
+    static-dir = "/app/static"
+  }
 
-  db-path = "gardening.db"
-  photos-dir = "photos"
-  static-dir = "static"
-  storage-lock-timeout = 5s
-  attention-feed-staleness-threshold = 5s
-  attention-recompute-interval = 30s
-  attention-recompute-interval = ${?ATTENTION_RECOMPUTE_INTERVAL}
+  storage {
+    db-path = "/data/gardening.db"
+    lock-timeout = 5s
+    photos-dir = "/photos"
+  }
 
-  watering {
-    min-sample-count = 5
-    min-sample-count = ${?WATERING_MIN_SAMPLE_COUNT}
-    max-sample-count = 20
-    max-sample-count = ${?WATERING_MAX_SAMPLE_COUNT}
-    overdue-grace-period = 24h
-    overdue-grace-period = ${?WATERING_OVERDUE_GRACE_PERIOD}
+  attention {
+    feed-staleness-threshold = 5s
+    recompute-interval = 30s
+    recompute-interval = ${?ATTENTION_RECOMPUTE_INTERVAL}
+
+    watering {
+      min-sample-count = 5
+      min-sample-count = ${?WATERING_MIN_SAMPLE_COUNT}
+      history-size = 20
+      history-size = ${?WATERING_HISTORY_SIZE}
+      overdue-grace-period = 24h
+      overdue-grace-period = ${?WATERING_OVERDUE_GRACE_PERIOD}
+    }
   }
 
   photo {
@@ -101,8 +108,8 @@ gardening {
 
 - Every overridable field takes its default when its environment variable is unset or empty — matches today's behavior exactly.
 - An override outside its bound fails startup, naming the field and the rejected value. A minimum sample count below 2 is one such rejected value.
-- Minimum sample count above the configured maximum (or vice versa) fails startup, regardless of either value's own bound.
-- A configured maximum sample count above 20 is honored exactly, with no upper limit.
+- Minimum sample count above the configured history size (or vice versa) fails startup, regardless of either value's own bound.
+- A configured history size above 20 is honored exactly, with no upper limit.
 - Every renamed environment variable (host, port) keeps its current default and override behavior under its new name.
 - Database file path, photos directory, and static assets directory keep their current effective value, but no longer accept an environment override — setting their old environment variable has no effect.
 - Setting none of the new environment variables changes nothing observable — this change alone is a no-op until an operator opts in.
