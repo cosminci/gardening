@@ -50,6 +50,25 @@ def port() -> int:
     return backend
 
 
+def host() -> str:
+    return os.environ.get("GARDENING_HOST") or "0.0.0.0"
+
+
+def loopback(bind_host: str) -> str:
+    """The address to probe or print for a bind host; wildcards map to loopback."""
+    return "127.0.0.1" if bind_host in ("0.0.0.0", "::") else bind_host
+
+
+def lan_address() -> str:
+    """Best-effort primary LAN IPv4 for the printed URL when bound to a wildcard."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.connect(("8.8.8.8", 80))
+            return probe.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
+
+
 def preflight(refresh: bool) -> None:
     for tool in ("java", "sbt", "npm", "node"):
         require(shutil.which(tool) is not None, f"Install {tool} before starting local development.")
@@ -62,9 +81,9 @@ def preflight(refresh: bool) -> None:
     with socket.socket() as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            listener.bind(("127.0.0.1", port()))
+            listener.bind((host(), port()))
         except OSError as error:
-            raise RuntimeError(f"Port {port()} is unavailable on 127.0.0.1.") from error
+            raise RuntimeError(f"Port {port()} is unavailable on {host()}.") from error
     if refresh:
         require(shutil.which("ssh") is not None, "Install ssh to refresh from the NAS.")
         require(os.environ.get("GARDENING_NAS_SSH"), "Set GARDENING_NAS_SSH to the NAS SSH destination.")
@@ -145,8 +164,8 @@ def await_frontend(build: subprocess.Popen[bytes]) -> None:
     raise RuntimeError("The frontend build did not produce a bundle in time.")
 
 
-def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
-    health = f"http://127.0.0.1:{backend_port}/health"
+def await_backend(probe_host: str, backend_port: int, backend: subprocess.Popen[bytes]) -> None:
+    health = f"http://{probe_host}:{backend_port}/health"
     deadline = time.monotonic() + BACKEND_READY_TIMEOUT
     while time.monotonic() < deadline:
         require(backend.poll() is None, "The backend stopped before it became ready.")
@@ -163,10 +182,11 @@ def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
 def start() -> None:
     processes: list[subprocess.Popen[bytes]] = []
     backend_port = port()
+    bind_host = host()
     # The fixed-tier paths take no env override, so local dev redirects them with -Dgardening.* system properties.
     backend_environment = {
         **os.environ,
-        "HOST": "127.0.0.1",
+        "HOST": bind_host,
         "PORT": str(backend_port),
         "JAVA_TOOL_OPTIONS": " ".join(
             filter(
@@ -176,6 +196,14 @@ def start() -> None:
                     f"-Dgardening.storage.db-path={DATABASE}",
                     f"-Dgardening.storage.photos-dir={DATA / 'photos'}",
                     f"-Dgardening.server.static-dir={STATIC_DIR}",
+                    # slf4j-simple prints no timestamp and an empty [thread] for unnamed
+                    # Loom virtual threads; give local logs a real clock and drop the [].
+                    "-Dorg.slf4j.simpleLogger.showDateTime=true",
+                    "-Dorg.slf4j.simpleLogger.dateTimeFormat=HH:mm:ss.SSS",
+                    "-Dorg.slf4j.simpleLogger.showThreadName=false",
+                    # Netty logs the IPv6 wildcard bind (0:0:0:0:0:0:0:0); local.py prints
+                    # the reachable URLs instead, so quiet that redundant line.
+                    "-Dorg.slf4j.simpleLogger.log.sttp.tapir.server.netty.sync.NettySyncServer=warn",
                 ],
             )
         ),
@@ -188,15 +216,19 @@ def start() -> None:
             subprocess.Popen(
                 ["npm", "run", "build", "--", "--watch"],
                 cwd=ROOT / "frontend",
+                env={**os.environ, "GARDENING_LIVE_RELOAD": "1"},
                 start_new_session=True,
             )
         )
         await_frontend(processes[0])
         print("Starting the backend…", flush=True)
         processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=backend_environment, start_new_session=True))
-        await_backend(backend_port, processes[1])
-        print(f"Local app: http://127.0.0.1:{backend_port}", flush=True)
-        print("Frontend edits rebuild automatically; hard-refresh the browser to load them.", flush=True)
+        probe_host = loopback(bind_host)
+        await_backend(probe_host, backend_port, processes[1])
+        print(f"Local app: http://{probe_host}:{backend_port}", flush=True)
+        if bind_host in ("0.0.0.0", "::"):
+            print(f"On your network: http://{lan_address()}:{backend_port}", flush=True)
+        print("Frontend edits rebuild and reload the browser automatically.", flush=True)
         while all(process.poll() is None for process in processes):
             time.sleep(0.2)
         raise RuntimeError("A local process stopped; shutting down.")
@@ -214,9 +246,10 @@ def main() -> None:
             "an existing local journal (or pass --yes). The NAS needs sqlite3. "
             "The frontend is built in watch mode and the backend serves it on "
             "GARDENING_PORT (default 8080); set it if that port is occupied. "
-            "Frontend edits rebuild automatically, so hard-refresh the browser "
-            "to load them without restarting the backend. For live hot reload, "
-            "run 'cd frontend && npm run dev' separately. "
+            "The backend binds 0.0.0.0 so other devices on your network can reach "
+            "it; set GARDENING_HOST=127.0.0.1 to restrict it to this machine. "
+            "Frontend edits rebuild and reload the browser automatically, without "
+            "restarting the backend. "
             "Local edits never sync back to the NAS."
         ),
     )
