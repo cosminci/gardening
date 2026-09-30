@@ -16,7 +16,6 @@ import gardening.usecases.{PhotoManager, PhotoThumbnailGenerator, PhotoWriteReco
 import gardening.ports.PlantManagerMetricsApi
 import gardening.usecases.SubstrateCatalog
 import gardening.ports.SubstrateCatalogMetricsApi
-import gardening.domain.attention.{WateringSampleCount, WateringSampleSize}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Positive}
 import io.prometheus.metrics.model.registry.PrometheusRegistry
@@ -34,14 +33,15 @@ final case class Programs(
 object Programs:
 
   def make(resources: AppResources, config: AppConfig, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
-    val plantStore        = SqlitePlantStore.make(resources.transactor)
-    val photoStore        = SqlitePhotoStore.make(resources.transactor)
-    val photoWriteJournal = SqlitePhotoWriteJournal.make(resources.transactor)
-    val operationStore    = SqliteOperationStore.make(resources.transactor)
-    val contentStore      = FilePhotoContentStore.make(config.photosDir)
-    val substrateStore    = SqliteSubstrateStore.make(resources.transactor)
-    val pesticideStore    = SqlitePesticideStore.make(resources.transactor)
-    val plantLock         = PlantUpdateLock.make
+    val plantStore         = SqlitePlantStore.make(resources.transactor)
+    val photoStore         = SqlitePhotoStore.make(resources.transactor)
+    val photoWriteJournal  = SqlitePhotoWriteJournal.make(resources.transactor)
+    val operationStore     = SqliteOperationStore.make(resources.transactor)
+    val contentStore       = FilePhotoContentStore.make(config.storage.photosDir)
+    val substrateStore     = SqliteSubstrateStore.make(resources.transactor)
+    val pesticideStore     = SqlitePesticideStore.make(resources.transactor)
+    val plantLock          = PlantUpdateLock.make
+    val thumbnailGenerator = PhotoThumbnailGenerator.make(config.photo.maxThumbnailSize)
 
     PhotoWriteRecovery.make(using photoStore, contentStore, photoWriteJournal).reconcile()
 
@@ -52,23 +52,19 @@ object Programs:
     given SubstrateCatalogMetricsApi                  = PrometheusSubstrateCatalogMetrics.make(registry)
     given PesticideCatalogMetricsApi                  = PrometheusPesticideCatalogMetrics.make(registry)
 
-    // Both counts are `>= 2` in config, so `>= 0` and positive hold without a re-check.
-    val minSampleCount: WateringSampleCount = config.watering.minSampleCount.assume[GreaterEqual[0]]
-    val historySize: WateringSampleSize     = config.watering.maxSampleCount.assume[Positive]
+    val watering        = config.attention.watering
+    val monitorSettings = PlantAttentionMonitor.Settings(
+      watering.minSampleCount.assume[GreaterEqual[0]],
+      watering.maxSampleCount.assume[Positive],
+      watering.overdueGracePeriod
+    )
 
-    PlantAttentionMonitor.make(minSampleCount, historySize, config.watering.overdueGracePeriod)(using plantStore, SystemClock).map: attention =>
+    PlantAttentionMonitor.make(monitorSettings)(using plantStore, SystemClock).map: attention =>
       forkDiscard:
-        Iterator.continually { sleep(config.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
+        Iterator.continually { sleep(config.attention.recomputeInterval); attention.refreshAll.discard }.foreach(identity)
       Programs(
         PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
-        PhotoManager.make(using
-          photoStore,
-          contentStore,
-          photoWriteJournal,
-          PhotoThumbnailGenerator.make(config.photo.maxThumbnailSize),
-          UuidIdGenerator,
-          SystemClock
-        ),
+        PhotoManager.make(using photoStore, contentStore, photoWriteJournal, thumbnailGenerator, UuidIdGenerator, SystemClock),
         OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
         attention,
         SubstrateCatalog.make(using substrateStore, UuidIdGenerator),

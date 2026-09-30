@@ -11,48 +11,40 @@ import squants.information.Information
 import java.nio.file.Path
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
+final case class ServerConfig(host: String, port: Int, staticDir: String) derives ConfigReader
+
+final case class StorageConfig(dbPath: String, lockTimeout: FiniteDuration, photosDir: Path) derives ConfigReader
+
 final case class WateringConfig(
     minSampleCount: Int :| GreaterEqual[2],
     maxSampleCount: Int :| GreaterEqual[2],
     overdueGracePeriod: FiniteDuration
 ) derives ConfigReader
 
+final case class AttentionConfig(feedStalenessThreshold: FiniteDuration, recomputeInterval: FiniteDuration, watering: WateringConfig)
+    derives ConfigReader
+
 final case class PhotoConfig(maxUploadSize: Information, maxThumbnailSize: Information) derives ConfigReader
 
-final case class AppConfig(
-    host: String,
-    port: Int,
-    dbPath: String,
-    photosDir: Path,
-    staticDir: String,
-    storageLockTimeout: FiniteDuration,
-    attentionFeedStalenessThreshold: FiniteDuration,
-    attentionRecomputeInterval: FiniteDuration,
-    watering: WateringConfig,
-    photo: PhotoConfig
-)
+final case class AppConfig(server: ServerConfig, storage: StorageConfig, attention: AttentionConfig, photo: PhotoConfig)
 
 object AppConfig:
 
   final private case class InvalidConfig(description: String) extends FailureReason
 
-  // Every semantic bound the type system can't express (cross-field ordering, positivity of
-  // durations and sizes) is checked here, once, so an out-of-bound override fails startup naming
-  // the field and its rejected value rather than surfacing later as wrong behaviour.
   given ConfigReader[AppConfig] = ConfigReader.derived[AppConfig].emap: config =>
-    val watering = config.watering
+    // Cross-field and positivity rules the refined types can't express; a failure names field and value.
+    val watering = config.attention.watering
+    val photo    = config.photo
     for
       _ <- check(
         watering.minSampleCount <= watering.maxSampleCount,
-        s"gardening.watering.max-sample-count (${watering.maxSampleCount}) must be greater than or equal to min-sample-count (${watering.minSampleCount})"
+        s"gardening.attention.watering.max-sample-count (${watering.maxSampleCount}) must be >= min-sample-count (${watering.minSampleCount})"
       )
-      _ <- check(watering.overdueGracePeriod > Duration.Zero, positive("gardening.watering.overdue-grace-period", watering.overdueGracePeriod))
-      _ <- check(
-        config.attentionRecomputeInterval > Duration.Zero,
-        positive("gardening.attention-recompute-interval", config.attentionRecomputeInterval)
-      )
-      _ <- check(config.photo.maxUploadSize.value > 0, positive("gardening.photo.max-upload-size", config.photo.maxUploadSize))
-      _ <- check(config.photo.maxThumbnailSize.value > 0, positive("gardening.photo.max-thumbnail-size", config.photo.maxThumbnailSize))
+      _ <- checkPositive("gardening.attention.watering.overdue-grace-period", watering.overdueGracePeriod)
+      _ <- checkPositive("gardening.attention.recompute-interval", config.attention.recomputeInterval)
+      _ <- checkPositive("gardening.photo.max-upload-size", photo.maxUploadSize)
+      _ <- checkPositive("gardening.photo.max-thumbnail-size", photo.maxThumbnailSize)
     yield config
 
   def load(): AppConfig = ConfigSource.default.at("gardening").loadOrThrow[AppConfig]
@@ -60,4 +52,8 @@ object AppConfig:
   private def check(condition: Boolean, description: => String): Either[FailureReason, Unit] =
     Either.cond(condition, (), InvalidConfig(description))
 
-  private def positive(field: String, value: Any): String = s"$field ($value) must be greater than zero"
+  private def checkPositive(field: String, value: FiniteDuration): Either[FailureReason, Unit] =
+    check(value > Duration.Zero, s"$field ($value) must be greater than zero")
+
+  private def checkPositive(field: String, value: Information): Either[FailureReason, Unit] =
+    check(value.value > 0, s"$field ($value) must be greater than zero")

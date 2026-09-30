@@ -288,4 +288,4 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
           .lift(readIndex.getAndIncrement())
           .orElse(getAttentionSamplesResults.lastOption)
           .getOrElse(fail("missing getAttentionSamples result"))
-    PlantAttentionMonitor.make(minSampleCount, historySize, overdueGracePeriod)(using store, () => now())
+    PlantAttentionMonitor.make(PlantAttentionMonitor.Settings(minSampleCount, historySize, overdueGracePeriod))(using store, () => now())

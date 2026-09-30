@@ -163,10 +163,7 @@ def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
 def start() -> None:
     processes: list[subprocess.Popen[bytes]] = []
     backend_port = port()
-    # host/port are the config's only env overrides (${?HOST}/${?PORT}); the fixed paths carry no env
-    # override, so local dev redirects them off their container defaults with -Dgardening.* system
-    # properties, which Typesafe Config layers over application.conf. JAVA_TOOL_OPTIONS reaches the
-    # backend JVM whether `sbt run` forks or not.
+    # The fixed-tier paths take no env override, so local dev redirects them with -Dgardening.* system properties.
     backend_environment = {
         **os.environ,
         "HOST": "127.0.0.1",
@@ -176,9 +173,9 @@ def start() -> None:
                 None,
                 [
                     os.environ.get("JAVA_TOOL_OPTIONS", ""),
-                    f"-Dgardening.db-path={DATABASE}",
-                    f"-Dgardening.photos-dir={DATA / 'photos'}",
-                    f"-Dgardening.static-dir={STATIC_DIR}",
+                    f"-Dgardening.storage.db-path={DATABASE}",
+                    f"-Dgardening.storage.photos-dir={DATA / 'photos'}",
+                    f"-Dgardening.server.static-dir={STATIC_DIR}",
                 ],
             )
         ),
