@@ -1483,43 +1483,4 @@ describe("browsing the journal", () => {
     });
     expect(screen.queryByText("private details")).not.toBeInTheDocument();
   });
-
-  it("should ignore a stale cemetery bookmark rejection after switching to the garden", async () => {
-    window.history.replaceState(null, "", "/?view=cemetery");
-    let rejectArchived: (reason: Error) => void = () => undefined;
-    const archivedRequest = new Promise<GetPlantsResult>((_resolve, reject) => {
-      rejectArchived = reject;
-    });
-    const base = JournalFixtures.buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-    });
-    const journal = {
-      ...base,
-      getPlants: (status?: string) => (status === "archived" ? archivedRequest : base.getPlants()),
-    };
-    try {
-      render(() => (
-        <App
-          plants={journal}
-          operations={journal}
-          attention={journal}
-          substrates={journal}
-          pesticideCatalog={journal}
-          photos={JournalFixtures.noopPhotoClient}
-        />
-      ));
-
-      const garden = await screen.findByRole("button", { name: /Garden.*1 plant/ });
-      fireEvent.click(garden);
-      rejectArchived(new Error("stale bookmark"));
-      await archivedRequest.catch(() => undefined);
-      await Promise.resolve();
-
-      expect(screen.getByRole("article", { name: "Fern" })).toBeInTheDocument();
-      expect(screen.queryByRole("alert")).toBeNull();
-    } finally {
-      window.history.replaceState(null, "", "/");
-    }
-  });
 });

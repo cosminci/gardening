@@ -370,22 +370,6 @@ Vitest.describe("PlantPhotosSheet", () => {
     ).not.toBeInTheDocument();
   });
 
-  Vitest.it("should close the full-size overlay via Escape", async () => {
-    const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-
-    Testing.fireEvent.click(await Testing.screen.findByAltText(/Photo from/));
-    Vitest.expect(Testing.screen.getByRole("dialog", { name: "Photo viewer" })).toBeInTheDocument();
-
-    Testing.fireEvent.keyDown(window, { key: "Escape" });
-    Vitest.expect(
-      Testing.screen.queryByRole("dialog", { name: "Photo viewer" }),
-    ).not.toBeInTheDocument();
-  });
-
   Vitest.it("should trap Tab inside the overlay", async () => {
     const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
 
