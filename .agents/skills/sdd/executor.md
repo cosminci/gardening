@@ -8,6 +8,8 @@ Decide `feature` (planned change, refactor, migration — you already know the n
 
 Then decide whether a spec is required: draft the Doc Sync entry first — one line naming a doc, section, and specific fact. A non-empty entry means write the spec; a pure refactor or internal cleanup with nothing to put there doesn't need one. Only the maintainer may waive this requirement, explicitly and for a specific change — record the decision (or waiver) in `.agent-work/<slug>/checklist.md`.
 
+Also make the complexity call here, before the spec (`DESIGN-PRINCIPLES.md` §7): whether this behavior is served by growing an existing flow or needs new machinery, and whether a unit the change will cross grows past a single responsibility and must split as part of it. "You don't need this" and "split this first" are valid, in-scope outcomes. Record the call in `.agent-work/<slug>/checklist.md`; by spec time it is already decided, and the spec only reflects it.
+
 ## Spike
 
 This is the load-bearing decision in this skill, not busywork before the "real" phase. A spec is a proposal for how to solve an understood problem — diagrams, domain types, ports, pseudocode where the design is algorithmic or efficiency-sensitive. Writing one before that understanding exists is exactly why specs go bad: it is an intricate floorplan drawn without ever having walked the site, and the building turns out untractable once someone tries to construct it. Understanding a problem space often requires trying to solve it, not just thinking hard about it in the abstract.
@@ -35,7 +37,7 @@ Derive tests from the merged spec's acceptance criteria and enumerated edge case
 
 Implement the approved behavior. Split into multiple PRs on separable seams, or when one PR would exceed a focused review session — never to dodge a gate. Each PR links the merged spec.
 
-Make the tests pass, then run the gates `AGENTS.md` already defines (backend/frontend/pipeline commands, `dagger call verify`, contract drift if you touched tapir endpoints) — do not repeat those commands here, and never weaken a gate to pass one. Self-check against [`checklists/code-quality.md`](checklists/code-quality.md) and [`checklists/implementation-completeness.md`](checklists/implementation-completeness.md) (against this PR's own slice) before requesting review.
+Make the tests pass, then run the gates `AGENTS.md` already defines (backend/frontend/pipeline commands, `dagger call verify`, contract drift if you touched tapir endpoints) — do not repeat those commands here, and never weaken a gate to pass one. Self-check against the shared [`checklists/code-quality.md`](checklists/code-quality.md) plus the stack leaf for each surface this PR changes ([`code-quality-frontend.md`](checklists/code-quality-frontend.md) for `frontend/**`, [`code-quality-backend.md`](checklists/code-quality-backend.md) for `backend/**`, and no other), and [`checklists/implementation-completeness.md`](checklists/implementation-completeness.md) (against this PR's own slice) before requesting review.
 
 ## Archive PR
 
