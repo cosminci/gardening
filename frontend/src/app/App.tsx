@@ -14,10 +14,11 @@ import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
 import type { PlantPhotoClient } from "../domain/PlantPhoto";
-import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
+import type { PlantAttentionFeed } from "../domain/PlantAttention";
 import { isAttentionProjectionValid } from "../domain/PlantAttention";
 import type { SubstrateClient } from "../domain/SubstrateCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
+import { createAttentionFeed } from "./AttentionFeed";
 import { PlantPhotosSheet } from "./PlantPhotosSheet";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
 import { DeleteSubstrateMixConfirmation } from "./DeleteSubstrateMixConfirmation";
@@ -27,7 +28,6 @@ import { displayJournalUpdate } from "./JournalTransition";
 import * as Controls from "./OperationControlIds";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
-import { orderPlantAttention } from "./PlantAttentionOrdering";
 import { filterHistoriesBySearch } from "./PlantSearch";
 import { createPesticideCatalogController } from "./PesticideCatalogController";
 import { PlantSheet, editPlantControlId, type PlantTarget } from "./PlantSheet";
@@ -76,45 +76,20 @@ export const App: Component<AppProps> = (props) => {
   const [plantSaveError, setPlantSaveError] = createSignal<string>();
   const [creationReloadFailed, setCreationReloadFailed] = createSignal(false);
   const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
-  const [attentionProjection, setAttentionProjection] = createSignal<Journal.AttentionProjection>();
-  const [feedConnectionState, setFeedConnectionState] =
-    createSignal<FeedConnectionState>("connecting");
-  const [lastAttentionUpdate, setLastAttentionUpdate] = createSignal<number>();
-  const recentlyArchived = new Set<Journal.PlantId>();
   let activeIds = new Set<Journal.PlantId>();
   let activePlantIdsLoaded = false;
   let loadVersion = 0;
   let initialViewLoaded = false;
-  let unsubscribeFeed: (() => void) | undefined;
 
-  const orderedGardenHistories = createMemo(() => {
-    const proj = attentionProjection();
-    const histories = gardenHistories();
-    if (proj === undefined) return histories;
-    const samplesById = new Map(proj.plants.map((s) => [s.plant, s]));
-    const pending: GardenHistory[] = [];
-    const knownHistories: GardenHistory[] = [];
-    const plantAttentions: { plant: Journal.Plant; watering: Journal.WateringAttention }[] = [];
-    for (const h of histories) {
-      const sample = samplesById.get(h.plant.id);
-      if (sample !== undefined) {
-        knownHistories.push(h);
-        plantAttentions.push({ plant: h.plant, watering: sample.watering });
-      } else {
-        pending.push(h);
-      }
-    }
-    const ordered = orderPlantAttention(plantAttentions);
-    const sortedKnown = knownHistories.toSorted(
-      (a, b) =>
-        ordered.findIndex((pa) => pa.plant.id === a.plant.id) -
-        ordered.findIndex((pa) => pa.plant.id === b.plant.id),
-    );
-    return [...pending, ...sortedKnown];
-  });
+  const attentionFeed = createAttentionFeed(
+    createMemo(() => props.attention),
+    gardenHistories,
+    () => (activePlantIdsLoaded ? activeIds : undefined),
+    () => setView("failed"),
+  );
 
   const histories = () =>
-    selected() === "garden" ? orderedGardenHistories() : cemeteryHistories();
+    selected() === "garden" ? attentionFeed.orderedGardenHistories() : cemeteryHistories();
 
   const filteredHistories = createMemo(() => filterHistoriesBySearch(histories(), searchQuery()));
 
@@ -152,8 +127,11 @@ export const App: Component<AppProps> = (props) => {
     setPesticides(pesticidesResult.entries);
 
     const newActiveIds = new Set(plantsResult.plants.map((plant) => plant.id));
-    const proj = attentionProjection();
-    if (proj !== undefined && !isAttentionProjectionValid(proj, newActiveIds, recentlyArchived)) {
+    const proj = attentionFeed.attentionProjection();
+    if (
+      proj !== undefined &&
+      !isAttentionProjectionValid(proj, newActiveIds, attentionFeed.recentlyArchived)
+    ) {
       setView("failed");
       return;
     }
@@ -269,7 +247,7 @@ export const App: Component<AppProps> = (props) => {
     if (result.kind === "plantMissing") return "This plant no longer exists.";
     if (result.kind === "alreadyArchived") return "This plant was already archived.";
     if (result.kind === "archiveFailed") return "The plant could not be archived.";
-    recentlyArchived.add(plant.id);
+    attentionFeed.markRecentlyArchived(plant.id);
     await loadJournal().catch(() => setView("failed"));
     setArchiveCompleted(true);
     setArchiveTarget(undefined);
@@ -437,27 +415,6 @@ export const App: Component<AppProps> = (props) => {
   });
 
   onMount(() => {
-    unsubscribeFeed = props.attention.subscribe((event) => {
-      if (event.kind === "connectionState") {
-        setFeedConnectionState(event.state);
-      } else {
-        const proj = event.projection;
-        for (const id of recentlyArchived)
-          if (!proj.plants.some((s) => s.plant === id)) recentlyArchived.delete(id);
-        if (activePlantIdsLoaded) {
-          if (!isAttentionProjectionValid(proj, activeIds, recentlyArchived)) {
-            setView("failed");
-            return;
-          }
-        }
-        setAttentionProjection(proj);
-        setLastAttentionUpdate(Date.now());
-      }
-    });
-    onCleanup(() => {
-      unsubscribeFeed?.();
-    });
-
     const navigate = () => {
       selectView(viewFromUrl(), false);
     };
@@ -477,8 +434,8 @@ export const App: Component<AppProps> = (props) => {
         gardenCount={gardenHistories().length}
         cemeteryCount={cemeteryCount()}
         selected={selected()}
-        connectionState={feedConnectionState()}
-        lastUpdateAt={lastAttentionUpdate()}
+        connectionState={attentionFeed.connectionState()}
+        lastUpdateAt={attentionFeed.lastUpdateAt()}
         searchQuery={searchQuery()}
         onSelect={selectView}
         onAddPlant={() => {
@@ -504,7 +461,7 @@ export const App: Component<AppProps> = (props) => {
             view={selected()}
             histories={filteredHistories()}
             emptyMessage={emptyMessage()}
-            attentionProjection={attentionProjection()}
+            attentionProjection={attentionFeed.attentionProjection()}
             substrateComponents={substrateComponents()}
             pesticides={pesticides()}
             getOperations={(plant, window) => props.operations.getOperations(plant, window)}
