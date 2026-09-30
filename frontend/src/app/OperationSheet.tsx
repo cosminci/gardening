@@ -2,6 +2,7 @@ import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { useBackgroundBarrier } from "./BackgroundBarrier";
+import * as Labels from "./JournalLabels";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { OperationForm } from "./OperationForm";
@@ -178,11 +179,10 @@ export const OperationSheet: Component<OperationSheetProps> = (props) => {
     try {
       result = await props.onArchiveSubstrateComponent(component.id);
     } catch {
-      return "The substrate component could not be archived.";
+      return Labels.substrateComponentArchiveFailedMessage;
     }
-    if (result.kind === "componentMissing") return "This substrate component no longer exists.";
-    if (result.kind === "alreadyArchived") return "This substrate component was already archived.";
-    if (result.kind === "archiveFailed") return "The substrate component could not be archived.";
+    const message = Labels.substrateComponentArchiveMessage(result);
+    if (message !== undefined) return message;
     setSubstrateArchiveCompleted(true);
     setSubstrateArchiveTarget(undefined);
     const currentEditor = editor();

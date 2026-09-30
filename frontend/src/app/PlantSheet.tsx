@@ -2,6 +2,7 @@ import { Show, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
 import { useBackgroundBarrier } from "./BackgroundBarrier";
+import * as Labels from "./JournalLabels";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
@@ -183,11 +184,10 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     try {
       result = await props.onArchiveComponent(component.id);
     } catch {
-      return "The substrate component could not be archived.";
+      return Labels.substrateComponentArchiveFailedMessage;
     }
-    if (result.kind === "componentMissing") return "This substrate component no longer exists.";
-    if (result.kind === "alreadyArchived") return "This substrate component was already archived.";
-    if (result.kind === "archiveFailed") return "The substrate component could not be archived.";
+    const message = Labels.substrateComponentArchiveMessage(result);
+    if (message !== undefined) return message;
     setArchiveCompleted(true);
     setArchiveTarget(undefined);
     const currentEditor = editor();

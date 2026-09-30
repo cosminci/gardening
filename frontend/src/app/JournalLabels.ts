@@ -37,6 +37,27 @@ export const pesticideLabel = (id: Journal.PesticideId, pesticides: readonly Jou
 export const operationKindLabel = (details: Journal.OperationDetails) =>
   details.kind === "care" ? "Care" : "Repot";
 
+// Both the plant sheet and the operation sheet archive substrate components and
+// must report each outcome identically; the mapping lives here so they cannot
+// drift. The failed-request message is shared with the thrown-exception path.
+export const substrateComponentArchiveFailedMessage =
+  "The substrate component could not be archived.";
+
+export const substrateComponentArchiveMessage = (
+  result: Journal.SubstrateComponentArchiveResult,
+): string | undefined => {
+  switch (result.kind) {
+    case "archived":
+      return undefined;
+    case "componentMissing":
+      return "This substrate component no longer exists.";
+    case "alreadyArchived":
+      return "This substrate component was already archived.";
+    case "archiveFailed":
+      return substrateComponentArchiveFailedMessage;
+  }
+};
+
 export const operationEditLabel = (
   operation: Journal.Operation,
   position: number,
