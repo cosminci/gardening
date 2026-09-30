@@ -242,6 +242,13 @@ select:disabled {
   flex-wrap: nowrap;
 }
 
+/* Explains why the disabled Save-mix button won't save the current parts. */
+.substrate-mix-hint {
+  margin: 0.5rem 0 0;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+
 .catalog-action--define {
   margin-left: auto;
   color: #4b3700;

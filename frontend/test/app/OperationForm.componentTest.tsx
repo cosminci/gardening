@@ -218,34 +218,33 @@ describe("OperationForm", () => {
     expect(Testing.screen.queryByText("Component", { exact: true })).not.toBeInTheDocument();
     expect(Testing.screen.queryByText("Share", { exact: true })).not.toBeInTheDocument();
     expect(Testing.screen.getByText("%")).toBeInTheDocument();
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
-    expect(Testing.screen.getByRole("combobox", { name: "Component 2" })).toHaveValue(pineBarkId);
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: perliteId },
-    });
-    const perliteInfoControls = Testing.screen.getAllByRole("button", {
-      name: "Information about Perlite",
-    });
-    expect(perliteInfoControls[0]).not.toHaveAttribute(
-      "aria-describedby",
-      perliteInfoControls[1]?.getAttribute("aria-describedby"),
-    );
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-    expect(Testing.screen.getByRole("alert")).toHaveTextContent(
-      "Each substrate component can only be used once.",
-    );
 
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: pineBarkId },
-    });
+    // A row's dropdown reselects the component in place before we commit to the mix.
+    const firstComponent = Testing.screen.getByRole("combobox", { name: "Component 1" });
+    Testing.fireEvent.change(firstComponent, { target: { value: pineBarkId } });
+    expect(firstComponent).toHaveValue(pineBarkId);
+    Testing.fireEvent.change(firstComponent, { target: { value: perliteId } });
+    expect(firstComponent).toHaveValue(perliteId);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
+    const secondComponent = Testing.screen.getByRole("combobox", { name: "Component 2" });
+    expect(secondComponent).toHaveValue(pineBarkId);
+    // The already-chosen perlite is not offered again, so a duplicate cannot be built:
+    // only the row's own pine bark remains selectable.
+    expect(Testing.within(secondComponent).getAllByRole("option")).toHaveLength(1);
+
+    // Perlite 100% + pine bark 1% exceeds the total; the disabled Save-mix button
+    // now explains why rather than staying silently greyed out.
+    expect(Testing.screen.getByRole("button", { name: "Save mix" })).toBeDisabled();
+    expect(
+      Testing.screen.getByText("Substrate shares cannot total more than 100%."),
+    ).toBeInTheDocument();
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
     expect(Testing.screen.getByRole("alert")).toHaveTextContent(
       "Substrate shares cannot total more than 100%.",
     );
 
     Testing.fireEvent.input(share, { target: { value: "80" } });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Remove component 2" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
     expect(submitted).toEqual([
       {
@@ -260,7 +259,6 @@ describe("OperationForm", () => {
   });
 
   it("should not extend the substrate mix when every component is already chosen", () => {
-    const changes: unknown[] = [];
     Testing.render(() => (
       <OperationForm
         initial={repot("o1", "2026-01-01T00:00:00Z").details}
@@ -285,7 +283,11 @@ describe("OperationForm", () => {
 
     Testing.fireEvent.click(extend);
     expect(Testing.screen.queryByRole("combobox", { name: "Component 3" })).toBeNull();
-    expect(changes).toEqual([]);
+
+    // Removing a row frees its component and re-enables extending the mix.
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Remove component 2" }));
+    expect(Testing.screen.queryByRole("combobox", { name: "Component 2" })).toBeNull();
+    expect(extend).toBeEnabled();
   });
 
   it("should reveal pesticide choices last and clear them when deselected", async () => {
