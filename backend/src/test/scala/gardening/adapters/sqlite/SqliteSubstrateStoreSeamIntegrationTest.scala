@@ -88,7 +88,7 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
         case other                                          => fail(s"expected UpdateFailed, got $other")
 
   test("should report read failures when the substrate schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val store = SqliteSubstrateStore.make(connection.transactor)
 
       val readResult = store.getSubstrateComponents
@@ -160,7 +160,7 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
         case other                                    => fail(s"expected DeleteFailed, got $other")
 
   test("should report a substrate mix read failure when the substrate schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val store = SqliteSubstrateStore.make(connection.transactor)
 
       val result = store.getSubstrateMixes
@@ -177,7 +177,7 @@ class SqliteSubstrateStoreSeamIntegrationTest extends munit.FunSuite:
     override def close(): Unit = connection.close()
 
   private def storeResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, buildStore(connection))
 

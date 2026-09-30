@@ -1,6 +1,6 @@
 ThisBuild / scalaVersion := "3.8.4"
 ThisBuild / organization := "com.cosminci.gardening"
-ThisBuild / version      := sys.env.getOrElse("GARDENING_APP_VERSION", "0.0.0-dev")
+ThisBuild / version      := "0.1.0"
 
 val tapirV      = "1.13.31"
 val apispecV    = "0.11.10"
@@ -18,6 +18,7 @@ val oxV         = "1.0.8"
 val scodecV     = "1.2.5"
 val prometheusV = "1.3.1"
 val squantsV    = "1.8.3"
+val pureconfigV = "0.17.10"
 
 // Match the packaged runtime's JVM flags (see image.ts): SQLite JDBC loads a native library, and
 // Scala 3's LazyVals runtime still uses sun.misc.Unsafe. Without these, every JVM launched outside
@@ -109,6 +110,9 @@ lazy val root = (project in file("."))
       "io.prometheus"                  % "prometheus-metrics-instrumentation-jvm" % prometheusV,
       "com.softwaremill.sttp.apispec" %% "openapi-circe-yaml"      % apispecV,
       "io.github.iltotore"            %% "iron"                    % ironV,
+      "io.github.iltotore"            %% "iron-pureconfig"         % ironV,
+      "com.github.pureconfig"         %% "pureconfig-core"         % pureconfigV,
+      "com.github.pureconfig"         %% "pureconfig-squants"      % pureconfigV,
       "com.augustnagro"               %% "magnum"                  % magnumV,
       "org.xerial"                     % "sqlite-jdbc"              % sqliteV,
       "org.flywaydb"                   % "flyway-core"              % flywayV,

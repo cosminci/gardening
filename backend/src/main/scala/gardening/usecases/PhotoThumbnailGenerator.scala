@@ -3,7 +3,6 @@ package gardening.usecases
 import gardening.domain.plants.*
 import scodec.bits.ByteVector
 import squants.information.Information
-import squants.information.InformationConversions.*
 
 import java.awt.{Color, RenderingHints}
 import java.awt.image.{BufferedImage, ImageObserver}
@@ -17,14 +16,12 @@ trait PhotoThumbnailGenerator:
 
 object PhotoThumbnailGenerator:
 
-  def make: PhotoThumbnailGenerator = LivePhotoThumbnailGenerator
-
-  val maxThumbnailSize: Information = 100.kibibytes
+  def make(maxThumbnailSize: Information): PhotoThumbnailGenerator = LivePhotoThumbnailGenerator(maxThumbnailSize)
 
   private val ladder: Vector[(Int, Float)] =
     Vector((1024, 0.8f), (800, 0.8f), (800, 0.6f), (600, 0.6f), (600, 0.4f), (400, 0.4f))
 
-  private object LivePhotoThumbnailGenerator extends PhotoThumbnailGenerator:
+  final private class LivePhotoThumbnailGenerator(maxThumbnailSize: Information) extends PhotoThumbnailGenerator:
 
     override def derive(original: PhotoContent): ThumbnailDerivationResult =
       Option(ImageIO.read(ByteArrayInputStream(original.bytes.toArray))) match

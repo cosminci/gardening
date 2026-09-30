@@ -53,9 +53,9 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
       val archived   = plantStore.updatePlant(Plant(archivedPlantId, defaultPlantDetails.copy(status = PlantStatus.Archived)))
       val actual     = plantStore.getAttentionSamples(size = 20)
 
-      val firstWateringHistory  = WateringHistory.from(firstWaterings.reverse.take(20).map(_.date)).fold(message => fail(message), identity)
-      val secondWateringHistory = WateringHistory.from(secondWaterings.reverse.map(_.date)).fold(message => fail(message), identity)
-      val emptyWateringHistory  = WateringHistory.from(Vector.empty).fold(message => fail(message), identity)
+      val firstWateringHistory  = firstWaterings.reverse.take(20).map(_.date)
+      val secondWateringHistory = secondWaterings.reverse.map(_.date)
+      val emptyWateringHistory  = Vector.empty
       val expectedSamples       = Vector(
         PlantAttentionSample(firstPlantId, firstWateringHistory),
         PlantAttentionSample(secondPlantId, secondWateringHistory),
@@ -100,6 +100,6 @@ class SqlitePlantAttentionStoreSeamIntegrationTest extends FunSuite:
     override def close(): Unit = connection.close()
 
   private def storeResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, SqlitePlantStore.make(connection.transactor), SqliteOperationStore.make(connection.transactor))

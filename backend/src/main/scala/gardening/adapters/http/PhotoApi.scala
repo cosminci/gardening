@@ -9,8 +9,7 @@ import io.circe.{Codec, Decoder, Encoder}
 import io.github.iltotore.iron.*
 import io.github.iltotore.iron.constraint.numeric.{GreaterEqual, Interval}
 import scodec.bits.ByteVector
-import squants.information.{Information, Mebibytes}
-import squants.information.InformationConversions.*
+import squants.information.Information
 import sttp.model.{HeaderNames, StatusCode}
 import sttp.model.Part
 import sttp.shared.Identity
@@ -30,13 +29,11 @@ import Codecs.given
 
 object PhotoApi:
 
-  private val MaxPhotoBytes: Information = 20.mebibytes
-
   private val plantMissing    = ApiError("plant not found")
   private val photoMissing    = ApiError("photo not found")
   private val contentMissing  = ApiError("photo content not found")
   private val unsupportedType = ApiError("unsupported media type: only image/jpeg and image/png are accepted")
-  private val photoTooLarge   = ApiError(s"photo exceeds the ${MaxPhotoBytes.toString(Mebibytes, "%.0f")} size limit")
+  private val photoTooLarge   = ApiError("photo exceeds the maximum upload size")
   private val addPhotoErrors  = oneOf[ApiError](
     oneOfVariantExactMatcher(StatusCode.NotFound, jsonBody[ApiError])(plantMissing),
     oneOfVariantExactMatcher(StatusCode.UnsupportedMediaType, jsonBody[ApiError])(unsupportedType),
@@ -90,11 +87,11 @@ object PhotoApi:
   private[http] val publicEndpoints: List[AnyEndpoint] =
     List(addPhotoEndpoint, getPhotosEndpoint, removePhotoEndpoint, photoContentEndpoint)
 
-  def serverEndpoints(using photos: PhotoManager): List[ServerEndpoint[Any, Identity]] = List(
+  def serverEndpoints(maxUploadSize: Information)(using photos: PhotoManager): List[ServerEndpoint[Any, Identity]] = List(
     addPhotoEndpoint.handle: (plantId, upload) =>
       try
         for
-          _         <- Either.cond(upload.file.body.length() <= MaxPhotoBytes.toBytes.toLong, (), photoTooLarge)
+          _         <- Either.cond(upload.file.body.length() <= maxUploadSize.toBytes.toLong, (), photoTooLarge)
           bytes     <- Files.readAllBytes(upload.file.body.toPath).asRight
           mediaType <- sniffPhotoMediaType(bytes).toRight(unsupportedType)
           photo     <- photos.addPhoto(PlantId(plantId), PhotoContent(ByteVector(bytes), mediaType), upload.idempotencyKey.body).toEither

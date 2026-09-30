@@ -201,7 +201,7 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
         case other                             => fail(s"expected UpdateFailed, got $other")
 
   test("should return read failures for plants, attention samples, and archived count when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val plantStore = SqlitePlantStore.make(connection.transactor)
       plantStore.addPlant(Plant(PlantId("new"), defaultPlantDetails)) match
         case AddPlantResult.AddFailed(_) => ()
@@ -228,6 +228,6 @@ class SqlitePlantStoreSeamIntegrationTest extends FunSuite:
     override def close(): Unit = connection.close()
 
   private def storeResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, SqlitePlantStore.make(connection.transactor), SqliteOperationStore.make(connection.transactor))

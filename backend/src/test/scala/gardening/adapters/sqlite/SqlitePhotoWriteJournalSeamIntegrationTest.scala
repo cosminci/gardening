@@ -82,7 +82,7 @@ class SqlitePhotoWriteJournalSeamIntegrationTest extends FunSuite:
         case other                                   => fail(s"expected RecordFailed, got $other")
 
   test("should report a read failure when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val journal = SqlitePhotoWriteJournal.make(connection.transactor)
       journal.findByKey(key) match
         case PhotoJournalFindResult.FindFailed(_) => ()
@@ -137,6 +137,6 @@ class SqlitePhotoWriteJournalSeamIntegrationTest extends FunSuite:
     override def close(): Unit = connection.close()
 
   private def journalResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     JournalResource(connection, connection.dataSource, SqlitePhotoWriteJournal.make(connection.transactor))

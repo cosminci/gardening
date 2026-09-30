@@ -10,7 +10,6 @@ import "./sheet.css";
 import "./plant-photos-sheet.css";
 
 const photosPageSize = 6;
-const maxUploadBytes = 20 * 1024 * 1024;
 const acceptedMimeTypes = ["image/jpeg", "image/png"] as const;
 
 interface PlantPhotosSheetProps {
@@ -89,11 +88,6 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
       input.value = "";
       return;
     }
-    if (file.size > maxUploadBytes) {
-      setUploadError("File is too large. Maximum size is 20 MiB.");
-      input.value = "";
-      return;
-    }
 
     setUploading(true);
     const result = await props.photos.addPhoto(props.plant.id, file);
@@ -107,7 +101,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
     } else if (result.kind === "unsupportedMediaType") {
       setUploadError("Unsupported file type.");
     } else if (result.kind === "tooLarge") {
-      setUploadError("File is too large. Maximum size is 20 MiB.");
+      setUploadError("The photo is too large to upload.");
     } else {
       setUploadError("The photo could not be uploaded.");
     }

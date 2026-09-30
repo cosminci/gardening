@@ -460,7 +460,7 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
         case other                                             => fail(s"expected CompensationFailed, got $other")
 
   test("should return read failures for operations when the schema is unavailable"):
-    Using.resource(Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
+    Using.resource(Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))): connection =>
       val operationStore = SqliteOperationStore.make(connection.transactor)
       operationStore.getOperations(PlantId("p1"), fullWindow) match
         case GetOperationsResult.ReadFailed(_) => ()
@@ -490,7 +490,7 @@ class SqliteOperationStoreSeamIntegrationTest extends FunSuite:
     override def close(): Unit = connection.close()
 
   private def storeResource =
-    val connection = Sqlite.make.connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
+    val connection = Sqlite.make(SqliteHelpers.lockTimeout).connect(SqliteLocation.InMemory(UUID.randomUUID().toString))
     val _          = Flyway.configure().dataSource(connection.dataSource).load().migrate()
     StoreResource(connection, connection.dataSource, SqlitePlantStore.make(connection.transactor), SqliteOperationStore.make(connection.transactor))
 

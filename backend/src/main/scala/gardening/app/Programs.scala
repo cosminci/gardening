@@ -19,8 +19,6 @@ import gardening.ports.SubstrateCatalogMetricsApi
 import io.prometheus.metrics.model.registry.PrometheusRegistry
 import ox.{Ox, discard, forkDiscard, sleep}
 
-import java.nio.file.Path
-
 final case class Programs(
     plants: PlantManager,
     photos: PhotoManager,
@@ -32,15 +30,16 @@ final case class Programs(
 
 object Programs:
 
-  def make(resources: AppResources, photosDir: Path, registry: PrometheusRegistry)(using Ox)(using log: Logger): Either[Throwable, Programs] =
-    val plantStore        = SqlitePlantStore.make(resources.transactor)
-    val photoStore        = SqlitePhotoStore.make(resources.transactor)
-    val photoWriteJournal = SqlitePhotoWriteJournal.make(resources.transactor)
-    val operationStore    = SqliteOperationStore.make(resources.transactor)
-    val contentStore      = FilePhotoContentStore.make(photosDir)
-    val substrateStore    = SqliteSubstrateStore.make(resources.transactor)
-    val pesticideStore    = SqlitePesticideStore.make(resources.transactor)
-    val plantLock         = PlantUpdateLock.make
+  def make(resources: AppResources, config: AppConfig, registry: PrometheusRegistry)(using Ox)(using log: Logger): Programs =
+    val plantStore         = SqlitePlantStore.make(resources.transactor)
+    val photoStore         = SqlitePhotoStore.make(resources.transactor)
+    val photoWriteJournal  = SqlitePhotoWriteJournal.make(resources.transactor)
+    val operationStore     = SqliteOperationStore.make(resources.transactor)
+    val contentStore       = FilePhotoContentStore.make(config.storage.photosDir)
+    val substrateStore     = SqliteSubstrateStore.make(resources.transactor)
+    val pesticideStore     = SqlitePesticideStore.make(resources.transactor)
+    val plantLock          = PlantUpdateLock.make
+    val thumbnailGenerator = PhotoThumbnailGenerator.make(config.photo.maxThumbnailSize)
 
     PhotoWriteRecovery.make(using photoStore, contentStore, photoWriteJournal).reconcile()
 
@@ -51,14 +50,14 @@ object Programs:
     given SubstrateCatalogMetricsApi                  = PrometheusSubstrateCatalogMetrics.make(registry)
     given PesticideCatalogMetricsApi                  = PrometheusPesticideCatalogMetrics.make(registry)
 
-    PlantAttentionMonitor.make(using plantStore, SystemClock).map: attention =>
-      forkDiscard:
-        Iterator.continually { sleep(AppConfig.attentionRecomputeInterval); attention.refreshAll.discard }.foreach(identity)
-      Programs(
-        PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
-        PhotoManager.make(using photoStore, contentStore, photoWriteJournal, PhotoThumbnailGenerator.make, UuidIdGenerator, SystemClock),
-        OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
-        attention,
-        SubstrateCatalog.make(using substrateStore, UuidIdGenerator),
-        PesticideCatalog.make(using pesticideStore, UuidIdGenerator)
-      )
+    val attention = PlantAttentionMonitor.make(config.attention.watering)(using plantStore, SystemClock)
+    forkDiscard:
+      Iterator.continually { sleep(config.attention.recomputeInterval); attention.refreshAll.discard }.foreach(identity)
+    Programs(
+      PlantManager.make(using plantStore, substrateStore, UuidIdGenerator, plantLock),
+      PhotoManager.make(using photoStore, contentStore, photoWriteJournal, thumbnailGenerator, UuidIdGenerator, SystemClock),
+      OperationLedger.make(using operationStore, plantStore, substrateStore, pesticideStore, UuidIdGenerator, plantLock),
+      attention,
+      SubstrateCatalog.make(using substrateStore, UuidIdGenerator),
+      PesticideCatalog.make(using pesticideStore, UuidIdGenerator)
+    )

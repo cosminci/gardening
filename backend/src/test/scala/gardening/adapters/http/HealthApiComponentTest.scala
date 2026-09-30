@@ -7,14 +7,14 @@ import sttp.model.StatusCode
 import sttp.tapir.server.stub.TapirStubInterpreter
 
 class HealthApiComponentTest extends munit.FunSuite:
-  test("should report ok and the running version"):
+  test("should report ok"):
     val backend =
       TapirStubInterpreter(SttpBackendStub.synchronous)
-        .whenServerEndpoint(HealthApi.serverEndpoint("1.2.3"))
+        .whenServerEndpoint(HealthApi.serverEndpoint)
         .thenRunLogic()
         .backend()
 
     val response = basicRequest.get(uri"http://test/health").send(backend)
 
     assertEquals(response.code, StatusCode.Ok)
-    assertEquals(response.body, """{"status":"ok","version":"1.2.3"}""".asRight)
+    assertEquals(response.body, """{"status":"ok"}""".asRight)

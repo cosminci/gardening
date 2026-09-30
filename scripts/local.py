@@ -163,13 +163,22 @@ def await_backend(backend_port: int, backend: subprocess.Popen[bytes]) -> None:
 def start() -> None:
     processes: list[subprocess.Popen[bytes]] = []
     backend_port = port()
-    environment = {
+    # The fixed-tier paths take no env override, so local dev redirects them with -Dgardening.* system properties.
+    backend_environment = {
         **os.environ,
-        "GARDENING_DB_PATH": str(DATABASE),
-        "GARDENING_PHOTOS_DIR": str(DATA / "photos"),
-        "GARDENING_HOST": "127.0.0.1",
-        "GARDENING_PORT": str(backend_port),
-        "GARDENING_STATIC_DIR": str(STATIC_DIR),
+        "HOST": "127.0.0.1",
+        "PORT": str(backend_port),
+        "JAVA_TOOL_OPTIONS": " ".join(
+            filter(
+                None,
+                [
+                    os.environ.get("JAVA_TOOL_OPTIONS", ""),
+                    f"-Dgardening.storage.db-path={DATABASE}",
+                    f"-Dgardening.storage.photos-dir={DATA / 'photos'}",
+                    f"-Dgardening.server.static-dir={STATIC_DIR}",
+                ],
+            )
+        ),
     }
     try:
         print("Building the frontend and watching for changes…", flush=True)
@@ -179,13 +188,12 @@ def start() -> None:
             subprocess.Popen(
                 ["npm", "run", "build", "--", "--watch"],
                 cwd=ROOT / "frontend",
-                env=environment,
                 start_new_session=True,
             )
         )
         await_frontend(processes[0])
         print("Starting the backend…", flush=True)
-        processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=environment, start_new_session=True))
+        processes.append(subprocess.Popen(["sbt", "run"], cwd=ROOT / "backend", env=backend_environment, start_new_session=True))
         await_backend(backend_port, processes[1])
         print(f"Local app: http://127.0.0.1:{backend_port}", flush=True)
         print("Frontend edits rebuild automatically; hard-refresh the browser to load them.", flush=True)

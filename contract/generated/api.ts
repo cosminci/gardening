@@ -387,7 +387,6 @@ export interface components {
         /** HealthResponse */
         HealthResponse: {
             status: string;
-            version: string;
         };
         /** LogOperationRequest */
         LogOperationRequest: {
