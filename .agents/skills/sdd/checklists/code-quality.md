@@ -1,37 +1,12 @@
-# Code quality checklist
+# Code quality checklist — shared
 
-Gate for every Implementation PR. First verify against `CONTRIBUTING.md` §Naming, §Scala
-composition, §Logging, §Metrics, §Testing conventions, and `DESIGN-PRINCIPLES.md` §2/§3/§6 —
-those own the general rules; do not restate them here. Then check the items below, which live
-only in this checklist.
+Gate for every Implementation PR, both stacks. Then load the stack checklist for each surface this PR changes — [`code-quality-frontend.md`](code-quality-frontend.md) for `frontend/**`, [`code-quality-backend.md`](code-quality-backend.md) for `backend/**` — and no others: a frontend-only PR does not read the backend checklist, nor the reverse. `CONTRIBUTING.md` §Testing conventions and `DESIGN-PRINCIPLES.md` §2/§3/§6/§7 own the general rules; the items below live only here.
 
-- [ ] Assertions are one physical line in the normal case; extract named `expectedX`/`actualX`
-  values (decomposing nested expressions into values as needed) to make that possible.
-- [ ] Private members omit their return type unless it is `Unit`.
-- [ ] Each affected suite was reviewed as a whole against current supported behavior — edited,
-  merged, or removed as use cases evolved, not just appended to for coverage.
-- [ ] Suite order within a file: reusable non-trivial mock data, then use-case tests, then
-  observable `Refs` (only if needed), then `buildX` helpers.
-- [ ] At most one `Refs` instance per test; a test wanting more than one is really two use cases
-  — split it.
-- [ ] `Refs` holds only observed collaborator effects/calls a test asserts, never a stored mock
-  response; `buildX` constructs every collaborator substitute and takes fixed
-  responses/failures/clocks as parameters with ordinary-case defaults.
-- [ ] A stub/mock is declared in the one suite that needs it, unless it is non-trivial (roughly
-  4+ lines to define) *and* shared by more than one suite — only then does it move to
-  `TestImplicits` (a capability `given`) or a shared `Mocks` object (domain data).
-- [ ] Prefer a codec that encodes the wire format directly over a DTO; a DTO exists only when it
-  cannot leak past its boundary and no codec can express the format cleanly.
-- [ ] A test needs no helper beyond its `buildX` call to read as one use case.
-- [ ] Fixtures are declared in semantic scenario order, grouped by the state or use case they
-  describe, not by type.
-- [ ] Test names interpolate the actual domain value under test (e.g.
-  `s"should return ${WateringAttention.Current} ..."`) rather than spelling it out, so a rename
-  can't silently make the name wrong.
-- [ ] Application logic sits behind a trait named for its behavior, with a same-named companion
-  exposing `make` and a private `LiveX`; tests exercise only what `make` returns.
-- [ ] Integration tests acquire/use/release their own resource explicitly through the
-  ecosystem's standard primitive — never through a callback-style setup helper.
+- [ ] For each module this PR changed, its suite was re-derived as a whole from the module's current observable behavior — the suite _is_ that projection. Existing tests were extended, merged, retargeted, or deleted to match; a net-new test exists only where a genuinely new observable behavior has no existing test that should own it.
+- [ ] No two tests differ only in which parameters they fill — that is one table test.
+- [ ] Each unit this PR grew was measured against `DESIGN-PRINCIPLES.md` §7's size signal (a unit past a screenful, a suite past ~3× the code it exercises); anything past it was split or justified, not silently grown.
 - [ ] Tests are Arrange / Act / Assert, each block separated by a blank line.
-- [ ] Values are named for the meaning they establish, not the helper call that produced them
-  (`wateredPlantOperations`, not `watered`).
+- [ ] Assertions are one physical line in the normal case; extract named `expectedX`/`actualX` values (decomposing nested expressions into values as needed) to make that possible.
+- [ ] Fixtures are declared in semantic scenario order, grouped by the state or use case they describe, not by type.
+- [ ] Values are named for the meaning they establish, not the helper call that produced them (`wateredPlantOperations`, not `watered`).
+- [ ] Test names interpolate the actual domain value under test (e.g. `s"should return ${WateringAttention.Current} ..."`) rather than spelling it out, so a rename can't silently make the name wrong.

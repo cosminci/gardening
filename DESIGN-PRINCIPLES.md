@@ -1,6 +1,6 @@
 # Design principles
 
-How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise. They are adapted from the UPS RO Application Design Guidelines (Ports & Adapters, DDD, Fractal Design, Anti-Corruption Layers, Indirection Layers, Strict Build Guardrails), which are language-agnostic; this document grounds them in the choices this repo actually makes.
+How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise. They are adapted from the UPS RO Application Design Guidelines (Ports & Adapters, DDD, Fractal Design, Anti-Corruption Layers, Indirection Layers, Strict Build Guardrails), which are language-agnostic, plus one this repo makes its own — keeping complexity in check as the system grows (§7); this document grounds them in the choices this repo actually makes.
 
 The aims:
 
@@ -70,6 +70,14 @@ The build is deliberately strict, and staying inside the lines is what makes hig
 - **Real imports, not fully-qualified paths.** Reach for a symbol by importing it; inline `a.b.c.Thing` references are noise that hides dependencies.
 - **Don't contort a test to cover glue.** If covering a line needs a cast to `Any`, an untyped response, or similar gymnastics, that is the "hard to test ⇒ fix the design" signal: either the code wants a seam, or it is a transport shell that belongs in the coverage exclusion — not a hack.
 - **`Wart.Any` is intentionally _off_.** tapir encodes "no streaming capability" as the type parameter `Any` in every endpoint signature, so a blanket ban fires on all adapter code and cannot be used here. The `Any`-widening hacks it would otherwise catch are prevented by the two rules above and by scalafix's ban on the `asInstanceOf`/`isInstanceOf` family.
+
+## 7. Keeping Complexity in Check
+
+§3 shapes the system at rest; this is how it holds that shape as it grows. The system is evolved, not accreted — protecting against complexity is part of the change that adds behavior, not a later cleanup.
+
+- **Refactor as work arrives.** A unit that was rightly one thing may need to split once new work grows it past a single responsibility (§3) — not a past mistake, but the point where one responsibility became several. Do the split in the change that crosses the line, never later.
+- **Size is measured, not felt.** You cannot feel a file, class, or suite becoming a monster — reading 100 or 2000 lines costs the same. So read the number: a unit past a screenful, or a test suite past roughly 3× the code it exercises, is carrying more than one reason to change. Investigate and split the unit; never trim the suite to hide the ratio.
+- **Complexity outranks completeness.** When holding complexity down conflicts with shipping more, reduce complexity first and ship the fuller feature second.
 
 ## Direct style, no effect system
 
