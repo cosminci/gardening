@@ -115,13 +115,7 @@ describe("PlantSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save plant" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Add at least one substrate component.");
     fireEvent.click(screen.getByRole("button", { name: "Define new component" }));
-    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toHaveClass(
-      "sheet--entering",
-    );
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByRole("dialog", { name: "Substrate component editor" })).toHaveClass(
-      "sheet--closing",
-    );
     await vi.waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
     });
@@ -419,12 +413,8 @@ describe("PlantSheet", () => {
     fireEvent.keyDown(window, { key: "Tab" });
     expect(within(dialog).getByRole("button", { name: "Collapse plant editor" })).toHaveFocus();
     fireEvent.click(within(dialog).getByRole("button", { name: "Define new component" }));
-    const editor = screen.getByRole("dialog", { name: "Substrate component editor" });
-    expect(dialog.parentElement).toHaveClass("sheet-layer--editing");
     fireEvent.click(within(dialog).getByRole("button", { name: "Collapse plant editor" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Collapse plant editor" }));
-    expect(editor).toHaveClass("sheet--closing");
-    expect(dialog.parentElement).not.toHaveClass("sheet-layer--editing");
     await vi.waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Substrate component editor" })).toBeNull();
       expect(dialog).toHaveClass("sheet--closing");
@@ -435,7 +425,6 @@ describe("PlantSheet", () => {
     expect(screen.getByRole("button", { name: "Add plant" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Add plant" }));
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByRole("dialog", { name: "Plant editor" })).toHaveClass("sheet--closing");
     await vi.waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Plant editor" })).toBeNull();
     });

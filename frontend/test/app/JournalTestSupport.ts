@@ -282,6 +282,22 @@ export const buildJournal = ({
   };
 };
 
+export const buildJournalWithCemetery = (
+  activePlants: readonly Journal.Plant[],
+  archivedPlants: readonly Journal.Plant[],
+  opts: Parameters<typeof buildJournal>[0] = {},
+): ReturnType<typeof buildJournal> => {
+  const base = buildJournal(opts);
+  return {
+    ...base,
+    getPlants: (status?: string) =>
+      Promise.resolve({
+        kind: "read" as const,
+        plants: status === "archived" ? archivedPlants : activePlants,
+      }),
+  };
+};
+
 const queuedResult = <Result>(results: readonly [Result, ...Result[]], read: number): Result => {
   const result = results.at(Math.min(read, results.length - 1));
   if (result === undefined) throw new Error("queued result is empty");

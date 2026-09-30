@@ -204,6 +204,29 @@ describe("WsPlantAttentionFeed", () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it("should ignore open and message events that fire after unsubscribing", () => {
+    const { factory, sockets } = makeFakeWsFactory();
+    const feed = makeWsPlantAttentionFeed(factory);
+    const events: FeedEvent[] = [];
+
+    const unsubscribe = feed.subscribe((event) => events.push(event));
+    sockets[0]?.onopen?.(new Event("open"));
+
+    expect(events).toEqual([
+      { kind: "connectionState", state: "connecting" },
+      { kind: "connectionState", state: "connected" },
+    ]);
+
+    unsubscribe();
+    sockets[0]?.onopen?.(new Event("open"));
+    sockets[0]?.onmessage?.(new MessageEvent("message", { data: wireProjection }));
+
+    expect(events).toEqual([
+      { kind: "connectionState", state: "connecting" },
+      { kind: "connectionState", state: "connected" },
+    ]);
+  });
+
   it("should decode unavailable watering with null and non-null elapsed", () => {
     const { factory, sockets } = makeFakeWsFactory();
     const feed = makeWsPlantAttentionFeed(factory);

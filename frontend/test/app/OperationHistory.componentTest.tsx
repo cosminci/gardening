@@ -75,6 +75,15 @@ Vitest.describe("operation history", () => {
       }),
     ).toBeInTheDocument();
     Vitest.expect(edited).toEqual([firstOlder]);
+
+    // Card list edit: clicking the card-list twin also fires onEdit
+    const cards = Testing.screen.getByRole("list", { name: "Older operations" });
+    Testing.fireEvent.click(
+      Testing.within(cards).getByRole("button", {
+        name: "Edit historical care operation 1 from 03.03.2026",
+      }),
+    );
+    Vitest.expect(edited).toEqual([firstOlder, firstOlder]);
     setOperationChange({
       kind: "edited",
       operation: {
@@ -273,37 +282,6 @@ Vitest.describe("operation history", () => {
       Vitest.expect(getOperations).toHaveBeenCalledTimes(2);
     });
   });
-
-  Vitest.it(
-    "should edit an operation from the card list, distinct from the table row",
-    async () => {
-      const edited: Journal.Operation[] = [];
-      const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
-      Testing.render(() => (
-        <OperationHistory
-          plant={recent.plant}
-          substrateComponents={[]}
-          pesticides={[]}
-          getOperations={getOperations}
-          operationChange={undefined}
-          onEdit={(operation) => {
-            edited.push(operation);
-          }}
-        />
-      ));
-
-      Testing.fireEvent.click(
-        Testing.screen.getByRole("button", { name: "Show operation history" }),
-      );
-      const cards = await Testing.screen.findByRole("list", { name: "Older operations" });
-      Testing.fireEvent.click(
-        Testing.within(cards).getByRole("button", {
-          name: "Edit historical care operation 1 from 03.03.2026",
-        }),
-      );
-      Vitest.expect(edited).toEqual([firstOlder]);
-    },
-  );
 
   Vitest.it("should scroll to compensate for a shifted anchor when collapsing", async () => {
     const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage()));

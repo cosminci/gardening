@@ -39,6 +39,15 @@ describe("plant search filtering", () => {
     expect(matched.map((h) => h.plant.id)).toEqual(["species", "nickname"]);
   });
 
+  it("should match a plant whose location contains the query", () => {
+    const kitchenPlant = gardenHistory({ location: Journal.location("Kitchen") }, "kitchen");
+    const officePlant = gardenHistory({ location: Journal.location("Office") }, "office");
+
+    const matched = filterHistoriesBySearch([kitchenPlant, officePlant], "kitchen");
+
+    expect(matched.map((h) => h.plant.id)).toEqual(["kitchen"]);
+  });
+
   it("should not match a plant with no nickname against an empty field", () => {
     const noNickname = gardenHistory({ maybeNickname: null }, "no-nickname");
 

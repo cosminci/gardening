@@ -494,7 +494,8 @@ describe("OperationForm", () => {
     });
   });
 
-  it("should offer no delete action for a new, unsaved operation", () => {
+  it("should show a delete action next to save for an existing operation", () => {
+    // New/unsaved operation: no Delete control
     Testing.render(() => (
       <OperationForm
         initial={undefined}
@@ -511,11 +512,10 @@ describe("OperationForm", () => {
         onCancel={() => undefined}
       />
     ));
-
     expect(Testing.screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-  });
+    Testing.cleanup();
 
-  it("should show a delete action next to save for an existing operation", () => {
+    // Existing operation: Delete control present with correct position and callback
     let deletions = 0;
     Testing.render(() => (
       <OperationForm

@@ -138,6 +138,7 @@ describe("HttpPlantPhotoClient", () => {
 
   it("should remove a photo and preserve all outcomes", async () => {
     const requests: Request[] = [];
+    const reason = new Error("offline");
     const client = makeHttpPlantPhotoClient(
       respondingWith(
         [
@@ -148,32 +149,23 @@ describe("HttpPlantPhotoClient", () => {
         requests,
       ),
     );
+    const offlineClient = makeHttpPlantPhotoClient(respondingWith([reason]));
 
     const removed = await client.removePhoto(photoId1);
     const missing = await client.removePhoto(photoId1);
     const failed = await client.removePhoto(photoId1);
+    const offline = await offlineClient.removePhoto(photoId1);
 
     expect(removed).toEqual({ kind: "removed" });
     expect(missing).toEqual({ kind: "photoMissing" });
     expect(failed).toMatchObject({ kind: "removeFailed" });
+    expect(offline).toEqual({ kind: "removeFailed", reason });
     const paths = requests.map((r) => `${r.method} ${new URL(r.url).pathname}`);
     expect(paths).toEqual(["DELETE /photos/ph1", "DELETE /photos/ph1", "DELETE /photos/ph1"]);
   });
 
-  it("should translate a removal network failure into an explicit domain failure", async () => {
-    const reason = new Error("offline");
-    const client = makeHttpPlantPhotoClient(respondingWith([reason]));
-
-    const result = await client.removePhoto(photoId1);
-
-    expect(result).toEqual({ kind: "removeFailed", reason });
-  });
-
-  it("should derive a thumbnail photo content URL from a photo id", () => {
+  it("should derive photo content URLs for all supported variants", () => {
     expect(photoContentUrl(photoId1, "thumbnail")).toBe("/photos/ph1/content?variant=thumbnail");
-  });
-
-  it("should derive an original photo content URL from a photo id", () => {
     expect(photoContentUrl(photoId1, "original")).toBe("/photos/ph1/content?variant=original");
   });
 });

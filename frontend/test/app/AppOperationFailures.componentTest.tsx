@@ -4,13 +4,20 @@ import { App } from "../../src/app/App";
 import { instant, operationId } from "../../src/domain/Journal";
 import type {
   AttentionProjection,
-  GetPlantsResult,
   GetOperationsResult,
+  GetPlantsResult,
   OperationWindow,
   PlantId,
   PlantStatus,
 } from "../../src/domain/Journal";
-import { buildJournal, ficus, noopPhotoClient, operationsPage } from "./JournalTestSupport";
+import {
+  buildJournal,
+  care,
+  ficus,
+  noopPhotoClient,
+  operationsPage,
+  repot,
+} from "./JournalTestSupport";
 
 const unavailableFicusAttention: AttentionProjection = {
   measuredAt: instant("2026-01-01T00:00:00Z"),
@@ -25,39 +32,54 @@ const unavailableFicusAttention: AttentionProjection = {
 Vitest.afterEach(() => Reflect.deleteProperty(document, "startViewTransition"));
 
 Vitest.describe("operation failures", () => {
-  Vitest.it("should report a logging failure without showing its reason", async () => {
-    const reason = new Error("private details");
-    const journal = buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [operationsPage()] },
-      logOperationResult: { kind: "loggingFailed", reason },
-    });
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
+  Vitest.it("should report a log failure without showing its reason", async () => {
+    const cases = [
+      {
+        makeJournal: () =>
+          buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage()] },
+            logOperationResult: {
+              kind: "loggingFailed" as const,
+              reason: new Error("private details"),
+            },
+          }),
+      },
+      {
+        makeJournal: () => ({
+          ...buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage()] },
+          }),
+          logOperation: () => Promise.reject(new Error("private details")),
+        }),
+      },
+    ];
+    for (const { makeJournal } of cases) {
+      const journal = makeJournal();
+      const view = Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
 
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-    const alert = await Testing.screen.findByRole("alert");
-    const privateReason = Testing.screen.queryByText("private details");
-    Testing.fireEvent.click(
-      Testing.screen.getByRole("button", { name: "Collapse operation editor" }),
-    );
-    await Testing.waitForElementToBeRemoved(() =>
-      Testing.screen.queryByRole("form", { name: "Log operation" }),
-    );
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
 
-    Vitest.expect(alert).toHaveTextContent("The operation could not be saved.");
-    Vitest.expect(privateReason).toBeNull();
-    Vitest.expect(Testing.screen.queryByRole("form", { name: "Log operation" })).toBeNull();
+      const alert = await Testing.screen.findByRole("alert");
+
+      Vitest.expect(alert).toHaveTextContent("The operation could not be saved.");
+      Vitest.expect(Testing.screen.queryByText("private details")).toBeNull();
+      view.unmount();
+    }
   });
 
   Vitest.it(
@@ -88,40 +110,12 @@ Vitest.describe("operation failures", () => {
       const alert = await Testing.screen.findByRole("alert");
       const editor = Testing.screen.getByRole("dialog", { name: "Operation editor" });
 
-      const expectedMessage = "This plant is archived; new operations cannot be added.";
-      Vitest.expect(alert).toHaveTextContent(expectedMessage);
+      Vitest.expect(alert).toHaveTextContent(
+        "This plant is archived; new operations cannot be added.",
+      );
       Vitest.expect(editor).toBeInTheDocument();
     },
   );
-
-  Vitest.it("should report an unexpectedly rejected write", async () => {
-    const journal = {
-      ...buildJournal({
-        attentionProjection: unavailableFicusAttention,
-        getOperationsByPlantId: { p1: [operationsPage()] },
-      }),
-      logOperation: () => Promise.reject(new Error("private details")),
-    };
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
-
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-
-    const alert = await Testing.screen.findByRole("alert");
-
-    Vitest.expect(alert).toHaveTextContent("The operation could not be saved.");
-    Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
-  });
 
   Vitest.it("should report when the journal cannot refresh after saving", async () => {
     const base = buildJournal({
@@ -149,6 +143,281 @@ Vitest.describe("operation failures", () => {
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+    const alert = await Testing.screen.findByRole("alert");
+
+    Vitest.expect(alert).toHaveTextContent("The journal could not be loaded.");
+    Vitest.expect(Testing.screen.queryByText("private details")).not.toBeInTheDocument();
+    Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  Vitest.it("should report an edit failure without showing its reason", async () => {
+    const existing = repot("o1", "2026-03-03T00:00:00Z");
+    const cases = [
+      {
+        result: { kind: "operationMissing" as const },
+        message: "This operation no longer exists.",
+      },
+      {
+        result: { kind: "operationTypeMismatch" as const },
+        message: "The operation type cannot be changed.",
+      },
+      {
+        result: { kind: "editFailed" as const, reason: new Error("private details") },
+        message: "The operation could not be saved.",
+      },
+    ];
+    for (const { result, message } of cases) {
+      const journal = buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [operationsPage([existing])] },
+        editOperationResult: result,
+      });
+      const view = Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent repot operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+      const alert = await Testing.screen.findByRole("alert");
+
+      Vitest.expect(alert).toHaveTextContent(message);
+      Vitest.expect(Testing.screen.queryByText("private details")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  Vitest.it("should report when the journal cannot refresh after editing", async () => {
+    const existing = repot("o1", "2026-03-03T00:00:00Z");
+    const base = buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: {
+        p1: [operationsPage([existing]), operationsPage([existing])],
+      },
+      editOperationResult: { kind: "edited", operation: existing },
+    });
+    let plantReads = 0;
+    const journal = {
+      ...base,
+      getPlants: () =>
+        plantReads++ === 0 ? base.getPlants() : Promise.reject(new Error("offline")),
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByText("3rd of March");
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", {
+        name: "Edit recent repot operation 1 from 3rd of March",
+      }),
+    );
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+
+    const alert = await Testing.screen.findByRole("alert");
+
+    Vitest.expect(alert).toHaveTextContent("The journal could not be loaded.");
+    Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  Vitest.it(
+    "should ignore a stale post-edit refresh failure after leaving the garden",
+    async () => {
+      let rejectGarden: (reason: Error) => void = () => undefined;
+      const pendingGarden = new Promise<GetPlantsResult>((_resolve, reject) => {
+        rejectGarden = reject;
+      });
+      const existing = repot("o1", "2026-03-03T00:00:00Z");
+      const base = buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [operationsPage([existing])] },
+        editOperationResult: { kind: "edited", operation: existing },
+      });
+      let gardenReads = 0;
+      const journal = {
+        ...base,
+        getPlants: (status?: PlantStatus) =>
+          status === "archived"
+            ? Promise.resolve({ kind: "read" as const, plants: [] })
+            : gardenReads++ === 0
+              ? base.getPlants()
+              : pendingGarden,
+      };
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent repot operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(gardenReads).toBe(2);
+      });
+
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Cemetery.*0 plants/ }));
+      await Testing.screen.findByRole("region", { name: "Cemetery" });
+      rejectGarden(new Error("stale refresh"));
+      await pendingGarden.catch(() => undefined);
+      await Promise.resolve();
+
+      Vitest.expect(Testing.screen.getByRole("region", { name: "Cemetery" })).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
+  Vitest.it("should report a delete failure without showing its reason", async () => {
+    const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
+    const openDeleteConfirmation = () => {
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", {
+          name: "Edit recent care operation 1 from 3rd of March",
+        }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+      );
+    };
+    const cases = [
+      {
+        makeJournal: () =>
+          buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage([existing])] },
+            deleteOperationResult: { kind: "operationMissing" as const },
+          }),
+        message: "This operation no longer exists.",
+      },
+      {
+        makeJournal: () =>
+          buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage([existing])] },
+            deleteOperationResult: { kind: "cannotDeleteLatestRepot" as const },
+          }),
+        message: "This is the plant's current repot and cannot be deleted.",
+      },
+      {
+        makeJournal: () =>
+          buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage([existing])] },
+            deleteOperationResult: {
+              kind: "deleteFailed" as const,
+              reason: new Error("private details"),
+            },
+          }),
+        message: "The operation could not be deleted.",
+      },
+      {
+        makeJournal: () => ({
+          ...buildJournal({
+            attentionProjection: unavailableFicusAttention,
+            getOperationsByPlantId: { p1: [operationsPage([existing])] },
+          }),
+          deleteOperation: () => Promise.reject(new Error("private details")),
+        }),
+        message: "The operation could not be deleted.",
+      },
+    ];
+    for (const { makeJournal, message } of cases) {
+      const journal = makeJournal();
+      const view = Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByText("3rd of March");
+
+      openDeleteConfirmation();
+
+      const alert = await Testing.screen.findByRole("alert");
+
+      Vitest.expect(alert).toHaveTextContent(message);
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Operation editor" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByText("private details")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  Vitest.it("should report when the journal cannot refresh after deleting", async () => {
+    const existing = care({ id: "o1", date: "2026-03-03T00:00:00Z", moisture: "wet" });
+    const base = buildJournal({
+      attentionProjection: unavailableFicusAttention,
+      getOperationsByPlantId: { p1: [operationsPage([existing])] },
+      deleteOperationResult: { kind: "deleted" },
+    });
+    let gardenReads = 0;
+    const journal = {
+      ...base,
+      getPlants: (status?: string) =>
+        status === "archived"
+          ? Promise.resolve({ kind: "read" as const, plants: [] })
+          : gardenReads++ === 0
+            ? base.getPlants()
+            : Promise.reject(new Error("private details")),
+    };
+    Testing.render(() => (
+      <App
+        plants={journal}
+        operations={journal}
+        attention={journal}
+        substrates={journal}
+        pesticideCatalog={journal}
+        photos={noopPhotoClient}
+      />
+    ));
+    await Testing.screen.findByText("3rd of March");
+
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", {
+        name: "Edit recent care operation 1 from 3rd of March",
+      }),
+    );
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Delete" }));
+    const warning = Testing.screen.getByRole("alertdialog");
+    Testing.fireEvent.click(
+      Testing.within(warning).getByRole("button", { name: "Delete permanently" }),
+    );
 
     const alert = await Testing.screen.findByRole("alert");
 

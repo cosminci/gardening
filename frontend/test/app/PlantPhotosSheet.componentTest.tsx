@@ -66,7 +66,7 @@ Vitest.describe("PlantPhotosSheet", () => {
   });
 
   Vitest.it(
-    "should paginate with Previous and Next and apply the stale-response guard",
+    "should paginate with Previous and Next, showing a loading state between pages",
     async () => {
       let resolvePage2!: (result: Journal.GetPhotosResult) => void;
       const page2Promise = new Promise<Journal.GetPhotosResult>((resolve) => {
@@ -111,6 +111,73 @@ Vitest.describe("PlantPhotosSheet", () => {
       });
     },
   );
+
+  Vitest.it("should ignore a page fetch superseded by the reload after an upload", async () => {
+    const newPhoto: Journal.PlantPhoto = {
+      id: Journal.photoId("ph-new"),
+      capturedAt: Journal.instant("2026-09-26T12:00:00Z"),
+    };
+    let resolvePageTwo!: (result: Journal.GetPhotosResult) => void;
+    const pageTwoPromise = new Promise<Journal.GetPhotosResult>((resolve) => {
+      resolvePageTwo = resolve;
+    });
+    let resolveReload!: (result: Journal.GetPhotosResult) => void;
+    const reloadPromise = new Promise<Journal.GetPhotosResult>((resolve) => {
+      resolveReload = resolve;
+    });
+    let resolveAdd!: (result: Journal.AddPhotoResult) => void;
+    const addPromise = new Promise<Journal.AddPhotoResult>((resolve) => {
+      resolveAdd = resolve;
+    });
+
+    const client = buildPhotoClient();
+    let getIndex = 0;
+    client.getPhotos = (_id, window) => {
+      client.getPhotosCalls.push(window);
+      getIndex++;
+      if (getIndex === 1) return Promise.resolve(photosPage([photo1], true));
+      if (getIndex === 2) return pageTwoPromise;
+      return reloadPromise;
+    };
+    client.addPhoto = () => addPromise;
+
+    Testing.render(() => (
+      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+    ));
+    await Testing.screen.findByAltText(/Photo from/);
+
+    // Start an upload; the page stays "loaded" so pagination remains live.
+    const fileInput = Testing.screen.getByLabelText("Choose a photo to upload");
+    const file = new File(["jpeg"], "photo.jpg", { type: "image/jpeg" });
+    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
+    Testing.fireEvent.change(fileInput);
+    await Testing.screen.findByText("Uploading…");
+
+    // Page forward mid-upload: the page-2 fetch is now in flight.
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
+    await Testing.screen.findByText("Loading photos…");
+
+    // The upload resolves and triggers its own reload of page 1 (the newer request).
+    resolveAdd({ kind: "added", photo: newPhoto });
+    await Testing.waitFor(() => {
+      Vitest.expect(client.getPhotosCalls).toHaveLength(3);
+    });
+
+    // The reload lands first, then the stale page-2 fetch resolves last.
+    resolveReload(photosPage([newPhoto, photo1]));
+    await Testing.screen.findByText("Page 1");
+    resolvePageTwo(photosPage([photo2]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // The superseded page-2 response is discarded: we stay on page 1 with the new photo.
+    Vitest.expect(Testing.screen.getByText("Page 1")).toBeInTheDocument();
+    Vitest.expect(
+      document.querySelector('img[src="/photos/ph-new/content?variant=thumbnail"]'),
+    ).not.toBeNull();
+    Vitest.expect(
+      document.querySelector('img[src="/photos/ph2/content?variant=thumbnail"]'),
+    ).toBeNull();
+  });
 
   Vitest.it(
     "should show a failed page fetch and retry the same page, preserving loaded photos",
@@ -253,10 +320,17 @@ Vitest.describe("PlantPhotosSheet", () => {
     },
   );
 
-  Vitest.it("should show plantMissing error on upload", async () => {
+  Vitest.it.each([
+    { addPhotoResult: { kind: "plantMissing" as const }, expected: "no longer exists" },
+    {
+      addPhotoResult: { kind: "unsupportedMediaType" as const },
+      expected: "Unsupported file type",
+    },
+    { addPhotoResult: { kind: "tooLarge" as const }, expected: "too large" },
+  ])("should show $addPhotoResult.kind error on upload", async ({ addPhotoResult, expected }) => {
     const client = buildPhotoClient({
       getPhotosResults: [photosPage([])],
-      addPhotoResult: { kind: "plantMissing" },
+      addPhotoResult,
     });
 
     Testing.render(() => (
@@ -269,60 +343,28 @@ Vitest.describe("PlantPhotosSheet", () => {
     Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
     Testing.fireEvent.change(fileInput);
 
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent("no longer exists");
-  });
-
-  Vitest.it("should show unsupportedMediaType error on upload", async () => {
-    const client = buildPhotoClient({
-      getPhotosResults: [photosPage([])],
-      addPhotoResult: { kind: "unsupportedMediaType" },
-    });
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-    await Testing.screen.findByText("No photos yet.");
-
-    const fileInput = Testing.screen.getByLabelText("Choose a photo to upload");
-    const file = new File(["jpeg"], "photo.jpg", { type: "image/jpeg" });
-    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
-    Testing.fireEvent.change(fileInput);
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "Unsupported file type",
-    );
-  });
-
-  Vitest.it("should show tooLarge error from server on upload", async () => {
-    const client = buildPhotoClient({
-      getPhotosResults: [photosPage([])],
-      addPhotoResult: { kind: "tooLarge" },
-    });
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-    await Testing.screen.findByText("No photos yet.");
-
-    const fileInput = Testing.screen.getByLabelText("Choose a photo to upload");
-    const file = new File(["jpeg"], "photo.jpg", { type: "image/jpeg" });
-    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
-    Testing.fireEvent.change(fileInput);
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent("too large");
+    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(expected);
   });
 
   Vitest.it(
     "should not prepend an uploaded photo if the page finished loading after upload started",
     async () => {
-      let resolveGetPhotos!: (result: Journal.GetPhotosResult) => void;
+      let resolveInitial!: (result: Journal.GetPhotosResult) => void;
+      let resolveReload!: (result: Journal.GetPhotosResult) => void;
       const client = buildPhotoClient({
         addPhotoResult: { kind: "added", photo: photo1 },
       });
+      let getIndex = 0;
       client.getPhotos = (_id, window) => {
         client.getPhotosCalls.push(window);
+        getIndex++;
+        if (getIndex === 1) {
+          return new Promise((resolve) => {
+            resolveInitial = resolve;
+          });
+        }
         return new Promise((resolve) => {
-          resolveGetPhotos = resolve;
+          resolveReload = resolve;
         });
       };
 
@@ -336,7 +378,15 @@ Vitest.describe("PlantPhotosSheet", () => {
       Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
       Testing.fireEvent.change(fileInput);
 
-      resolveGetPhotos(photosPage([photo2]));
+      // The upload reloads page 1 — a newer request that supersedes the in-flight initial load.
+      await Testing.waitFor(() => {
+        Vitest.expect(client.getPhotosCalls).toHaveLength(2);
+      });
+
+      // The initial load finishes late with different content; it must be discarded, not merged.
+      resolveInitial(photosPage([photo1, photo2]));
+      // The reload is authoritative — the uploaded photo is not optimistically prepended.
+      resolveReload(photosPage([photo2]));
 
       const photos = await Testing.screen.findAllByAltText(/Photo from/);
       Vitest.expect(photos).toHaveLength(1);
@@ -350,8 +400,14 @@ Vitest.describe("PlantPhotosSheet", () => {
       <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
     ));
 
-    const thumbnail = await Testing.screen.findByAltText(/Photo from/);
-    Vitest.expect(thumbnail).toHaveAttribute("src", "/photos/ph1/content?variant=thumbnail");
+    const thumbnail = await Testing.screen.findByRole("button", {
+      name: "Photo from 15.05.2026 13:00",
+    });
+    Vitest.expect(thumbnail.querySelector("img")).toHaveAttribute(
+      "src",
+      "/photos/ph1/content?variant=thumbnail",
+    );
+    thumbnail.focus();
     Testing.fireEvent.click(thumbnail);
 
     const overlay = Testing.screen.getByRole("dialog", { name: "Photo viewer" });
@@ -363,11 +419,16 @@ Vitest.describe("PlantPhotosSheet", () => {
     const closeBtn = Testing.within(overlay).getByRole("button", { name: "Close photo viewer" });
     Vitest.expect(closeBtn).toHaveFocus();
 
-    // Close via button
+    // Unrelated key leaves the overlay open
+    Testing.fireEvent.keyDown(window, { key: "a" });
+    Vitest.expect(overlay).toBeInTheDocument();
+
+    // Close via button; focus returns to the thumbnail
     Testing.fireEvent.click(closeBtn);
     Vitest.expect(
       Testing.screen.queryByRole("dialog", { name: "Photo viewer" }),
     ).not.toBeInTheDocument();
+    Vitest.expect(thumbnail).toHaveFocus();
   });
 
   Vitest.it("should trap Tab inside the overlay", async () => {
@@ -383,20 +444,6 @@ Vitest.describe("PlantPhotosSheet", () => {
 
     Testing.fireEvent.keyDown(window, { key: "Tab" });
     Vitest.expect(closeBtn).toHaveFocus();
-  });
-
-  Vitest.it("should ignore unrelated keys while the overlay is open", async () => {
-    const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-
-    Testing.fireEvent.click(await Testing.screen.findByAltText(/Photo from/));
-    const overlay = Testing.screen.getByRole("dialog", { name: "Photo viewer" });
-
-    Testing.fireEvent.keyDown(window, { key: "a" });
-    Vitest.expect(overlay).toBeInTheDocument();
   });
 
   Vitest.it("should close the overlay via backdrop click", async () => {
@@ -452,47 +499,60 @@ Vitest.describe("PlantPhotosSheet", () => {
     ).not.toBeInTheDocument();
   });
 
-  Vitest.it(
-    "should not edit a superseded page when a removal resolves after a page change",
-    async () => {
-      let resolvePage2!: (result: Journal.GetPhotosResult) => void;
-      const client = buildPhotoClient({
-        removePhotoResult: { kind: "removed" },
-      });
-      let getIndex = 0;
-      client.getPhotos = (_id, window) => {
-        client.getPhotosCalls.push(window);
-        getIndex++;
-        if (getIndex === 1) return Promise.resolve(photosPage([photo1], true));
+  Vitest.it("should discard a page change superseded by the removal's reload", async () => {
+    let resolveNext!: (result: Journal.GetPhotosResult) => void;
+    let resolveReload!: (result: Journal.GetPhotosResult) => void;
+    const client = buildPhotoClient({
+      removePhotoResult: { kind: "removed" },
+    });
+    let getIndex = 0;
+    client.getPhotos = (_id, window) => {
+      client.getPhotosCalls.push(window);
+      getIndex++;
+      if (getIndex === 1) return Promise.resolve(photosPage([photo1], true));
+      if (getIndex === 2) {
         return new Promise((resolve) => {
-          resolvePage2 = resolve;
+          resolveNext = resolve;
         });
-      };
+      }
+      return new Promise((resolve) => {
+        resolveReload = resolve;
+      });
+    };
 
-      Testing.render(() => (
-        <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-      ));
-      await Testing.screen.findAllByAltText(/Photo from/);
+    Testing.render(() => (
+      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+    ));
+    await Testing.screen.findAllByAltText(/Photo from/);
 
-      Testing.fireEvent.click(
-        Testing.screen.getByRole("button", { name: "Remove photo from 15.05.2026 13:00" }),
-      );
-      const confirmation = Testing.screen.getByRole("alertdialog", { name: /Remove photo/ });
+    Testing.fireEvent.click(
+      Testing.screen.getByRole("button", { name: "Remove photo from 15.05.2026 13:00" }),
+    );
+    const confirmation = Testing.screen.getByRole("alertdialog", { name: /Remove photo/ });
 
-      // A pagination click while the confirmation is open (not blocked by it) starts loading page 2.
-      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
-      Vitest.expect(Testing.screen.getByText("Loading photos…")).toBeInTheDocument();
+    // A pagination click while the confirmation is open (not blocked by it) starts loading page 2.
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Next" }));
+    Vitest.expect(Testing.screen.getByText("Loading photos…")).toBeInTheDocument();
 
-      Testing.fireEvent.click(
-        Testing.within(confirmation).getByRole("button", { name: "Remove permanently" }),
-      );
-      resolvePage2(photosPage([photo2]));
+    // Confirming the removal reloads page 1 — the newer request, which supersedes the page-2 fetch.
+    Testing.fireEvent.click(
+      Testing.within(confirmation).getByRole("button", { name: "Remove permanently" }),
+    );
+    await Testing.waitFor(() => {
+      Vitest.expect(client.getPhotosCalls).toHaveLength(3);
+    });
+    resolveReload(photosPage([photo2]));
+    await Testing.screen.findByText("Page 1");
 
-      const photos = await Testing.screen.findAllByAltText(/Photo from/);
-      Vitest.expect(photos).toHaveLength(1);
-      Vitest.expect(photos[0]).toHaveAttribute("alt", Vitest.expect.stringContaining("14.05.2026"));
-    },
-  );
+    // The superseded page-2 fetch resolves last and is discarded, leaving the reload in place.
+    resolveNext(photosPage([photo1]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const photos = Testing.screen.getAllByAltText(/Photo from/);
+    Vitest.expect(photos).toHaveLength(1);
+    Vitest.expect(photos[0]).toHaveAttribute("alt", Vitest.expect.stringContaining("14.05.2026"));
+    Vitest.expect(Testing.screen.getByText("Page 1")).toBeInTheDocument();
+  });
 
   Vitest.it(
     "should step back a page when removing the last photo empties the current page",
@@ -552,51 +612,36 @@ Vitest.describe("PlantPhotosSheet", () => {
     Vitest.expect(Testing.screen.getAllByAltText(/Photo from/)).toHaveLength(2);
   });
 
-  Vitest.it("should show an error from remove confirmation failure", async () => {
-    const client = buildPhotoClient({
-      getPhotosResults: [photosPage([photo1])],
-      removePhotoResult: { kind: "removeFailed", reason: new Error("server error") },
-    });
+  Vitest.it.each([
+    {
+      removePhotoResult: { kind: "removeFailed" as const, reason: new Error("server error") },
+      expected: "could not be removed",
+    },
+    { removePhotoResult: { kind: "photoMissing" as const }, expected: "no longer exists" },
+  ])(
+    "should show $removePhotoResult.kind error from remove",
+    async ({ removePhotoResult, expected }) => {
+      const client = buildPhotoClient({
+        getPhotosResults: [photosPage([photo1])],
+        removePhotoResult,
+      });
 
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
+      Testing.render(() => (
+        <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
+      ));
 
-    await Testing.screen.findByAltText(/Photo from/);
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Remove photo/ }));
+      await Testing.screen.findByAltText(/Photo from/);
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Remove photo/ }));
+      Testing.fireEvent.click(
+        Testing.within(Testing.screen.getByRole("alertdialog")).getByRole("button", {
+          name: "Remove permanently",
+        }),
+      );
 
-    const confirmation = Testing.screen.getByRole("alertdialog", { name: /Remove photo/ });
-    Testing.fireEvent.click(
-      Testing.within(confirmation).getByRole("button", { name: "Remove permanently" }),
-    );
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "could not be removed",
-    );
-    // List unchanged
-    Vitest.expect(Testing.screen.getAllByAltText(/Photo from/)).toHaveLength(1);
-  });
-
-  Vitest.it("should show photoMissing error from remove", async () => {
-    const client = buildPhotoClient({
-      getPhotosResults: [photosPage([photo1])],
-      removePhotoResult: { kind: "photoMissing" },
-    });
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-
-    await Testing.screen.findByAltText(/Photo from/);
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: /Remove photo/ }));
-    Testing.fireEvent.click(
-      Testing.within(Testing.screen.getByRole("alertdialog")).getByRole("button", {
-        name: "Remove permanently",
-      }),
-    );
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent("no longer exists");
-  });
+      Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(expected);
+      Vitest.expect(Testing.screen.getAllByAltText(/Photo from/)).toHaveLength(1);
+    },
+  );
 
   Vitest.it("should close via Escape when not uploading", async () => {
     const onCancel = Vitest.vi.fn();
@@ -615,39 +660,29 @@ Vitest.describe("PlantPhotosSheet", () => {
     unmount();
   });
 
-  Vitest.it("should not close via Escape while an overlay is open", async () => {
+  Vitest.it("should not close via Escape while a nested modal is open", async () => {
     const onCancel = Vitest.vi.fn();
     const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
 
     Testing.render(() => <PlantPhotosSheet plant={ficus()} photos={client} onCancel={onCancel} />);
 
+    // Overlay open: Escape closes the overlay, not the sheet
     Testing.fireEvent.click(await Testing.screen.findByAltText(/Photo from/));
     Vitest.expect(Testing.screen.getByRole("dialog", { name: "Photo viewer" })).toBeInTheDocument();
-
-    // Escape closes the overlay, not the sheet
     Testing.fireEvent.keyDown(window, { key: "Escape" });
     Vitest.expect(
       Testing.screen.queryByRole("dialog", { name: "Photo viewer" }),
     ).not.toBeInTheDocument();
     Vitest.expect(onCancel).not.toHaveBeenCalled();
-  });
 
-  Vitest.it("should not close via Escape while a remove confirmation is open", async () => {
-    const onCancel = Vitest.vi.fn();
-    const client = buildPhotoClient({ getPhotosResults: [photosPage([photo1])] });
-
-    Testing.render(() => <PlantPhotosSheet plant={ficus()} photos={client} onCancel={onCancel} />);
-    await Testing.screen.findAllByAltText(/Photo from/);
-
+    // Remove confirmation open: Escape does not close the sheet
     Testing.fireEvent.click(
       Testing.screen.getByRole("button", { name: "Remove photo from 15.05.2026 13:00" }),
     );
     Vitest.expect(
       Testing.screen.getByRole("alertdialog", { name: /Remove photo/ }),
     ).toBeInTheDocument();
-
     Testing.fireEvent.keyDown(window, { key: "Escape" });
-
     Vitest.expect(onCancel).not.toHaveBeenCalled();
   });
 
