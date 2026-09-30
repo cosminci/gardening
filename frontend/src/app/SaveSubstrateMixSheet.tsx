@@ -16,6 +16,7 @@ export const SaveSubstrateMixSheet: Component<SaveSubstrateMixSheetProps> = (pro
   const [name, setName] = createSignal("");
   const [notes, setNotes] = createSignal("");
   const [error, setError] = createSignal<string>();
+  const [submitting, setSubmitting] = createSignal(false);
 
   const save = async (): Promise<void> => {
     const trimmedName = name().trim();
@@ -24,19 +25,24 @@ export const SaveSubstrateMixSheet: Component<SaveSubstrateMixSheetProps> = (pro
       return;
     }
     const trimmedNotes = notes().trim();
-    const result = await props.onSave(
-      Journal.substrateMixName(trimmedName),
-      trimmedNotes === "" ? null : Journal.substrateMixNotes(trimmedNotes),
-    );
-    if (result.kind === "added") {
-      props.onClose();
-      return;
+    setSubmitting(true);
+    try {
+      const result = await props.onSave(
+        Journal.substrateMixName(trimmedName),
+        trimmedNotes === "" ? null : Journal.substrateMixNotes(trimmedNotes),
+      );
+      if (result.kind === "added") {
+        props.onClose();
+        return;
+      }
+      const errors = {
+        duplicateSubstrate: "A mix with these exact components and shares is already saved.",
+        addFailed: "The mix could not be saved.",
+      } satisfies Record<typeof result.kind, string>;
+      setError(errors[result.kind]);
+    } finally {
+      setSubmitting(false);
     }
-    const errors = {
-      duplicateSubstrate: "A mix with these exact components and shares is already saved.",
-      addFailed: "The mix could not be saved.",
-    } satisfies Record<typeof result.kind, string>;
-    setError(errors[result.kind]);
   };
 
   onMount(() => {
@@ -97,8 +103,8 @@ export const SaveSubstrateMixSheet: Component<SaveSubstrateMixSheetProps> = (pro
         </label>
         <Show when={error()}>{(message) => <p role="alert">{message()}</p>}</Show>
         <footer class="catalog-editor__actions">
-          <button class="primary-action" type="submit">
-            Save
+          <button class="primary-action" type="submit" disabled={submitting()}>
+            {submitting() ? "Saving…" : "Save"}
           </button>
         </footer>
       </form>

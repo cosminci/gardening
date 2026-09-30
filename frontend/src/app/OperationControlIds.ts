@@ -3,6 +3,8 @@ import type * as Journal from "../domain/Journal";
 export const logOperationControlId = (id: Journal.PlantId) => `log-operation-${id}`;
 export const editOperationControlId = (id: Journal.OperationId) => `edit-operation-${id}`;
 export const deleteOperationControlId = (id: Journal.OperationId) => `delete-operation-${id}`;
+export const editPlantControlId = (id: Journal.PlantId) => `edit-plant-${id}`;
+export const archivePlantControlId = (id: Journal.PlantId) => `archive-plant-${id}`;
 export const addPesticideControlId = "add-pesticide";
 export const editPesticideControlId = (id: Journal.PesticideId) => `edit-pesticide-${id}`;
 export const archivePesticideControlId = (id: Journal.PesticideId) => `archive-pesticide-${id}`;

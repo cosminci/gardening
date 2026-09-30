@@ -18,8 +18,6 @@ import "./sheet.css";
 export type PlantTarget =
   { readonly kind: "add" } | { readonly kind: "edit"; readonly plant: Journal.Plant };
 
-export const editPlantControlId = (plantId: Journal.PlantId) => `edit-plant-${plantId}`;
-
 interface PlantSheetProps {
   readonly target: PlantTarget;
   readonly components: readonly Journal.SubstrateComponent[];
@@ -212,7 +210,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     window.removeEventListener("keydown", onKeyDown);
     const returnFocusId =
       props.target.kind === "edit"
-        ? editPlantControlId(props.target.plant.id)
+        ? Controls.editPlantControlId(props.target.plant.id)
         : props.completed
           ? "garden-toggle"
           : "add-plant";

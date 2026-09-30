@@ -3,10 +3,9 @@ import type { Component, JSX } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
 import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLabels";
-import { logOperationControlId } from "./OperationControlIds";
+import * as Controls from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
-import { editPlantControlId } from "./PlantSheet";
 
 export const plantPhotosControlId = (id: Journal.PlantId) => `plant-photos-${String(id)}`;
 import "./plant-card.css";
@@ -233,7 +232,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               {props.kind !== "cemetery" && (
                 <>
                   <button
-                    id={editPlantControlId(props.plant.id)}
+                    id={Controls.editPlantControlId(props.plant.id)}
                     class="inline-icon-action inline-icon-action--edit"
                     type="button"
                     aria-label={`Edit ${name()}`}
@@ -243,7 +242,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
                     }}
                   />
                   <button
-                    id={`archive-plant-${props.plant.id}`}
+                    id={Controls.archivePlantControlId(props.plant.id)}
                     class="inline-icon-action inline-icon-action--archive"
                     type="button"
                     aria-label={`Archive ${name()}`}
@@ -288,7 +287,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         </Show>
         {props.kind !== "cemetery" && (
           <button
-            id={logOperationControlId(props.plant.id)}
+            id={Controls.logOperationControlId(props.plant.id)}
             class="add-operation"
             type="button"
             aria-label={`Log operation for ${name()}`}

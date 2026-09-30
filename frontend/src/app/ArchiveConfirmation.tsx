@@ -2,6 +2,7 @@ import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { plantDisplayName } from "./JournalLabels";
+import { archivePlantControlId } from "./OperationControlIds";
 
 interface ArchiveConfirmationProps {
   readonly plant: Journal.Plant;
@@ -22,7 +23,7 @@ export const ArchiveConfirmation: Component<ArchiveConfirmationProps> = (props) 
       completed={props.completed}
       returnFocus={{
         kind: "restoreOrFallback",
-        expectedId: `archive-plant-${props.plant.id}`,
+        expectedId: archivePlantControlId(props.plant.id),
         fallbackId: "garden-toggle",
       }}
       onConfirm={props.onConfirm}

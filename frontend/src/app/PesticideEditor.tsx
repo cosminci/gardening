@@ -29,6 +29,7 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
   const [type, setType] = createSignal<Journal.PesticideType>(initial?.data.type ?? "fungicide");
   const [info, setInfo] = createSignal(initial?.data.maybeInfo ?? "");
   const [error, setError] = createSignal<string>();
+  const [submitting, setSubmitting] = createSignal(false);
 
   const save = async (): Promise<void> => {
     const trimmedName = name().trim();
@@ -42,21 +43,26 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
       type: type(),
       maybeInfo: trimmedInfo === "" ? null : Journal.pesticideInfo(trimmedInfo),
     };
-    const result =
-      props.pesticide === undefined
-        ? await props.onAdd(data)
-        : await props.onEdit(props.pesticide.id, data);
-    if (result.kind === "added" || result.kind === "edited") {
-      props.onClose();
-      return;
+    setSubmitting(true);
+    try {
+      const result =
+        props.pesticide === undefined
+          ? await props.onAdd(data)
+          : await props.onEdit(props.pesticide.id, data);
+      if (result.kind === "added" || result.kind === "edited") {
+        props.onClose();
+        return;
+      }
+      const errors = {
+        pesticideMissing: "This pesticide no longer exists.",
+        pesticideArchived: "This pesticide is archived and can no longer be edited.",
+        addFailed: "The pesticide could not be saved.",
+        editFailed: "The pesticide could not be saved.",
+      } satisfies Record<typeof result.kind, string>;
+      setError(errors[result.kind]);
+    } finally {
+      setSubmitting(false);
     }
-    const errors = {
-      pesticideMissing: "This pesticide no longer exists.",
-      pesticideArchived: "This pesticide is archived and can no longer be edited.",
-      addFailed: "The pesticide could not be saved.",
-      editFailed: "The pesticide could not be saved.",
-    } satisfies Record<typeof result.kind, string>;
-    setError(errors[result.kind]);
   };
 
   const archived = () => props.pesticide?.status === "archived";
@@ -155,8 +161,8 @@ export const PesticideEditor: Component<PesticideEditorProps> = (props) => {
                 </button>
               )}
             </Show>
-            <button class="primary-action" type="submit">
-              Save
+            <button class="primary-action" type="submit" disabled={submitting()}>
+              {submitting() ? "Saving…" : "Save"}
             </button>
           </footer>
         </Show>

@@ -83,14 +83,24 @@
   border: 1px solid var(--line);
 }
 
-.photo-thumb__img {
+.photo-thumb__open {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 0;
+  border: 0;
+  background: none;
   cursor: pointer;
 }
 
-.photo-thumb__img:hover {
+.photo-thumb__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-thumb__open:hover .photo-thumb__img {
   opacity: 0.9;
 }
 

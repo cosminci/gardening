@@ -18,10 +18,14 @@ export const makeWsPlantAttentionFeed = (
       listener({ kind: "connectionState", state: "connecting" });
 
       socket.onopen = () => {
+        // A close() only suppresses events the browser has not yet queued; an open/message task
+        // already enqueued before unsubscribe still fires, so guard on stopped like onclose does.
+        if (stopped) return;
         listener({ kind: "connectionState", state: "connected" });
       };
 
       socket.onmessage = ({ data }) => {
+        if (stopped) return;
         try {
           listener({
             kind: "projection",
