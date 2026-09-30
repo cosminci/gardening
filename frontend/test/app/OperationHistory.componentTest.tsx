@@ -2,6 +2,7 @@ import * as Testing from "@solidjs/testing-library";
 import * as Vitest from "vitest";
 import { createSignal } from "solid-js";
 import { OperationHistory, type OperationHistoryChange } from "../../src/app/OperationHistory";
+import { editOperationControlId } from "../../src/app/OperationControlIds";
 import * as Journal from "../../src/domain/Journal";
 import { care, operationsPage } from "./JournalTestSupport";
 
@@ -17,6 +18,10 @@ const older = [
 ];
 
 Vitest.describe("operation history", () => {
+  Vitest.afterEach(() => {
+    Vitest.vi.unstubAllGlobals();
+  });
+
   Vitest.it("should disclose, page, edit, and collapse operation history", async () => {
     const windows: Journal.OperationWindow[] = [];
     const edited: Journal.Operation[] = [];
@@ -424,4 +429,66 @@ Vitest.describe("operation history", () => {
     Vitest.expect(getOperations).toHaveBeenNthCalledWith(2, { offset: 13, size: 10 });
     Vitest.expect(getOperations).toHaveBeenNthCalledWith(3, { offset: 13, size: 10 });
   });
+
+  Vitest.it(
+    "should keep the focus-restore edit id on the viewport-visible operation view",
+    async () => {
+      const listeners = new Set<(event: MediaQueryListEvent) => void>();
+      let cards = true;
+      Vitest.vi.stubGlobal("matchMedia", (media: string) => ({
+        media,
+        get matches() {
+          return cards;
+        },
+        addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+          listeners.delete(listener);
+        },
+      }));
+      const getOperations = Vitest.vi.fn(() => Promise.resolve(operationsPage(older, true)));
+      Testing.render(() => (
+        <OperationHistory
+          plant={recent.plant}
+          substrateComponents={[]}
+          pesticides={[]}
+          getOperations={getOperations}
+          operationChange={undefined}
+          onEdit={() => undefined}
+        />
+      ));
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Show operation history" }),
+      );
+      const cardList = await Testing.screen.findByRole("list", { name: "Older operations" });
+      const table = Testing.screen.getByRole("table");
+      const editName = "Edit historical care operation 1 from 03.03.2026";
+      const controlId = editOperationControlId(firstOlder.id);
+
+      // Narrow viewport: the card twin owns the focus-restore id; the table does not.
+      Vitest.expect(document.querySelectorAll(`#${controlId}`)).toHaveLength(1);
+      Vitest.expect(document.getElementById(controlId)).toBe(
+        Testing.within(cardList).getByRole("button", { name: editName }),
+      );
+      Vitest.expect(
+        Testing.within(table).getByRole("button", { name: editName }),
+      ).not.toHaveAttribute("id");
+
+      // Cross the breakpoint to the wide viewport: the id moves to the table twin.
+      cards = false;
+      listeners.forEach((listener) => {
+        listener({ matches: cards } as MediaQueryListEvent);
+      });
+
+      Vitest.expect(document.querySelectorAll(`#${controlId}`)).toHaveLength(1);
+      Vitest.expect(document.getElementById(controlId)).toBe(
+        Testing.within(table).getByRole("button", { name: editName }),
+      );
+      Vitest.expect(
+        Testing.within(cardList).getByRole("button", { name: editName }),
+      ).not.toHaveAttribute("id");
+    },
+  );
 });

@@ -1,4 +1,14 @@
-import { For, Match, Show, Switch, createEffect, createSignal, on } from "solid-js";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  onMount,
+} from "solid-js";
 import type { Component } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import * as Labels from "./JournalLabels";
@@ -27,6 +37,9 @@ type HistoryState =
 
 export const recentOperationCount = 3;
 const historyPageSize = 10;
+// Mirrors plant-history.css: the cards render at this width, the table above it.
+// Only the visible twin carries the edit id so focus-restore lands on it.
+const cardsBreakpoint = "(max-width: 62rem)";
 
 export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   const [expanded, setExpanded] = createSignal(false);
@@ -39,6 +52,19 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   let pageStatus: HTMLSpanElement | undefined;
   let failureStatus: HTMLParagraphElement | undefined;
   let pendingScrollRestore: ((event: TransitionEvent) => void) | undefined;
+
+  const matchesCards = () =>
+    typeof window.matchMedia === "function" && window.matchMedia(cardsBreakpoint).matches;
+  const [cardsView, setCardsView] = createSignal(matchesCards());
+  onMount(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(cardsBreakpoint);
+    const sync = (event: MediaQueryListEvent) => setCardsView(event.matches);
+    query.addEventListener("change", sync);
+    onCleanup(() => {
+      query.removeEventListener("change", sync);
+    });
+  });
 
   const loadPage = async (page: number, focusResult = false) => {
     const request = ++latestRequest;
@@ -187,6 +213,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                             section="historical"
                             substrateComponents={props.substrateComponents}
                             pesticides={props.pesticides}
+                            ownsEditControlId={cardsView()}
                             onEdit={() => {
                               props.onEdit(operation);
                             }}
@@ -215,7 +242,9 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                               >
                                 <td class="operation-history__edit-cell">
                                   <button
-                                    id={editOperationControlId(operation.id)}
+                                    id={
+                                      cardsView() ? undefined : editOperationControlId(operation.id)
+                                    }
                                     class="inline-icon-action inline-icon-action--edit"
                                     type="button"
                                     aria-label={Labels.operationEditLabel(

@@ -14,6 +14,10 @@ interface OperationCellProps {
   readonly substrateComponents: readonly Journal.SubstrateComponent[];
   readonly pesticides: readonly Journal.Pesticide[];
   readonly onEdit: () => void;
+  // The history card and table render the same operation as twins; only the
+  // viewport-visible twin may carry the focus-restore id so getElementById
+  // resolves to a visible button. Defaults to true (this cell is the sole view).
+  readonly ownsEditControlId?: boolean;
 }
 
 export const OperationCell: Component<OperationCellProps> = (props) => {
@@ -24,6 +28,8 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
   );
   const moisture = careDetails?.moisture;
   const actions = careDetails?.actions;
+  const editControlId = () =>
+    (props.ownsEditControlId ?? true) ? editOperationControlId(props.operation.id) : undefined;
   const pesticideNames = () =>
     careDetails && careDetails.pesticides.size > 0
       ? [...careDetails.pesticides]
@@ -42,7 +48,7 @@ export const OperationCell: Component<OperationCellProps> = (props) => {
           <span class="operation__date-short">{shortDate()}</span>
         </time>
         <button
-          id={editOperationControlId(props.operation.id)}
+          id={editControlId()}
           class="inline-icon-action inline-icon-action--edit"
           type="button"
           aria-label={Labels.operationEditLabel(props.operation, props.position, props.section)}
