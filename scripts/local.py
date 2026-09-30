@@ -51,7 +51,7 @@ def port() -> int:
 
 
 def host() -> str:
-    return os.environ.get("GARDENING_HOST") or "0.0.0.0"
+    return os.environ.get("GARDENING_HOST") or "127.0.0.1"
 
 
 def loopback(bind_host: str) -> str:
@@ -246,8 +246,8 @@ def main() -> None:
             "an existing local journal (or pass --yes). The NAS needs sqlite3. "
             "The frontend is built in watch mode and the backend serves it on "
             "GARDENING_PORT (default 8080); set it if that port is occupied. "
-            "The backend binds 0.0.0.0 so other devices on your network can reach "
-            "it; set GARDENING_HOST=127.0.0.1 to restrict it to this machine. "
+            "The backend binds 127.0.0.1 (this machine only); set "
+            "GARDENING_HOST=0.0.0.0 to expose it to other devices on your network. "
             "Frontend edits rebuild and reload the browser automatically, without "
             "restarting the backend. "
             "Local edits never sync back to the NAS."
