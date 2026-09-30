@@ -28,10 +28,7 @@ object PlantAttentionMonitor:
   def make(settings: Settings)(using
       store: PlantAttentionStore^,
       clock: Clock^
-  )(using
-      log: Logger^,
-      metrics: PlantAttentionMonitorMetricsApi^
-  ): PlantAttentionMonitor^{store, clock, log, metrics} =
+  )(using log: Logger^, metrics: PlantAttentionMonitorMetricsApi^): PlantAttentionMonitor^{store, clock, log, metrics} =
     LivePlantAttentionMonitor(settings)
 
   private class LivePlantAttentionMonitor(settings: Settings)(using store: PlantAttentionStore^, clock: Clock^)(using
@@ -40,10 +37,7 @@ object PlantAttentionMonitor:
   ) extends PlantAttentionMonitor:
     // A failed initial projection means the store is unreachable at startup; crash rather than serve stale data.
     @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
-    private val currentProjection =
-      val initial = computeProjection.toTry.get
-      recordWateringMetrics(initial)
-      AtomicReference(initial)
+    private val currentProjection = computeProjection.toTry.get.tap(recordWateringMetrics).pipe(AtomicReference(_))
 
     override def current: AttentionProjection = currentProjection.get()
 
