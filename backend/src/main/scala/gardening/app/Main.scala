@@ -37,21 +37,21 @@ object Main:
 
     val outcome = Using.resource(AppResources.acquire(SqliteLocation.File(config.storage.dbPath), config.storage.lockTimeout)): resources =>
       supervisedError(EitherMode[Throwable]()):
-        val _ = Flyway.configure().dataSource(resources.dataSource).load().migrate()
-        Programs.make(resources, config, registry).flatMap: programs =>
-          val endpoints = List(HealthApi.serverEndpoint, prometheusMetrics.metricsEndpoint) ++
-            PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
-            AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
-            OperationApi.serverEndpoints(using programs.operations) ++
-            SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
-            PhotoApi.serverEndpoints(config.photo.maxUploadSize)(using programs.photos) ++
-            PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
-            StaticSite.endpoint(config.server.staticDir)
+        val _         = Flyway.configure().dataSource(resources.dataSource).load().migrate()
+        val programs  = Programs.make(resources, config, registry)
+        val endpoints = List(HealthApi.serverEndpoint, prometheusMetrics.metricsEndpoint) ++
+          PlantApi.serverEndpoints(using programs.plants, programs.plantAttentionMonitor) ++
+          AttentionApi.serverEndpoints(using programs.plantAttentionMonitor, feedHeartbeats) ++
+          OperationApi.serverEndpoints(using programs.operations) ++
+          SubstrateApi.serverEndpoints(using programs.substrateCatalog) ++
+          PhotoApi.serverEndpoints(config.photo.maxUploadSize)(using programs.photos) ++
+          PesticideApi.serverEndpoints(using programs.pesticideCatalog) :+
+          StaticSite.endpoint(config.server.staticDir)
 
-          val metricsInterceptor = prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
-          val serverOptions      = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(metricsInterceptor).options
-          log.info(s"gardening backend starting on host=${config.server.host} port=${config.server.port}")
-          NettySyncServer(serverOptions).host(config.server.host).port(config.server.port).addEndpoints(endpoints).startAndWait().asRight
+        val metricsInterceptor = prometheusMetrics.metricsInterceptor(Seq(AttentionApi.attentionFeedEndpoint))
+        val serverOptions      = NettySyncServerOptions.customiseInterceptors.metricsInterceptor(metricsInterceptor).options
+        log.info(s"gardening backend starting on host=${config.server.host} port=${config.server.port}")
+        NettySyncServer(serverOptions).host(config.server.host).port(config.server.port).addEndpoints(endpoints).startAndWait().asRight
 
     outcome.left.foreach(log.error("startup", _))
     if outcome.isLeft then sys.exit(1)

@@ -40,8 +40,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
 
     val refs    = Refs()
     val monitor =
-      buildMonitor(refs, now = () => measurementTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+      buildMonitor(refs, now = () => measurementTime, getAttentionSamplesResults = sampleResults)
     val expectedWatering   = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = elapsedSinceWatering.some)
     val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
 
@@ -68,7 +67,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
       val wateringHistory = wateringDates
       val sampleResults   = Vector(GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory))))
 
-      buildMonitor(now = () => referenceTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed")).current
+      buildMonitor(now = () => referenceTime, getAttentionSamplesResults = sampleResults).current
 
     val expected =
       cases.map((_, expectedWatering) => AttentionProjection(measuredAt = referenceTime, plants = Vector(PlantAttention(plant.id, expectedWatering))))
@@ -76,7 +75,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     assertEquals(actual, expected)
 
   test("should publish an empty projection when there are no active plants"):
-    val monitor            = buildMonitor().getOrElse(fail("initial attention failed"))
+    val monitor            = buildMonitor()
     val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector.empty)
 
     assertEquals(monitor.current, expectedProjection)
@@ -86,8 +85,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
-    val monitor = buildMonitor(getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val monitor            = buildMonitor(getAttentionSamplesResults = sampleResults)
     val expectedWatering   = WateringAttention.Unavailable(sampleCount = 0, maybeElapsed = none)
     val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
 
@@ -99,8 +97,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
-    val monitor = buildMonitor(getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val monitor            = buildMonitor(getAttentionSamplesResults = sampleResults)
     val expectedWatering   = WateringAttention.Current(sampleCount = 5, averageInterval = 0.millis, elapsed = 0.millis)
     val expectedProjection = AttentionProjection(measuredAt = referenceTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
 
@@ -113,8 +110,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesRead     = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults   = Vector(samplesRead)
 
-    val monitor = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val monitor            = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults)
     val expectedWatering   = WateringAttention.Overdue(sampleCount = 5, averageInterval = 0.millis, elapsed = 1.milli)
     val expectedProjection = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
 
@@ -130,9 +126,8 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults          = Vector(samplesRead)
 
-    val currentTime = AtomicReference(initialMeasurementTime)
-    val monitor = buildMonitor(now = () => currentTime.get(), getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val currentTime        = AtomicReference(initialMeasurementTime)
+    val monitor            = buildMonitor(now = () => currentTime.get(), getAttentionSamplesResults = sampleResults)
     val initialWatering    = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = initialElapsed)
     val expectedProjection = AttentionProjection(measuredAt = initialMeasurementTime, plants = Vector(PlantAttention(plant.id, initialWatering)))
 
@@ -148,8 +143,8 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesRead            = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, wateringHistory)))
     val sampleResults          = Vector(samplesRead)
 
-    val currentTime = AtomicReference(initialMeasurementTime)
-    val monitor = buildMonitor(now = () => currentTime.get(), getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
+    val currentTime              = AtomicReference(initialMeasurementTime)
+    val monitor                  = buildMonitor(now = () => currentTime.get(), getAttentionSamplesResults = sampleResults)
     val refreshedMeasurementTime = initialMeasurementTime + 1.day
     currentTime.set(refreshedMeasurementTime)
     val refreshResult = monitor.refreshAll
@@ -184,8 +179,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val afterWatering         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, afterWateringHistory)))
     val sampleResults         = Vector(beforeWatering, afterWatering)
 
-    val monitor = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val monitor               = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults)
     val expectedWatering      = WateringAttention.Current(sampleCount = 5, averageInterval = averageInterval, elapsed = elapsedSinceWatering)
     val refreshedProjection   = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
     val expectedRefreshResult = RefreshAttentionResult.Refreshed(refreshedProjection)
@@ -205,8 +199,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val afterRemoval         = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(plant.id, afterRemovalHistory)))
     val sampleResults        = Vector(beforeRemoval, afterRemoval)
 
-    val monitor = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
-
+    val monitor               = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults)
     val expectedWatering      = WateringAttention.Unavailable(sampleCount = 4, maybeElapsed = elapsedSinceWatering.some)
     val refreshedProjection   = AttentionProjection(measuredAt = measurementTime, plants = Vector(PlantAttention(plant.id, expectedWatering)))
     val expectedRefreshResult = RefreshAttentionResult.Refreshed(refreshedProjection)
@@ -225,7 +218,7 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val samplesReadFailed    = GetAttentionSamplesResult.ReadFailed(failure)
     val sampleResults        = Vector(samplesRead, samplesReadFailed)
 
-    val monitor = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults).getOrElse(fail("initial attention failed"))
+    val monitor           = buildMonitor(now = () => measurementTime, getAttentionSamplesResults = sampleResults)
     val initialProjection = monitor.current
 
     val expectedRefreshResult = RefreshAttentionResult.RefreshFailed(failure)
@@ -239,9 +232,8 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val initialSamples  = GetAttentionSamplesResult.Read(
       Vector(PlantAttentionSample(plant.id, wateringHistory), PlantAttentionSample(remainingPlant.id, wateringHistory))
     )
-    val refreshedSamples = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(remainingPlant.id, wateringHistory)))
-    val monitor = buildMonitor(getAttentionSamplesResults = Vector(initialSamples, refreshedSamples)).getOrElse(fail("initial attention failed"))
-
+    val refreshedSamples  = GetAttentionSamplesResult.Read(Vector(PlantAttentionSample(remainingPlant.id, wateringHistory)))
+    val monitor           = buildMonitor(getAttentionSamplesResults = Vector(initialSamples, refreshedSamples))
     val initialProjection = monitor.current
     val refreshed         = monitor.refreshAll
     val currentProjection = monitor.current
@@ -257,11 +249,9 @@ class PlantAttentionMonitorComponentTest extends munit.FunSuite with TestImplici
     val failure           = RuntimeException("store down")
     val samplesReadFailed = GetAttentionSamplesResult.ReadFailed(failure)
 
-    val monitorResult = buildMonitor(getAttentionSamplesResults = Vector(samplesReadFailed))
+    val thrown = intercept[RuntimeException](buildMonitor(getAttentionSamplesResults = Vector(samplesReadFailed)))
 
-    val expectedResult = Left(failure)
-
-    assertEquals(monitorResult, expectedResult)
+    assertEquals(thrown, failure)
 
   extension (instant: Instant)
     private def +(duration: FiniteDuration) = instant.plus(duration.toJava)

@@ -31,14 +31,19 @@ object PlantAttentionMonitor:
   )(using
       log: Logger^,
       metrics: PlantAttentionMonitorMetricsApi^
-  ): Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
-    LivePlantAttentionMonitor(settings).start
+  ): PlantAttentionMonitor^{store, clock, log, metrics} =
+    LivePlantAttentionMonitor(settings)
 
   private class LivePlantAttentionMonitor(settings: Settings)(using store: PlantAttentionStore^, clock: Clock^)(using
       log: Logger^,
       metrics: PlantAttentionMonitorMetricsApi^
   ) extends PlantAttentionMonitor:
-    private val currentProjection = AtomicReference(AttentionProjection(clock.now(), Vector.empty))
+    // A failed initial projection means the store is unreachable at startup; crash rather than serve stale data.
+    @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
+    private val currentProjection =
+      val initial = computeProjection.toTry.get
+      recordWateringMetrics(initial)
+      AtomicReference(initial)
 
     override def current: AttentionProjection = currentProjection.get()
 
@@ -51,12 +56,6 @@ object PlantAttentionMonitor:
           logLevelTransitions(projection, previousLevels)
           recordWateringMetrics(projection)
           RefreshAttentionResult.Refreshed(projection)
-
-    private[PlantAttentionMonitor] def start: Either[Throwable, PlantAttentionMonitor^{store, clock, log, metrics}] =
-      computeProjection.map: projection =>
-        currentProjection.set(projection)
-        recordWateringMetrics(projection)
-        this
 
     private def computeProjection: Either[Throwable, AttentionProjection] =
       store.getAttentionSamples(size = settings.historySize) match

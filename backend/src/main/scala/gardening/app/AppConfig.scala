@@ -1,11 +1,10 @@
 package gardening.app
 
-import io.github.iltotore.iron.*
-import io.github.iltotore.iron.constraint.numeric.GreaterEqual
+import gardening.usecases.PlantAttentionMonitor
 import io.github.iltotore.iron.pureconfig.given
-import _root_.pureconfig.*
-import _root_.pureconfig.error.FailureReason
-import _root_.pureconfig.module.squants.given
+import pureconfig.*
+import pureconfig.error.FailureReason
+import pureconfig.module.squants.given
 import squants.information.Information
 
 import java.nio.file.Path
@@ -15,13 +14,9 @@ final case class ServerConfig(host: String, port: Int, staticDir: String) derive
 
 final case class StorageConfig(dbPath: String, lockTimeout: FiniteDuration, photosDir: Path) derives ConfigReader
 
-final case class WateringConfig(
-    minSampleCount: Int :| GreaterEqual[2],
-    maxSampleCount: Int :| GreaterEqual[2],
-    overdueGracePeriod: FiniteDuration
-) derives ConfigReader
+given ConfigReader[PlantAttentionMonitor.Settings] = ConfigReader.derived
 
-final case class AttentionConfig(feedStalenessThreshold: FiniteDuration, recomputeInterval: FiniteDuration, watering: WateringConfig)
+final case class AttentionConfig(feedStalenessThreshold: FiniteDuration, recomputeInterval: FiniteDuration, watering: PlantAttentionMonitor.Settings)
     derives ConfigReader
 
 final case class PhotoConfig(maxUploadSize: Information, maxThumbnailSize: Information) derives ConfigReader
@@ -35,16 +30,15 @@ object AppConfig:
   given ConfigReader[AppConfig] = ConfigReader.derived[AppConfig].emap: config =>
     // Cross-field and positivity rules the refined types can't express; a failure names field and value.
     val watering = config.attention.watering
-    val photo    = config.photo
+    val min      = watering.minSampleCount
+    val size     = watering.historySize
     for
-      _ <- check(
-        watering.minSampleCount <= watering.maxSampleCount,
-        s"gardening.attention.watering.max-sample-count (${watering.maxSampleCount}) must be >= min-sample-count (${watering.minSampleCount})"
-      )
+      _ <- check(min >= 2, s"gardening.attention.watering.min-sample-count ($min) must be >= 2")
+      _ <- check(min <= size, s"gardening.attention.watering.history-size ($size) must be >= min-sample-count ($min)")
       _ <- checkPositive("gardening.attention.watering.overdue-grace-period", watering.overdueGracePeriod)
       _ <- checkPositive("gardening.attention.recompute-interval", config.attention.recomputeInterval)
-      _ <- checkPositive("gardening.photo.max-upload-size", photo.maxUploadSize)
-      _ <- checkPositive("gardening.photo.max-thumbnail-size", photo.maxThumbnailSize)
+      _ <- checkPositive("gardening.photo.max-upload-size", config.photo.maxUploadSize)
+      _ <- checkPositive("gardening.photo.max-thumbnail-size", config.photo.maxThumbnailSize)
     yield config
 
   def load(): AppConfig = ConfigSource.default.at("gardening").loadOrThrow[AppConfig]
