@@ -57,11 +57,11 @@
 
 .sheet-collapse__icon {
   display: block;
-  width: 1rem;
-  height: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
   background-color: currentcolor;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 4 15 12 9 20'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 4 15 12 9 20'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9.5 6 16.5 12 9.5 18'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9.5 6 16.5 12 9.5 18'/%3E%3C/svg%3E");
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
@@ -86,14 +86,12 @@
 
 @media (max-width: 46rem) and (orientation: portrait) {
   .sheet {
-    top: auto;
+    top: 0;
     right: 0;
     bottom: 0;
     left: 0;
     width: 100%;
     height: auto;
-    max-height: 100vh;
-    max-height: 100dvh;
     border-radius: 1rem 1rem 0 0;
     box-shadow: 0 -8px 30px rgb(14 37 28 / 20%);
     transition-duration: 260ms;
@@ -107,6 +105,12 @@
 
   .sheet-layer .sheet--closing {
     transform: translateY(100%);
+  }
+
+  /* The sheet slides up from the bottom here, so collapsing pushes it back
+     down — point the chevron down to match. */
+  .sheet-collapse__icon {
+    transform: rotate(90deg);
   }
 
   /*
@@ -124,6 +128,9 @@
 
   .sheet--catalog-editor {
     top: 5.25rem;
+    /* The first sheet stays put here (no desktop slide-away reveal), so the
+       nested editor must slide itself up on open, mirroring its close. */
+    animation: sheet-enter-up 260ms ease;
   }
 }
 

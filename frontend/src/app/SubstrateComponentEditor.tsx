@@ -23,6 +23,7 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
   const [name, setName] = createSignal<string>(initial?.data.name ?? "");
   const [info, setInfo] = createSignal(initial?.data.maybeInfo ?? "");
   const [error, setError] = createSignal<string>();
+  const [submitting, setSubmitting] = createSignal(false);
 
   const save = async (): Promise<void> => {
     const trimmedName = name().trim();
@@ -35,25 +36,30 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
       name: Journal.substrateComponentName(trimmedName),
       maybeInfo: trimmedInfo === "" ? null : Journal.substrateComponentInfo(trimmedInfo),
     };
-    const result =
-      props.component === undefined
-        ? await props.onAdd(data)
-        : await props.onEdit(props.component.id, data);
-    // vitest 5's coverage-v8 (ast-v8-to-istanbul) miscounts this branch: it is fully covered in
-    // isolation but the converter reports a negative else-count once this component's coverage is
-    // merged with PlantSheet.componentTest's data. Exclude the phantom branch, not real logic.
-    /* v8 ignore next */
-    if (result.kind === "added" || result.kind === "edited") {
-      props.onClose();
-      return;
+    setSubmitting(true);
+    try {
+      const result =
+        props.component === undefined
+          ? await props.onAdd(data)
+          : await props.onEdit(props.component.id, data);
+      // vitest 5's coverage-v8 (ast-v8-to-istanbul) miscounts this branch: it is fully covered in
+      // isolation but the converter reports a negative else-count once this component's coverage is
+      // merged with PlantSheet.componentTest's data. Exclude the phantom branch, not real logic.
+      /* v8 ignore next */
+      if (result.kind === "added" || result.kind === "edited") {
+        props.onClose();
+        return;
+      }
+      const errors = {
+        componentMissing: "This substrate component no longer exists.",
+        componentArchived: "This substrate component is archived and can no longer be edited.",
+        addFailed: "The substrate component could not be saved.",
+        editFailed: "The substrate component could not be saved.",
+      } satisfies Record<typeof result.kind, string>;
+      setError(errors[result.kind]);
+    } finally {
+      setSubmitting(false);
     }
-    const errors = {
-      componentMissing: "This substrate component no longer exists.",
-      componentArchived: "This substrate component is archived and can no longer be edited.",
-      addFailed: "The substrate component could not be saved.",
-      editFailed: "The substrate component could not be saved.",
-    } satisfies Record<typeof result.kind, string>;
-    setError(errors[result.kind]);
   };
 
   const archived = () => props.component?.status === "archived";
@@ -143,8 +149,8 @@ export const SubstrateComponentEditor: Component<SubstrateComponentEditorProps> 
                 </button>
               )}
             </Show>
-            <button class="primary-action" type="submit">
-              Save
+            <button class="primary-action" type="submit" disabled={submitting()}>
+              {submitting() ? "Saving…" : "Save"}
             </button>
           </footer>
         </Show>

@@ -2,9 +2,11 @@ import { Show, createSignal, onCleanup, onMount, untrack } from "solid-js";
 import type { Component } from "solid-js";
 import * as Journal from "../domain/Journal";
 import { useBackgroundBarrier } from "./BackgroundBarrier";
+import * as Labels from "./JournalLabels";
 import { LoadSubstrateMixSheet } from "./LoadSubstrateMixSheet";
 import * as Controls from "./OperationControlIds";
 import { SaveSubstrateMixSheet } from "./SaveSubstrateMixSheet";
+import { waitForSheetTransition } from "./SheetTransition";
 import { SubstrateComponentArchiveConfirmation } from "./SubstrateComponentArchiveConfirmation";
 import { SubstrateComponentEditor } from "./SubstrateComponentEditor";
 import { SubstrateFields, validateSubstrate } from "./SubstrateFields";
@@ -15,8 +17,6 @@ import "./sheet.css";
 
 export type PlantTarget =
   { readonly kind: "add" } | { readonly kind: "edit"; readonly plant: Journal.Plant };
-
-export const editPlantControlId = (plantId: Journal.PlantId) => `edit-plant-${plantId}`;
 
 interface PlantSheetProps {
   readonly target: PlantTarget;
@@ -86,11 +86,6 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
   const [archiveTarget, setArchiveTarget] = createSignal<Journal.SubstrateComponent>();
   const [archiveCompleted, setArchiveCompleted] = createSignal(false);
   useBackgroundBarrier();
-
-  const waitForSheetTransition = () =>
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 180);
-    });
 
   const closeSheets = async (target: "editor" | "plant") => {
     if (closingSheet() !== undefined) return;
@@ -187,11 +182,10 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     try {
       result = await props.onArchiveComponent(component.id);
     } catch {
-      return "The substrate component could not be archived.";
+      return Labels.substrateComponentArchiveFailedMessage;
     }
-    if (result.kind === "componentMissing") return "This substrate component no longer exists.";
-    if (result.kind === "alreadyArchived") return "This substrate component was already archived.";
-    if (result.kind === "archiveFailed") return "The substrate component could not be archived.";
+    const message = Labels.substrateComponentArchiveMessage(result);
+    if (message !== undefined) return message;
     setArchiveCompleted(true);
     setArchiveTarget(undefined);
     const currentEditor = editor();
@@ -216,7 +210,7 @@ export const PlantSheet: Component<PlantSheetProps> = (props) => {
     window.removeEventListener("keydown", onKeyDown);
     const returnFocusId =
       props.target.kind === "edit"
-        ? editPlantControlId(props.target.plant.id)
+        ? Controls.editPlantControlId(props.target.plant.id)
         : props.completed
           ? "garden-toggle"
           : "add-plant";

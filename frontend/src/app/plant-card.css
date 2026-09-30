@@ -238,7 +238,9 @@
   }
 }
 
-@media (max-width: 62rem) and (orientation: landscape) {
+/* Sideways layouts have horizontal room, so the actions recover to a row at any
+   width — a large landscape tablet is still coarse-pointer but is not narrow. */
+@media (orientation: landscape) {
   .plant-card__actions {
     flex-direction: row;
   }

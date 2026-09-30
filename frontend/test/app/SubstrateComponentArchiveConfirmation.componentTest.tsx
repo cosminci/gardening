@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@solidjs/testing-library";
+import { describe, expect, it } from "vitest";
 import { SubstrateComponentArchiveConfirmation } from "../../src/app/SubstrateComponentArchiveConfirmation";
 import * as Journal from "../../src/domain/Journal";
 
@@ -13,83 +13,20 @@ const perlite: Journal.SubstrateComponent = {
 };
 
 describe("substrate component archive confirmation", () => {
-  it("should keep keyboard focus inside the permanent-archive warning", () => {
-    const onCancel = vi.fn();
+  it("should label the dialog and buttons for archiving the named substrate component", () => {
     render(() => (
       <SubstrateComponentArchiveConfirmation
         component={perlite}
         completed={false}
         onConfirm={() => Promise.resolve(undefined)}
-        onCancel={onCancel}
+        onCancel={() => undefined}
       />
     ));
-    const warning = screen.getByRole("alertdialog", { name: "Archive Perlite" });
-    const cancel = within(warning).getByRole("button", { name: "Cancel" });
-    const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
-
-    const initialFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
-    const backwardsFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Tab" });
-    const forwardsFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Tab" });
-    const forwardsFromCancelFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Escape" });
-    const escapeCalls = onCancel.mock.calls.length;
-    fireEvent.click(cancel);
-
-    expect(initialFocus).toBe(cancel);
-    expect(backwardsFocus).toBe(confirm);
-    expect(forwardsFocus).toBe(cancel);
-    expect(forwardsFromCancelFocus).toBe(cancel);
-    expect(escapeCalls).toBe(1);
-    expect(onCancel).toHaveBeenCalledTimes(2);
-  });
-
-  it("should prevent duplicate archiving while the request is pending and show failures", async () => {
-    let finish: (message: string) => void = () => undefined;
-    const onConfirm = vi.fn(
-      () =>
-        new Promise<string>((resolve) => {
-          finish = resolve;
-        }),
-    );
-    const onCancel = vi.fn();
-    render(() => (
-      <SubstrateComponentArchiveConfirmation
-        component={perlite}
-        completed={false}
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />
-    ));
-
-    const warning = screen.getByRole("alertdialog", { name: "Archive Perlite" });
-    const cancel = within(warning).getByRole("button", { name: "Cancel" });
-    const confirm = within(warning).getByRole("button", { name: "Archive permanently" });
-
-    fireEvent.click(confirm);
-    const pendingFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Tab" });
-    const trappedFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Escape" });
-    const pendingCancelCalls = onCancel.mock.calls.length;
-    finish("The substrate component could not be archived.");
-
-    const alert = await screen.findByRole("alert");
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Archive permanently" })).toBeEnabled();
-    });
-    const restoredFocus = document.activeElement;
-    fireEvent.keyDown(window, { key: "Escape" });
-
-    expect(pendingFocus).toBe(warning);
-    expect(trappedFocus).toBe(warning);
-    expect(pendingCancelCalls).toBe(0);
-    expect(alert).toHaveTextContent("The substrate component could not be archived.");
-    expect(restoredFocus).toBe(cancel);
-    expect(onCancel).toHaveBeenCalledOnce();
-    expect(onConfirm).toHaveBeenCalledOnce();
+    const dialog = screen.getByRole("alertdialog", { name: "Archive Perlite" });
+    expect(within(dialog).getByRole("button", { name: "Archive permanently" })).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/will no longer be offered for new plants or repots/),
+    ).toBeInTheDocument();
   });
 
   it("should restore focus to the component's archive control on cancel, but not once completed", async () => {

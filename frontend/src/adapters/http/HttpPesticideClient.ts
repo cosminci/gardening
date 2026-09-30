@@ -2,6 +2,7 @@ import type { components, paths } from "@contract";
 import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { PesticideClient } from "../../domain/PesticideCatalog";
+import { coerceToError } from "./HttpError";
 
 type Wire = components["schemas"];
 
@@ -84,5 +85,4 @@ const toWirePesticideData = (value: Journal.PesticideData): Wire["PesticideData"
   info: value.maybeInfo,
 });
 
-const requestFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("journal request failed");
+const requestFailure = (error: unknown): Error => coerceToError(error, "journal request failed");

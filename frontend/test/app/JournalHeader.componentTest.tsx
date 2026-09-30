@@ -44,11 +44,12 @@ describe("journal header backend indicator", () => {
     expect(indicatorPrecedesAddPlant).toBeTruthy();
   });
 
-  it("should keep the backend indicator visible before the journal loads", () => {
+  it("should keep the backend indicator visible before the journal loads, hiding add-plant and search", () => {
     render(() => <JournalHeader {...baseProps} loaded={false} />);
 
     expect(screen.getByRole("status", { name: "Backend connected" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add plant" })).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
   });
 
   it("should await the first attention update before reporting freshness", () => {
@@ -98,12 +99,6 @@ describe("journal header search box", () => {
     expect(
       search.compareDocumentPosition(gardenToggle) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  });
-
-  it("should hide the search box before the journal loads, like add-plant", () => {
-    render(() => <JournalHeader {...baseProps} loaded={false} />);
-
-    expect(screen.queryByRole("searchbox")).toBeNull();
   });
 
   it("should report typed input through onSearchQuery", () => {

@@ -134,6 +134,50 @@ describe("plant attention ordering", () => {
     expect(orderedPlantIds).toEqual(["second", "first"]);
   });
 
+  it("should order all four watering kinds: unavailable first, then scored plants by urgency", () => {
+    const unavailablePlant = { ...referencePlant, id: Journal.plantId("unavailable") };
+    const currentPlant = { ...referencePlant, id: Journal.plantId("current") };
+    const overduePlant = { ...referencePlant, id: Journal.plantId("overdue") };
+    const redAlertPlant = { ...referencePlant, id: Journal.plantId("red-alert") };
+    const unavailable: Journal.PlantAttention = {
+      plant: unavailablePlant,
+      watering: { kind: "unavailable", sampleCount: 0, maybeElapsed: null },
+    };
+    const current: Journal.PlantAttention = {
+      plant: currentPlant,
+      watering: {
+        kind: "current",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("43200000"),
+      },
+    };
+    const overdue: Journal.PlantAttention = {
+      plant: overduePlant,
+      watering: {
+        kind: "overdue",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("90000000"),
+      },
+    };
+    const redAlert: Journal.PlantAttention = {
+      plant: redAlertPlant,
+      watering: {
+        kind: "redAlert",
+        sampleCount: 5,
+        averageInterval: Journal.milliseconds("86400000"),
+        elapsed: Journal.milliseconds("172800000"),
+      },
+    };
+
+    const orderedIds = orderPlantAttention([current, redAlert, unavailable, overdue]).map(
+      ({ plant }) => plant.id,
+    );
+
+    expect(orderedIds).toEqual(["unavailable", "red-alert", "overdue", "current"]);
+  });
+
   it("should preserve input order for plants without a watering deadline", () => {
     const watering: Journal.WateringAttention = {
       kind: "unavailable",

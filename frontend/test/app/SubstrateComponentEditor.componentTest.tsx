@@ -175,6 +175,37 @@ Vitest.describe("SubstrateComponentEditor", () => {
     },
   );
 
+  Vitest.it("should prevent another save while a save is in progress", async () => {
+    let finishSaving!: (result: { kind: "added"; entry: typeof perlite }) => void;
+    const saving = new Promise<{ kind: "added"; entry: typeof perlite }>((resolve) => {
+      finishSaving = resolve;
+    });
+    const onAdd = Vitest.vi.fn(() => saving);
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
+      <SubstrateComponentEditor
+        component={undefined}
+        onAdd={onAdd}
+        onEdit={() => Promise.resolve({ kind: "edited", entry: perlite })}
+        onClose={onClose}
+      />
+    ));
+
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Pumice" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    const savingButton = Testing.screen.getByRole("button", { name: "Saving…" });
+    Vitest.expect(savingButton).toBeDisabled();
+    Testing.fireEvent.click(savingButton);
+    Vitest.expect(onAdd).toHaveBeenCalledOnce();
+
+    finishSaving({ kind: "added", entry: perlite });
+    await Testing.waitFor(() => {
+      Vitest.expect(onClose).toHaveBeenCalledOnce();
+    });
+  });
+
   Vitest.it("should collapse without saving", () => {
     const onClose = Vitest.vi.fn();
     Testing.render(() => (

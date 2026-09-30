@@ -4,6 +4,7 @@ import type * as Journal from "../domain/Journal";
 import * as Labels from "./JournalLabels";
 import { editOperationControlId } from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
+import { useCardsView } from "./useCardsView";
 
 export type OperationHistoryChange =
   | { readonly kind: "logged" }
@@ -39,6 +40,10 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
   let pageStatus: HTMLSpanElement | undefined;
   let failureStatus: HTMLParagraphElement | undefined;
   let pendingScrollRestore: ((event: TransitionEvent) => void) | undefined;
+
+  // Only the viewport-visible twin (cards or table) carries the edit id, so
+  // focus-restore lands on it.
+  const cardsView = useCardsView();
 
   const loadPage = async (page: number, focusResult = false) => {
     const request = ++latestRequest;
@@ -187,6 +192,7 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                             section="historical"
                             substrateComponents={props.substrateComponents}
                             pesticides={props.pesticides}
+                            ownsEditControlId={cardsView()}
                             onEdit={() => {
                               props.onEdit(operation);
                             }}
@@ -215,7 +221,9 @@ export const OperationHistory: Component<OperationHistoryProps> = (props) => {
                               >
                                 <td class="operation-history__edit-cell">
                                   <button
-                                    id={editOperationControlId(operation.id)}
+                                    id={
+                                      cardsView() ? undefined : editOperationControlId(operation.id)
+                                    }
                                     class="inline-icon-action inline-icon-action--edit"
                                     type="button"
                                     aria-label={Labels.operationEditLabel(

@@ -61,25 +61,6 @@ describe("HttpOperationClient", () => {
     expect(offlineDates).toMatchObject({ kind: "readFailed" });
   });
 
-  it("should reject logging an operation after its plant has been archived", async () => {
-    const client = makeHttpOperationClient(
-      respondingWith([jsonResponse({ message: "archived plant" }, 409)]),
-    );
-    const plantId = Journal.plantId("p1");
-    const date = Journal.instant("2026-04-03T18:00:00Z");
-    const care: Journal.OperationDetails = {
-      kind: "care",
-      actions: new Set(["watered"]),
-      pesticides: new Set(),
-      moisture: "wet",
-      maybeNote: null,
-    };
-
-    const result = await client.logOperation(plantId, date, care);
-
-    expect(result).toEqual({ kind: "plantArchived" });
-  });
-
   it("should translate plant and operation responses into domain values", async () => {
     const pesticide = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const requests: Request[] = [];
@@ -174,6 +155,7 @@ describe("HttpOperationClient", () => {
     const fetch = respondingWith(
       [
         jsonResponse({ id: "logged" }, 201),
+        jsonResponse({ message: "archived plant" }, 409),
         jsonResponse({ message: "operation type cannot be changed" }, 409),
         repotResponse("Fresh"),
         repotResponse(null),
@@ -200,8 +182,24 @@ describe("HttpOperationClient", () => {
         maybeNote: Journal.note("Fresh"),
       },
     };
+    const careRequestBody = {
+      plantId: "p1",
+      date: "2026-01-01T00:00:00Z",
+      details: {
+        kind: "care",
+        actions: ["watered"],
+        pesticides: ["00000000-0000-4000-8001-000000000003"],
+        moisture: "wet",
+        notes: null,
+      },
+    };
 
     const loggedResult = await client.logOperation(
+      Journal.plantId("p1"),
+      Journal.instant("2026-01-01T00:00:00Z"),
+      care,
+    );
+    const archivedResult = await client.logOperation(
       Journal.plantId("p1"),
       Journal.instant("2026-01-01T00:00:00Z"),
       care,
@@ -217,22 +215,14 @@ describe("HttpOperationClient", () => {
     const expectedLogged = { kind: "logged", id: Journal.operationId("logged") };
     const expectedPaths = [
       "POST /operations",
+      "POST /operations",
       "PUT /operations/o1",
       "PUT /operations/o1",
       "PUT /operations/o1",
     ];
     const expectedRequests = [
-      {
-        plantId: "p1",
-        date: "2026-01-01T00:00:00Z",
-        details: {
-          kind: "care",
-          actions: ["watered"],
-          pesticides: ["00000000-0000-4000-8001-000000000003"],
-          moisture: "wet",
-          notes: null,
-        },
-      },
+      careRequestBody,
+      careRequestBody,
       {
         kind: "repot",
         substrate: [{ componentId: perliteId, share: 80 }],
@@ -250,6 +240,7 @@ describe("HttpOperationClient", () => {
       },
     ];
     expect(loggedResult).toEqual(expectedLogged);
+    expect(archivedResult).toEqual({ kind: "plantArchived" });
     expect(mismatchResult).toEqual({ kind: "operationTypeMismatch" });
     expect(editedResult).toMatchObject({ kind: "edited", operation: expectedOperation });
     expect(clearedResult).toMatchObject({ operation: { details: { maybeNote: null } } });
@@ -314,6 +305,7 @@ describe("HttpOperationClient", () => {
 
   it("should delete an operation and preserve its outcomes", async () => {
     const requests: Request[] = [];
+    const reason = new Error("offline");
     const client = makeHttpOperationClient(
       respondingWith(
         [
@@ -325,16 +317,19 @@ describe("HttpOperationClient", () => {
         requests,
       ),
     );
+    const offlineClient = makeHttpOperationClient(respondingWith([reason]));
 
     const deleted = await client.deleteOperation(Journal.operationId("o1"));
     const missing = await client.deleteOperation(Journal.operationId("missing"));
     const latestRepot = await client.deleteOperation(Journal.operationId("repot"));
     const failed = await client.deleteOperation(Journal.operationId("o1"));
+    const offline = await offlineClient.deleteOperation(Journal.operationId("o1"));
 
     expect(deleted).toEqual({ kind: "deleted" });
     expect(missing).toEqual({ kind: "operationMissing" });
     expect(latestRepot).toEqual({ kind: "cannotDeleteLatestRepot" });
     expect(failed).toMatchObject({ kind: "deleteFailed" });
+    expect(offline).toEqual({ kind: "deleteFailed", reason });
     const requestedPaths = requests.map(
       (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
@@ -344,14 +339,5 @@ describe("HttpOperationClient", () => {
       "DELETE /operations/repot",
       "DELETE /operations/o1",
     ]);
-  });
-
-  it("should translate a deletion network failure into an explicit domain failure", async () => {
-    const reason = new Error("offline");
-    const client = makeHttpOperationClient(respondingWith([reason]));
-
-    const offlineDelete = await client.deleteOperation(Journal.operationId("o1"));
-
-    expect(offlineDelete).toEqual({ kind: "deleteFailed", reason });
   });
 });

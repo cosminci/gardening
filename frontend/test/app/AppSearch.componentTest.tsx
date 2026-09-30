@@ -95,6 +95,49 @@ describe("searching the journal", () => {
     expect(screen.getByRole("button", { name: /Garden.*2 plants/ })).toBeInTheDocument();
   });
 
+  it("should filter the cemetery view live by species, nickname, or location", async () => {
+    const archivedFicus = {
+      ...JournalFixtures.ficus(),
+      details: { ...JournalFixtures.ficus().details, status: "archived" as const },
+    };
+    const archivedMonstera = {
+      ...JournalFixtures.monstera(),
+      details: { ...JournalFixtures.monstera().details, status: "archived" as const },
+    };
+    const base = JournalFixtures.buildJournal({
+      attentionProjection: { measuredAt: instant("2026-01-01T00:00:00Z"), plants: [] },
+      getOperationsByPlantId: {
+        p1: [JournalFixtures.operationsPage()],
+        p2: [JournalFixtures.operationsPage()],
+      },
+    });
+    const journal = {
+      ...base,
+      getPlants: (status?: string) =>
+        Promise.resolve({
+          kind: "read" as const,
+          plants: status === "archived" ? [archivedFicus, archivedMonstera] : [],
+        }),
+      getArchivedCount: () => Promise.resolve({ kind: "read" as const, count: 2 }),
+    };
+
+    renderJournal(journal);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Cemetery.*2 plants/ }));
+    await screen.findByRole("article", { name: "Fern" });
+    await screen.findByRole("article", { name: "Monstera deliciosa" });
+
+    const search = screen.getByRole("searchbox");
+    fireEvent.input(search, { target: { value: "kitchen" } });
+
+    expect(screen.getByRole("article", { name: "Monstera deliciosa" })).toBeInTheDocument();
+    expect(screen.queryByRole("article", { name: "Fern" })).toBeNull();
+
+    fireEvent.input(search, { target: { value: "" } });
+    expect(screen.getByRole("article", { name: "Fern" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Monstera deliciosa" })).toBeInTheDocument();
+  });
+
   it("should clear the search query when switching between garden and cemetery", async () => {
     const archivedPlant = {
       ...JournalFixtures.monstera(),

@@ -205,12 +205,6 @@ describe("OperationForm", () => {
     expect(Testing.screen.getByRole("tooltip", { name: /Improves drainage/ })).toHaveTextContent(
       "Improves drainage. Use up to 30%.",
     );
-    const substrateInfo = Testing.screen.getByRole("button", { name: "Information about Perlite" });
-    substrateInfo.focus();
-    Testing.fireEvent.keyDown(substrateInfo, { key: "Enter" });
-    expect(substrateInfo).toHaveFocus();
-    Testing.fireEvent.keyDown(substrateInfo, { key: "Escape" });
-    expect(substrateInfo).not.toHaveFocus();
     const share = Testing.screen.getByRole("spinbutton", { name: "Component 1 share" });
     share.focus();
     Testing.fireEvent.input(share, { target: { value: "0" } });
@@ -224,34 +218,33 @@ describe("OperationForm", () => {
     expect(Testing.screen.queryByText("Component", { exact: true })).not.toBeInTheDocument();
     expect(Testing.screen.queryByText("Share", { exact: true })).not.toBeInTheDocument();
     expect(Testing.screen.getByText("%")).toBeInTheDocument();
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
-    expect(Testing.screen.getByRole("combobox", { name: "Component 2" })).toHaveValue(pineBarkId);
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: perliteId },
-    });
-    const perliteInfoControls = Testing.screen.getAllByRole("button", {
-      name: "Information about Perlite",
-    });
-    expect(perliteInfoControls[0]).not.toHaveAttribute(
-      "aria-describedby",
-      perliteInfoControls[1]?.getAttribute("aria-describedby"),
-    );
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
-    expect(Testing.screen.getByRole("alert")).toHaveTextContent(
-      "Each substrate component can only be used once.",
-    );
 
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Component 2" }), {
-      target: { value: pineBarkId },
-    });
+    // A row's dropdown reselects the component in place before we commit to the mix.
+    const firstComponent = Testing.screen.getByRole("combobox", { name: "Component 1" });
+    Testing.fireEvent.change(firstComponent, { target: { value: pineBarkId } });
+    expect(firstComponent).toHaveValue(pineBarkId);
+    Testing.fireEvent.change(firstComponent, { target: { value: perliteId } });
+    expect(firstComponent).toHaveValue(perliteId);
+
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
+    const secondComponent = Testing.screen.getByRole("combobox", { name: "Component 2" });
+    expect(secondComponent).toHaveValue(pineBarkId);
+    // The already-chosen perlite is not offered again, so a duplicate cannot be built:
+    // only the row's own pine bark remains selectable.
+    expect(Testing.within(secondComponent).getAllByRole("option")).toHaveLength(1);
+
+    // Perlite 100% + pine bark 1% exceeds the total; the disabled Save-mix button
+    // now explains why rather than staying silently greyed out.
+    expect(Testing.screen.getByRole("button", { name: "Save mix" })).toBeDisabled();
+    expect(
+      Testing.screen.getByText("Substrate shares cannot total more than 100%."),
+    ).toBeInTheDocument();
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
     expect(Testing.screen.getByRole("alert")).toHaveTextContent(
       "Substrate shares cannot total more than 100%.",
     );
 
     Testing.fireEvent.input(share, { target: { value: "80" } });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Remove component 2" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Extend mix" }));
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save operation" }));
     expect(submitted).toEqual([
       {
@@ -266,7 +259,6 @@ describe("OperationForm", () => {
   });
 
   it("should not extend the substrate mix when every component is already chosen", () => {
-    const changes: unknown[] = [];
     Testing.render(() => (
       <OperationForm
         initial={repot("o1", "2026-01-01T00:00:00Z").details}
@@ -291,7 +283,11 @@ describe("OperationForm", () => {
 
     Testing.fireEvent.click(extend);
     expect(Testing.screen.queryByRole("combobox", { name: "Component 3" })).toBeNull();
-    expect(changes).toEqual([]);
+
+    // Removing a row frees its component and re-enables extending the mix.
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Remove component 2" }));
+    expect(Testing.screen.queryByRole("combobox", { name: "Component 2" })).toBeNull();
+    expect(extend).toBeEnabled();
   });
 
   it("should reveal pesticide choices last and clear them when deselected", async () => {
@@ -334,14 +330,6 @@ describe("OperationForm", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(Testing.screen.getAllByLabelText("Insecticide")).toHaveLength(2);
-    const pesticideInfo = Testing.screen.getByRole("button", {
-      name: "Information about Neem oil",
-    });
-    pesticideInfo.focus();
-    Testing.fireEvent.keyDown(pesticideInfo, { key: "Enter" });
-    expect(pesticideInfo).toHaveFocus();
-    Testing.fireEvent.keyDown(pesticideInfo, { key: "Escape" });
-    expect(pesticideInfo).not.toHaveFocus();
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Insecticidal soap" }));
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Neem oil" }));
@@ -508,7 +496,8 @@ describe("OperationForm", () => {
     });
   });
 
-  it("should offer no delete action for a new, unsaved operation", () => {
+  it("should show a delete action next to save for an existing operation", () => {
+    // New/unsaved operation: no Delete control
     Testing.render(() => (
       <OperationForm
         initial={undefined}
@@ -525,11 +514,10 @@ describe("OperationForm", () => {
         onCancel={() => undefined}
       />
     ));
-
     expect(Testing.screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-  });
+    Testing.cleanup();
 
-  it("should show a delete action next to save for an existing operation", () => {
+    // Existing operation: Delete control present with correct position and callback
     let deletions = 0;
     Testing.render(() => (
       <OperationForm

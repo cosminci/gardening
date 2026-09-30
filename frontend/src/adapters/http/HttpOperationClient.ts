@@ -3,6 +3,7 @@ import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { OperationClient } from "../../domain/Operation";
 import { fromWireSubstrate, toWireSubstrate } from "./Codecs";
+import { coerceToError } from "./HttpError";
 
 type Wire = components["schemas"];
 
@@ -140,5 +141,4 @@ const toWireDetails = (details: Journal.OperationDetails): Wire["OperationDetail
         notes: details.maybeNote,
       };
 
-const requestFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("operation request failed");
+const requestFailure = (error: unknown): Error => coerceToError(error, "operation request failed");

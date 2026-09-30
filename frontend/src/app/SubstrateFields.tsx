@@ -32,6 +32,8 @@ interface SubstrateFieldsProps {
 }
 
 export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
+  const mixError = () => validateSubstrate(props.parts);
+
   const updatePart = (index: number, update: Partial<SubstratePartInput>) => {
     props.onChange(
       props.parts.map((part, partIndex) => (partIndex === index ? { ...part, ...update } : part)),
@@ -64,7 +66,9 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
                 <For
                   each={props.components.filter(
                     (component) =>
-                      component.status === "active" || component.id === part().component,
+                      component.id === part().component ||
+                      (component.status === "active" &&
+                        !props.parts.some((other) => other.component === component.id)),
                   )}
                 >
                   {(component) => (
@@ -152,7 +156,8 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           class="inline-icon-action inline-icon-action--save-mix"
           type="button"
           aria-label="Save mix"
-          disabled={validateSubstrate(props.parts) !== undefined}
+          aria-describedby={mixError() !== undefined ? "substrate-mix-error" : undefined}
+          disabled={mixError() !== undefined}
           onClick={() => {
             props.onSaveMix();
           }}
@@ -203,6 +208,13 @@ export const SubstrateFields: Component<SubstrateFieldsProps> = (props) => {
           Define new component
         </button>
       </div>
+      <Show when={mixError()}>
+        {(message) => (
+          <p id="substrate-mix-error" class="substrate-mix-hint">
+            {message()}
+          </p>
+        )}
+      </Show>
     </fieldset>
   );
 };

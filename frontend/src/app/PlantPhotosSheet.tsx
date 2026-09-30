@@ -5,6 +5,8 @@ import type { PlantPhotoClient } from "../domain/PlantPhoto";
 import { useBackgroundBarrier } from "./BackgroundBarrier";
 import { formatLocalDateTime, plantDisplayName } from "./JournalLabels";
 import { PhotoRemoveConfirmation, removePhotoControlId } from "./PhotoRemoveConfirmation";
+import { plantPhotosControlId } from "./PlantCard";
+import { waitForSheetTransition } from "./SheetTransition";
 import { photoContentUrl } from "../adapters/http/HttpPlantPhotoClient";
 import "./sheet.css";
 import "./plant-photos-sheet.css";
@@ -39,13 +41,9 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
   const [uploading, setUploading] = createSignal(false);
 
   let requestedPage = 1;
+  let latestRequest = 0;
 
   useBackgroundBarrier();
-
-  const waitForSheetTransition = () =>
-    new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 180);
-    });
 
   const closeSheet = async () => {
     if (closing()) return;
@@ -55,6 +53,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
   };
 
   const loadPage = async (page: number, focusResult = false) => {
+    const request = ++latestRequest;
     requestedPage = page;
     setState({ kind: "loading" });
     const outcome = await props.photos
@@ -66,6 +65,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
         (result) => ({ kind: "completed", result }) as const,
         () => ({ kind: "rejected" }) as const,
       );
+    if (request !== latestRequest) return;
     if (outcome.kind === "completed" && outcome.result.kind === "read") {
       setPageNumber(page);
       setState({ kind: "loaded", page: outcome.result.page });
@@ -146,7 +146,7 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
 
   onCleanup(() => {
     window.removeEventListener("keydown", onKeyDown);
-    document.getElementById(`plant-photos-${String(props.plant.id)}`)?.focus();
+    document.getElementById(plantPhotosControlId(props.plant.id))?.focus();
   });
 
   const loadedPage = () => {
@@ -242,14 +242,19 @@ export const PlantPhotosSheet: Component<PlantPhotosSheetProps> = (props) => {
                         {(photo) => (
                           <div class="photo-thumb">
                             <div class="photo-thumb__img-wrap">
-                              <img
-                                class="photo-thumb__img"
-                                src={photoContentUrl(photo.id, "thumbnail")}
-                                alt={`Photo from ${formatLocalDateTime(photo.capturedAt)}`}
+                              <button
+                                class="photo-thumb__open"
+                                type="button"
                                 onClick={() => {
                                   openFullsize(photo);
                                 }}
-                              />
+                              >
+                                <img
+                                  class="photo-thumb__img"
+                                  src={photoContentUrl(photo.id, "thumbnail")}
+                                  alt={`Photo from ${formatLocalDateTime(photo.capturedAt)}`}
+                                />
+                              </button>
                               <button
                                 id={removePhotoControlId(photo.id)}
                                 class="photo-thumb__remove"

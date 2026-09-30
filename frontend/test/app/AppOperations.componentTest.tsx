@@ -157,6 +157,13 @@ Vitest.describe("changing the journal", () => {
       Vitest.expect(deleted).toEqual([Journal.operationId("o1")]);
       Vitest.expect(Testing.screen.queryByRole("dialog", { name: "Operation editor" })).toBeNull();
       Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      // The deleted operation's edit control is gone, so focus lands on the plant's log button
+      // rather than dropping to the document.
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+        ).toHaveFocus();
+      });
     },
   );
 
@@ -786,8 +793,6 @@ Vitest.describe("changing the journal", () => {
     });
     trigger.focus();
     Testing.fireEvent.click(trigger);
-    const editor = Testing.screen.getByRole("dialog", { name: "Operation editor" });
-    Vitest.expect(editor).toHaveClass("sheet--entering");
     Vitest.expect(Testing.screen.getByRole("combobox", { name: "Operation type" })).toBeDisabled();
     Testing.fireEvent.input(Testing.screen.getByRole("spinbutton", { name: "Component 1 share" }), {
       target: { value: "80" },
@@ -937,7 +942,6 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(current.getByRole("dialog", { name: "Operation editor" })).toBeInTheDocument();
     Testing.fireEvent.keyDown(window, { key: "Escape" });
 
-    Vitest.expect(dialog).toHaveClass("sheet--closing");
     await Testing.waitFor(() => {
       Vitest.expect(current.queryByRole("dialog")).not.toBeInTheDocument();
       Vitest.expect(header).toHaveProperty("inert", false);
@@ -985,8 +989,6 @@ Vitest.describe("changing the journal", () => {
     await Testing.screen.findByRole("article", { name: "Fern" });
 
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    const operationEditor = Testing.screen.getByRole("dialog", { name: "Operation editor" });
-    Vitest.expect(operationEditor).toHaveClass("sheet--entering");
     Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
       target: { value: "repot" },
     });
@@ -1290,7 +1292,9 @@ Vitest.describe("changing the journal", () => {
     Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
     Vitest.expect(Testing.screen.getAllByLabelText("Insecticide")).toHaveLength(2);
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
-    Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", true);
+    Vitest.expect(
+      Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
     Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
       target: { value: "Neem concentrate" },
     });
@@ -1305,7 +1309,6 @@ Vitest.describe("changing the journal", () => {
       const editor = Testing.screen.queryByRole("dialog", { name: "Pesticide editor" });
       Vitest.expect(editor).toBeNull();
     });
-    Vitest.expect(operation.querySelector(".operation-form__body")).toHaveProperty("inert", false);
     const editNeem = Testing.screen.getByRole("button", { name: "Edit Neem concentrate" });
     const pesticidesTerm = Testing.screen.getByText("Pesticides", { selector: "dt" });
     Vitest.expect(editNeem).toBeInTheDocument();
@@ -1329,9 +1332,9 @@ Vitest.describe("changing the journal", () => {
     Vitest.expect(editedPesticides).toEqual([{ id: neemId, data: editedPesticide }]);
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }));
     Testing.fireEvent.keyDown(window, { key: "Escape" });
-    Vitest.expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
-    const closingEditor = Testing.screen.getByRole("dialog", { name: "Pesticide editor" });
-    Vitest.expect(closingEditor).toHaveClass("sheet--closing");
+    Vitest.expect(
+      Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
     await Testing.waitFor(() => {
       const editor = Testing.screen.queryByRole("dialog", { name: "Pesticide editor" });
       const editControl = Testing.screen.getByRole("button", { name: "Edit Neem concentrate" });
@@ -1342,19 +1345,20 @@ Vitest.describe("changing the journal", () => {
       "Draft treatment notes",
     );
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem concentrate" }));
-    const editor = Testing.screen.getByRole("dialog", { name: "Pesticide editor" });
     const collapseOperation = Testing.screen.getByRole("button", {
       name: "Collapse operation editor",
     });
     Testing.fireEvent.click(collapseOperation);
     Testing.fireEvent.click(collapseOperation);
-    Vitest.expect(editor).toHaveClass("sheet--closing");
-    Vitest.expect(operation).not.toHaveClass("sheet--closing");
-    Vitest.expect(operation.parentElement).not.toHaveClass("sheet-layer--editing");
+    Vitest.expect(
+      Testing.screen.queryByRole("dialog", { name: "Pesticide editor" }),
+    ).toBeInTheDocument();
+    Vitest.expect(
+      Testing.screen.queryByRole("dialog", { name: "Operation editor" }),
+    ).toBeInTheDocument();
     await Testing.waitFor(() => {
       const remainingEditor = Testing.screen.queryByRole("dialog", { name: "Pesticide editor" });
       Vitest.expect(remainingEditor).toBeNull();
-      Vitest.expect(operation).toHaveClass("sheet--closing");
     });
     await Testing.waitFor(() => {
       Vitest.expect(Testing.screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1451,6 +1455,59 @@ Vitest.describe("changing the journal", () => {
     },
   );
 
+  Vitest.it(
+    "should archive a substrate component and close its editor while the operation sheet stays open",
+    async () => {
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        componentArchiveResult: {
+          kind: "archived",
+          entry: {
+            id: perliteId,
+            data: { name: Journal.substrateComponentName("Perlite"), maybeInfo: null },
+            status: "archived",
+          },
+        },
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      const operation = Testing.screen.getByRole("dialog", { name: "Operation editor" });
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(
+        Testing.within(warning).getByRole("button", { name: "Archive permanently" }),
+      );
+
+      await Testing.waitFor(() => {
+        Vitest.expect(
+          Testing.screen.queryByRole("dialog", { name: "Substrate component editor" }),
+        ).toBeNull();
+      });
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(Testing.screen.getByRole("dialog", { name: "Operation editor" })).toBe(
+        operation,
+      );
+    },
+  );
+
   Vitest.it("should cancel archiving a pesticide and restore focus without writing", async () => {
     const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
     const neem = {
@@ -1508,6 +1565,51 @@ Vitest.describe("changing the journal", () => {
   });
 
   Vitest.it(
+    "should cancel archiving a substrate component and restore focus without writing",
+    async () => {
+      const archivedComponents: Journal.SubstrateComponentId[] = [];
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        archivedComponents,
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+      const archiveControl = Testing.screen.getByRole("button", { name: "Archive" });
+      archiveControl.focus();
+      Testing.fireEvent.click(archiveControl);
+      const warning = Testing.screen.getByRole("alertdialog");
+      Testing.fireEvent.click(Testing.within(warning).getByRole("button", { name: "Cancel" }));
+
+      await Testing.waitFor(() => {
+        Vitest.expect(archiveControl).toHaveFocus();
+      });
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
+      ).toBeInTheDocument();
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(archivedComponents).toEqual([]);
+    },
+  );
+
+  Vitest.it(
     "should dismiss only the archive confirmation, not the pesticide editor, on Escape",
     async () => {
       const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
@@ -1554,6 +1656,44 @@ Vitest.describe("changing the journal", () => {
       Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
       Vitest.expect(
         Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  Vitest.it(
+    "should dismiss only the archive confirmation, not the substrate component editor, on Escape",
+    async () => {
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+      });
+      Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Archive" }));
+      Vitest.expect(Testing.screen.getByRole("alertdialog")).toBeInTheDocument();
+
+      Testing.fireEvent.keyDown(window, { key: "Escape" });
+
+      Vitest.expect(Testing.screen.queryByRole("alertdialog")).toBeNull();
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
       ).toBeInTheDocument();
     },
   );
@@ -1656,159 +1796,141 @@ Vitest.describe("changing the journal", () => {
     },
   );
 
-  Vitest.it("should keep the substrate editor open when adding a component fails", async () => {
-    const journal = JournalFixtures.buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      componentAddResult: { kind: "addFailed", reason: new Error("offline") },
-    });
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={JournalFixtures.noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
-
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
-      target: { value: "repot" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new component" }));
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Pumice" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(
-      await Testing.screen.findByText("The substrate component could not be saved."),
-    ).toBeInTheDocument();
-    Vitest.expect(
-      Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
-    ).toBeInTheDocument();
-  });
-
-  Vitest.it("should keep the substrate editor open when editing a component fails", async () => {
-    const journal = JournalFixtures.buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      componentEditResult: { kind: "editFailed", reason: new Error("offline") },
-    });
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={JournalFixtures.noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
-
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
-      target: { value: "repot" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Fine perlite" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(
-      await Testing.screen.findByText("The substrate component could not be saved."),
-    ).toBeInTheDocument();
-    Vitest.expect(
-      Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
-    ).toBeInTheDocument();
-  });
-
-  Vitest.it("should keep the pesticide editor open when adding a pesticide fails", async () => {
-    const journal = JournalFixtures.buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      getPesticidesResult: { kind: "read", entries: [] },
-      pesticideAddResult: { kind: "addFailed", reason: new Error("offline") },
-    });
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={JournalFixtures.noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
-
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Define new pesticide" }));
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Neem oil" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(
-      await Testing.screen.findByText("The pesticide could not be saved."),
-    ).toBeInTheDocument();
-    Vitest.expect(
-      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
-    ).toBeInTheDocument();
-  });
-
-  Vitest.it("should keep the pesticide editor open when editing a pesticide fails", async () => {
-    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
-    const journal = JournalFixtures.buildJournal({
-      attentionProjection: unavailableFicusAttention,
-      getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
-      getPesticidesResult: {
-        kind: "read",
-        entries: [
-          {
-            id: neemId,
-            data: {
-              name: Journal.pesticideName("Neem oil"),
-              type: "insecticide",
-              maybeInfo: null,
-            },
-            status: "active",
-          },
-        ],
+  Vitest.it("should keep the substrate editor open when a component save fails", async () => {
+    const cases = [
+      {
+        journalOpts: {
+          componentAddResult: { kind: "addFailed" as const, reason: new Error("offline") },
+        },
+        openEditor: () => {
+          Testing.fireEvent.click(
+            Testing.screen.getByRole("button", { name: "Define new component" }),
+          );
+          Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+            target: { value: "Pumice" },
+          });
+        },
       },
-      pesticideEditResult: { kind: "editFailed", reason: new Error("offline") },
-    });
-    Testing.render(() => (
-      <App
-        plants={journal}
-        operations={journal}
-        attention={journal}
-        substrates={journal}
-        pesticideCatalog={journal}
-        photos={JournalFixtures.noopPhotoClient}
-      />
-    ));
-    await Testing.screen.findByRole("article", { name: "Fern" });
+      {
+        journalOpts: {
+          componentEditResult: { kind: "editFailed" as const, reason: new Error("offline") },
+        },
+        openEditor: () => {
+          Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Perlite" }));
+          Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+            target: { value: "Fine perlite" },
+          });
+        },
+      },
+    ];
+    for (const { journalOpts, openEditor } of cases) {
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        ...journalOpts,
+      });
+      const view = Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.change(Testing.screen.getByRole("combobox", { name: "Operation type" }), {
+        target: { value: "repot" },
+      });
+      openEditor();
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+      Vitest.expect(
+        await Testing.screen.findByText("The substrate component could not be saved."),
+      ).toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Substrate component editor" }),
+      ).toBeInTheDocument();
+      view.unmount();
+    }
+  });
 
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Log operation for Fern" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Neem concentrate" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(
-      await Testing.screen.findByText("The pesticide could not be saved."),
-    ).toBeInTheDocument();
-    Vitest.expect(
-      Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
-    ).toBeInTheDocument();
+  Vitest.it("should keep the pesticide editor open when a pesticide save fails", async () => {
+    const neemId = Journal.pesticideId("00000000-0000-4000-8001-000000000003");
+    const cases = [
+      {
+        journalOpts: {
+          getPesticidesResult: { kind: "read" as const, entries: [] },
+          pesticideAddResult: { kind: "addFailed" as const, reason: new Error("offline") },
+        },
+        openEditor: () => {
+          Testing.fireEvent.click(
+            Testing.screen.getByRole("button", { name: "Define new pesticide" }),
+          );
+          Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+            target: { value: "Neem oil" },
+          });
+        },
+      },
+      {
+        journalOpts: {
+          getPesticidesResult: {
+            kind: "read" as const,
+            entries: [
+              {
+                id: neemId,
+                data: {
+                  name: Journal.pesticideName("Neem oil"),
+                  type: "insecticide" as const,
+                  maybeInfo: null,
+                },
+                status: "active" as const,
+              },
+            ],
+          },
+          pesticideEditResult: { kind: "editFailed" as const, reason: new Error("offline") },
+        },
+        openEditor: () => {
+          Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Edit Neem oil" }));
+          Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+            target: { value: "Neem concentrate" },
+          });
+        },
+      },
+    ];
+    for (const { journalOpts, openEditor } of cases) {
+      const journal = JournalFixtures.buildJournal({
+        attentionProjection: unavailableFicusAttention,
+        getOperationsByPlantId: { p1: [JournalFixtures.operationsPage()] },
+        ...journalOpts,
+      });
+      const view = Testing.render(() => (
+        <App
+          plants={journal}
+          operations={journal}
+          attention={journal}
+          substrates={journal}
+          pesticideCatalog={journal}
+          photos={JournalFixtures.noopPhotoClient}
+        />
+      ));
+      await Testing.screen.findByRole("article", { name: "Fern" });
+      Testing.fireEvent.click(
+        Testing.screen.getByRole("button", { name: "Log operation for Fern" }),
+      );
+      Testing.fireEvent.click(Testing.screen.getByRole("checkbox", { name: "Pesticide" }));
+      openEditor();
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+      Vitest.expect(
+        await Testing.screen.findByText("The pesticide could not be saved."),
+      ).toBeInTheDocument();
+      Vitest.expect(
+        Testing.screen.getByRole("dialog", { name: "Pesticide editor" }),
+      ).toBeInTheDocument();
+      view.unmount();
+    }
   });
 });

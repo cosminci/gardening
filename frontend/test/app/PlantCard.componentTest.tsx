@@ -70,6 +70,7 @@ const archivedCardProps = {
 describe("plant cards", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("should show a pending attention indicator when no projection has arrived", () => {
@@ -128,8 +129,23 @@ describe("plant cards", () => {
     expect(onEdit).toHaveBeenCalledOnce();
   });
 
-  it("should display ordinal dates for the three most recent operations", () => {
-    const days = [11, 13, 23];
+  it("should order the recent operations to match the active layout", () => {
+    // Operations arrive newest-first, as the backend returns them.
+    const days = [23, 13, 11];
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    let cards = false;
+    vi.stubGlobal("matchMedia", (media: string) => ({
+      media,
+      get matches() {
+        return cards;
+      },
+      addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+        listeners.delete(listener);
+      },
+    }));
     render(() => (
       <PlantCard
         {...emptyCardProps}
@@ -147,12 +163,18 @@ describe("plant cards", () => {
       />
     ));
 
-    const expectedDates = ["11th of March", "13th of March", "23rd of March"];
-    const actualDates = screen
-      .getAllByRole("time")
-      .map((time) => time.querySelector(".operation__date-long")?.textContent);
-    expect(actualDates).toEqual(expectedDates.toReversed());
-    expect(screen.getAllByRole("time")[0]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
+    const orderedDates = () =>
+      screen.getAllByRole("time").map((time) => within(time).getByText(/of March/).textContent);
+
+    // Desktop row reads left-to-right, so oldest-first.
+    expect(orderedDates()).toEqual(["11th of March", "13th of March", "23rd of March"]);
+
+    // Crossing to the stacked cards view flips to newest-first, top-down.
+    cards = true;
+    listeners.forEach((listener) => {
+      listener({ matches: true } as MediaQueryListEvent);
+    });
+    expect(orderedDates()).toEqual(["23rd of March", "13th of March", "11th of March"]);
   });
 
   it("should show history access only when older operations exist", () => {
@@ -210,7 +232,6 @@ describe("plant cards", () => {
     expect(screen.getByText("01.02.2026")).toBeInTheDocument();
     expect(screen.getByText("03.04.2026")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Log operation for Fern" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Archive Fern" })).toBeNull();
   });
 
   it("should show unknown dates for a cemetery plant without operations", () => {
@@ -228,27 +249,23 @@ describe("plant cards", () => {
     expect(screen.getAllByText("01.02.2026")).toHaveLength(2);
   });
 
-  it("should offer archiving from an active plant summary", () => {
+  it("should offer archiving and editing from an active plant summary", () => {
     const onArchive = vi.fn();
-
-    render(() => (
-      <PlantCard {...emptyCardProps} watering={currentWatering} onArchive={onArchive} />
-    ));
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
-
-    expect(onArchive).toHaveBeenCalledOnce();
-  });
-
-  it("should offer editing from an active plant summary", () => {
     const onEditPlant = vi.fn();
 
     render(() => (
-      <PlantCard {...emptyCardProps} watering={currentWatering} onEditPlant={onEditPlant} />
+      <PlantCard
+        {...emptyCardProps}
+        watering={currentWatering}
+        onArchive={onArchive}
+        onEditPlant={onEditPlant}
+      />
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Archive Fern" }));
+    expect(onArchive).toHaveBeenCalledOnce();
 
+    fireEvent.click(screen.getByRole("button", { name: "Edit Fern" }));
     expect(onEditPlant).toHaveBeenCalledOnce();
     expect(onEditPlant).toHaveBeenCalledWith(ficusPlant);
   });
@@ -277,7 +294,6 @@ describe("plant cards", () => {
     expect(screen.getByText("in 12h")).toBeInTheDocument();
     fireEvent.focus(screen.getByRole("button", { name: "Watering attention details for Fern" }));
     const tooltip = screen.getByRole("tooltip");
-    expect(tooltip.querySelector("dl")).toHaveClass("watering-attention__details");
     expect(within(tooltip).getByText("Watering operations")).toBeInTheDocument();
     expect(within(tooltip).getByText("5 considered")).toBeInTheDocument();
     expect(within(tooltip).getByText("2 days and 4 hours")).toBeInTheDocument();

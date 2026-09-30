@@ -37,6 +37,27 @@ export const pesticideLabel = (id: Journal.PesticideId, pesticides: readonly Jou
 export const operationKindLabel = (details: Journal.OperationDetails) =>
   details.kind === "care" ? "Care" : "Repot";
 
+// Both the plant sheet and the operation sheet archive substrate components and
+// must report each outcome identically; the mapping lives here so they cannot
+// drift. The failed-request message is shared with the thrown-exception path.
+export const substrateComponentArchiveFailedMessage =
+  "The substrate component could not be archived.";
+
+export const substrateComponentArchiveMessage = (
+  result: Journal.SubstrateComponentArchiveResult,
+): string | undefined => {
+  switch (result.kind) {
+    case "archived":
+      return undefined;
+    case "componentMissing":
+      return "This substrate component no longer exists.";
+    case "alreadyArchived":
+      return "This substrate component was already archived.";
+    case "archiveFailed":
+      return substrateComponentArchiveFailedMessage;
+  }
+};
+
 export const operationEditLabel = (
   operation: Journal.Operation,
   position: number,
@@ -46,11 +67,19 @@ export const operationEditLabel = (
     section === "recent" ? formatRecentDate(operation.date) : formatLocalDate(operation.date)
   }`;
 
+// `kind` is the row's semantic identity; `label` is only the display text. The
+// cell picks its specialized rendering off `kind` so relabelling never breaks it.
+export interface OperationDetailRow {
+  readonly kind: "moisture" | "actions" | "pesticides" | "substrate";
+  readonly label: string;
+  readonly value: string;
+}
+
 export const operationDetailRows = (
   details: Journal.OperationDetails,
   components: readonly Journal.SubstrateComponent[],
   pesticides: readonly Journal.Pesticide[],
-): readonly { readonly label: string; readonly value: string }[] => {
+): readonly OperationDetailRow[] => {
   switch (details.kind) {
     case "care": {
       const actions = [...details.actions].filter((action) => action !== "noAction");
@@ -58,20 +87,26 @@ export const operationDetailRows = (
         actions.length === 0
           ? "None recorded"
           : actions.map((action) => actionLabels[action]).join(", ");
-      const rows = [
-        { label: "Moisture", value: moistureLabels[details.moisture] },
-        { label: "Actions", value: actionSummary },
+      const rows: OperationDetailRow[] = [
+        { kind: "moisture", label: "Moisture", value: moistureLabels[details.moisture] },
+        { kind: "actions", label: "Actions", value: actionSummary },
       ];
       if (details.pesticides.size > 0) {
         const pesticideSummary = [...details.pesticides]
           .map((id) => pesticideLabel(id, pesticides))
           .join(", ");
-        rows.push({ label: "Pesticides", value: pesticideSummary });
+        rows.push({ kind: "pesticides", label: "Pesticides", value: pesticideSummary });
       }
       return rows;
     }
     case "repot":
-      return [{ label: "Substrate", value: formatSubstrate(details.substrate, components) }];
+      return [
+        {
+          kind: "substrate",
+          label: "Substrate",
+          value: formatSubstrate(details.substrate, components),
+        },
+      ];
   }
 };
 

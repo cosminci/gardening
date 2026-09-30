@@ -23,8 +23,8 @@ it("should render both a short and long date span, with the long form in the acc
     />
   ));
 
-  expect(screen.getByText("3rd of March")).toHaveClass("operation__date-long");
-  expect(screen.getByText("03.03")).toHaveClass("operation__date-short");
+  expect(screen.getByText("3rd of March")).toBeInTheDocument();
+  expect(screen.getByText("03.03")).toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Edit recent care operation 1 from 3rd of March" }),
   ).toBeInTheDocument();
@@ -64,7 +64,7 @@ it("should render a logged note without a Note label", () => {
     />
   ));
 
-  expect(screen.getByText("Recovering well")).toHaveClass("operation__note-value");
+  expect(screen.getByText("Recovering well")).toBeInTheDocument();
   expect(screen.queryByText("Note")).not.toBeInTheDocument();
 });
 

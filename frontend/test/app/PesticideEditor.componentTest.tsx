@@ -189,6 +189,37 @@ Vitest.describe("PesticideEditor", () => {
     },
   );
 
+  Vitest.it("should prevent another save while a save is in progress", async () => {
+    let finishSaving!: (result: { kind: "added"; entry: typeof neem }) => void;
+    const saving = new Promise<{ kind: "added"; entry: typeof neem }>((resolve) => {
+      finishSaving = resolve;
+    });
+    const onAdd = Vitest.vi.fn(() => saving);
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => (
+      <PesticideEditor
+        pesticide={undefined}
+        onAdd={onAdd}
+        onEdit={() => Promise.resolve({ kind: "edited", entry: neem })}
+        onClose={onClose}
+      />
+    ));
+
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Soap" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    const savingButton = Testing.screen.getByRole("button", { name: "Saving…" });
+    Vitest.expect(savingButton).toBeDisabled();
+    Testing.fireEvent.click(savingButton);
+    Vitest.expect(onAdd).toHaveBeenCalledOnce();
+
+    finishSaving({ kind: "added", entry: neem });
+    await Testing.waitFor(() => {
+      Vitest.expect(onClose).toHaveBeenCalledOnce();
+    });
+  });
+
   Vitest.it("should collapse without saving", () => {
     const onClose = Vitest.vi.fn();
     Testing.render(() => (

@@ -18,10 +18,15 @@ it("should expose information through focus, touch activation, and Escape", () =
   expect(trigger.parentElement).toHaveAttribute("data-open");
 
   trigger.focus();
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  expect(trigger.parentElement).toHaveAttribute("data-open");
+  expect(trigger).toHaveFocus();
+
   fireEvent.keyDown(trigger, { key: "Escape" });
   expect(trigger.parentElement).not.toHaveAttribute("data-open");
   expect(trigger).not.toHaveFocus();
-  expect(escaped).not.toHaveBeenCalled();
+  // Enter bubbled to the surrounding handler; Escape did not (it stops propagation).
+  expect(escaped).toHaveBeenCalledTimes(1);
 });
 
 it("should explain when no information was recorded", () => {

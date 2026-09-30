@@ -1,12 +1,12 @@
-import { For, Show } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
 import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLabels";
-import { logOperationControlId } from "./OperationControlIds";
+import * as Controls from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
-import { editPlantControlId } from "./PlantSheet";
+import { useCardsView } from "./useCardsView";
 
 export const plantPhotosControlId = (id: Journal.PlantId) => `plant-photos-${String(id)}`;
 import "./plant-card.css";
@@ -142,7 +142,7 @@ const WateringStatus: Component<{
   plantName: string;
   plant: Journal.PlantId;
 }> = (props) => {
-  const presentation = () => wateringPresentation(props.watering, props.measuredAt);
+  const presentation = createMemo(() => wateringPresentation(props.watering, props.measuredAt));
   const detailsId = () => `watering-attention-${props.plant}`;
 
   return (
@@ -162,7 +162,15 @@ const WateringStatus: Component<{
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const name = () => plantDisplayName(props.plant);
-  const recentOperations = () => [...props.operationPage.operations].reverse();
+  const cardsView = useCardsView();
+  // Operations arrive newest-first. The stacked cards view reads top-to-bottom,
+  // so it keeps that order (newest on top); the desktop row reads left-to-right
+  // oldest→newest, so only it reverses.
+  const recentOperations = createMemo(() =>
+    cardsView()
+      ? [...props.operationPage.operations]
+      : [...props.operationPage.operations].reverse(),
+  );
 
   return (
     <article
@@ -233,7 +241,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
               {props.kind !== "cemetery" && (
                 <>
                   <button
-                    id={editPlantControlId(props.plant.id)}
+                    id={Controls.editPlantControlId(props.plant.id)}
                     class="inline-icon-action inline-icon-action--edit"
                     type="button"
                     aria-label={`Edit ${name()}`}
@@ -243,7 +251,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
                     }}
                   />
                   <button
-                    id={`archive-plant-${props.plant.id}`}
+                    id={Controls.archivePlantControlId(props.plant.id)}
                     class="inline-icon-action inline-icon-action--archive"
                     type="button"
                     aria-label={`Archive ${name()}`}
@@ -288,7 +296,7 @@ export const PlantCard: Component<PlantCardProps> = (props) => {
         </Show>
         {props.kind !== "cemetery" && (
           <button
-            id={logOperationControlId(props.plant.id)}
+            id={Controls.logOperationControlId(props.plant.id)}
             class="add-operation"
             type="button"
             aria-label={`Log operation for ${name()}`}

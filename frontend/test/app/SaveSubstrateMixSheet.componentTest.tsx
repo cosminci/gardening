@@ -29,74 +29,88 @@ Vitest.describe("SaveSubstrateMixSheet", () => {
     Vitest.expect(onSave).not.toHaveBeenCalled();
   });
 
-  Vitest.it("should save with trimmed name and notes, then close", async () => {
-    const onSave = Vitest.vi.fn().mockResolvedValue({ kind: "added", entry: mix });
+  Vitest.it(
+    "should save with trimmed name and notes, then close; sends null notes when blank",
+    async () => {
+      const onSave = Vitest.vi.fn().mockResolvedValue({ kind: "added", entry: mix });
+      const onClose = Vitest.vi.fn();
+      Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={onClose} />);
+
+      Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+        target: { value: " Standard mix " },
+      });
+      Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Notes" }), {
+        target: { value: " Works well for aroids " },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+
+      await Testing.waitFor(() => {
+        Vitest.expect(onClose).toHaveBeenCalledOnce();
+      });
+      Vitest.expect(onSave).toHaveBeenCalledWith(
+        Journal.substrateMixName("Standard mix"),
+        Journal.substrateMixNotes("Works well for aroids"),
+      );
+      Testing.cleanup();
+
+      // Blank Notes → null
+      const onSave2 = Vitest.vi.fn().mockResolvedValue({ kind: "added", entry: mix });
+      Testing.render(() => <SaveSubstrateMixSheet onSave={onSave2} onClose={() => undefined} />);
+      Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+        target: { value: "Standard mix" },
+      });
+      Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+      await Testing.waitFor(() => {
+        Vitest.expect(onSave2).toHaveBeenCalledWith(Journal.substrateMixName("Standard mix"), null);
+      });
+    },
+  );
+
+  Vitest.it.each([
+    {
+      result: { kind: "duplicateSubstrate" as const },
+      expected: "A mix with these exact components and shares is already saved.",
+    },
+    {
+      result: { kind: "addFailed" as const, reason: new Error("offline") },
+      expected: "The mix could not be saved.",
+    },
+  ])("should show $result.kind error without closing", async ({ result, expected }) => {
+    const onSave = Vitest.vi.fn().mockResolvedValue(result);
     const onClose = Vitest.vi.fn();
     Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={onClose} />);
 
     Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: " Standard mix " },
-    });
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Notes" }), {
-      target: { value: " Works well for aroids " },
+      target: { value: "Standard mix" },
     });
     Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
 
+    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(expected);
+    Vitest.expect(onClose).not.toHaveBeenCalled();
+  });
+
+  Vitest.it("should prevent another save while a save is in progress", async () => {
+    let finishSaving!: (result: Journal.AddSubstrateMixResult) => void;
+    const saving = new Promise<Journal.AddSubstrateMixResult>((resolve) => {
+      finishSaving = resolve;
+    });
+    const onSave = Vitest.vi.fn(() => saving);
+    const onClose = Vitest.vi.fn();
+    Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={onClose} />);
+
+    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "Standard mix" },
+    });
+    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
+    const savingButton = Testing.screen.getByRole("button", { name: "Saving…" });
+    Vitest.expect(savingButton).toBeDisabled();
+    Testing.fireEvent.click(savingButton);
+    Vitest.expect(onSave).toHaveBeenCalledOnce();
+
+    finishSaving({ kind: "added", entry: mix });
     await Testing.waitFor(() => {
       Vitest.expect(onClose).toHaveBeenCalledOnce();
     });
-    Vitest.expect(onSave).toHaveBeenCalledWith(
-      Journal.substrateMixName("Standard mix"),
-      Journal.substrateMixNotes("Works well for aroids"),
-    );
-  });
-
-  Vitest.it("should save with null notes when notes are blank", async () => {
-    const onSave = Vitest.vi.fn().mockResolvedValue({ kind: "added", entry: mix });
-    Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={() => undefined} />);
-
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Standard mix" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    await Testing.waitFor(() => {
-      Vitest.expect(onSave).toHaveBeenCalledWith(Journal.substrateMixName("Standard mix"), null);
-    });
-  });
-
-  Vitest.it("should show a duplicate-substrate error without closing", async () => {
-    const onSave = Vitest.vi.fn().mockResolvedValue({ kind: "duplicateSubstrate" });
-    const onClose = Vitest.vi.fn();
-    Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={onClose} />);
-
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Standard mix" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "A mix with these exact components and shares is already saved.",
-    );
-    Vitest.expect(onClose).not.toHaveBeenCalled();
-  });
-
-  Vitest.it("should show a generic save-failure error without closing", async () => {
-    const onSave = Vitest.vi
-      .fn()
-      .mockResolvedValue({ kind: "addFailed", reason: new Error("offline") });
-    const onClose = Vitest.vi.fn();
-    Testing.render(() => <SaveSubstrateMixSheet onSave={onSave} onClose={onClose} />);
-
-    Testing.fireEvent.input(Testing.screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "Standard mix" },
-    });
-    Testing.fireEvent.click(Testing.screen.getByRole("button", { name: "Save" }));
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent(
-      "The mix could not be saved.",
-    );
-    Vitest.expect(onClose).not.toHaveBeenCalled();
   });
 
   Vitest.it("should collapse without saving", () => {

@@ -221,38 +221,28 @@ describe("HttpSubstrateClient", () => {
             },
             201,
           ),
+          jsonResponse({ message: "a substrate mix with these components already exists" }, 409),
         ],
         requests,
       ),
     );
+    const mixRequestBody = {
+      name: "Standard mix",
+      notes: "Works well for aroids",
+      substrate: [{ componentId: perliteId, share: 100 }],
+    };
 
     const added = await client.addSubstrateMix(mix.name, mix.maybeNotes, mixSubstrate);
+    const duplicate = await client.addSubstrateMix(mix.name, mix.maybeNotes, mixSubstrate);
     const requestedPaths = requests.map(
       (request) => `${request.method} ${new URL(request.url).pathname}`,
     );
     const requestBodies = await Promise.all(requests.map((request) => request.json()));
 
     expect(added).toEqual({ kind: "added", entry: mix });
-    expect(requestedPaths).toEqual(["POST /substrates/mixes"]);
-    expect(requestBodies).toEqual([
-      {
-        name: "Standard mix",
-        notes: "Works well for aroids",
-        substrate: [{ componentId: perliteId, share: 100 }],
-      },
-    ]);
-  });
-
-  it("should treat a duplicate substrate mix conflict as a domain outcome", async () => {
-    const client = makeHttpSubstrateClient(
-      respondingWith([
-        jsonResponse({ message: "a substrate mix with these components already exists" }, 409),
-      ]),
-    );
-
-    const added = await client.addSubstrateMix(mix.name, mix.maybeNotes, mixSubstrate);
-
-    expect(added).toEqual({ kind: "duplicateSubstrate" });
+    expect(duplicate).toEqual({ kind: "duplicateSubstrate" });
+    expect(requestedPaths).toEqual(["POST /substrates/mixes", "POST /substrates/mixes"]);
+    expect(requestBodies).toEqual([mixRequestBody, mixRequestBody]);
   });
 
   it("should retain storage failure outcomes for substrate mixes", async () => {

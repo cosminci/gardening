@@ -3,6 +3,7 @@ import createClient from "openapi-fetch";
 import * as Journal from "../../domain/Journal";
 import type { SubstrateClient } from "../../domain/SubstrateCatalog";
 import { fromWireSubstrate, toWireSubstrate } from "./Codecs";
+import { coerceToError } from "./HttpError";
 
 type Wire = components["schemas"];
 
@@ -130,5 +131,4 @@ const toSubstrateMix = (value: Wire["SubstrateMix"]): Journal.SubstrateMix => ({
   substrate: fromWireSubstrate(value.substrate),
 });
 
-const requestFailure = (error: unknown): Error =>
-  error instanceof Error ? error : new Error("journal request failed");
+const requestFailure = (error: unknown): Error => coerceToError(error, "journal request failed");

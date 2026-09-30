@@ -14,9 +14,12 @@ import type { OperationClient } from "../domain/Operation";
 import type { PesticideClient } from "../domain/PesticideCatalog";
 import type { PlantClient } from "../domain/Plant";
 import type { PlantPhotoClient } from "../domain/PlantPhoto";
-import type { FeedConnectionState, PlantAttentionFeed } from "../domain/PlantAttention";
+import type { PlantAttentionFeed } from "../domain/PlantAttention";
+import { isAttentionProjectionValid } from "../domain/PlantAttention";
 import type { SubstrateClient } from "../domain/SubstrateCatalog";
 import { ArchiveConfirmation } from "./ArchiveConfirmation";
+import { createAttentionFeed } from "./AttentionFeed";
+import { createConfirmation } from "./Confirmation";
 import { PlantPhotosSheet } from "./PlantPhotosSheet";
 import { DeleteOperationConfirmation } from "./DeleteOperationConfirmation";
 import { DeleteSubstrateMixConfirmation } from "./DeleteSubstrateMixConfirmation";
@@ -26,10 +29,9 @@ import { displayJournalUpdate } from "./JournalTransition";
 import * as Controls from "./OperationControlIds";
 import { recentOperationCount, type OperationHistoryChange } from "./OperationHistory";
 import { OperationSheet, operationControlId, type OperationTarget } from "./OperationSheet";
-import { orderPlantAttention } from "./PlantAttentionOrdering";
 import { filterHistoriesBySearch } from "./PlantSearch";
 import { createPesticideCatalogController } from "./PesticideCatalogController";
-import { PlantSheet, editPlantControlId, type PlantTarget } from "./PlantSheet";
+import { PlantSheet, type PlantTarget } from "./PlantSheet";
 import { createSubstrateCatalogController } from "./SubstrateCatalogController";
 import "./app.css";
 
@@ -56,64 +58,36 @@ export const App: Component<AppProps> = (props) => {
   const [selected, setSelected] = createSignal<PlantView>(viewFromUrl());
   const [searchQuery, setSearchQuery] = createSignal("");
   const [ready, setReady] = createSignal(false);
-  const [archiveTarget, setArchiveTarget] = createSignal<Journal.Plant>();
-  const [archiveCompleted, setArchiveCompleted] = createSignal(false);
+  const archive = createConfirmation<Journal.Plant>();
   const [photosTarget, setPhotosTarget] = createSignal<Journal.Plant>();
   const [substrateComponents, setSubstrateComponents] = createSignal<
     readonly Journal.SubstrateComponent[]
   >([]);
   const [substrateMixes, setSubstrateMixes] = createSignal<readonly Journal.SubstrateMix[]>([]);
-  const [deleteMixTarget, setDeleteMixTarget] = createSignal<Journal.SubstrateMix>();
-  const [deleteMixCompleted, setDeleteMixCompleted] = createSignal(false);
+  const deleteMix = createConfirmation<Journal.SubstrateMix>();
   const [pesticides, setPesticides] = createSignal<readonly Journal.Pesticide[]>([]);
   const [formTarget, setFormTarget] = createSignal<OperationTarget>();
   const [saveError, setSaveError] = createSignal<string>();
   const [plantTarget, setPlantTarget] = createSignal<PlantTarget>();
-  const [deleteTarget, setDeleteTarget] = createSignal<Journal.Operation>();
-  const [deleteCompleted, setDeleteCompleted] = createSignal(false);
+  const deleteOperation = createConfirmation<Journal.Operation>();
   const [plantSheetCompleted, setPlantSheetCompleted] = createSignal(false);
   const [plantSaveError, setPlantSaveError] = createSignal<string>();
   const [creationReloadFailed, setCreationReloadFailed] = createSignal(false);
   const [operationChange, setOperationChange] = createSignal<OperationHistoryChange>();
-  const [attentionProjection, setAttentionProjection] = createSignal<Journal.AttentionProjection>();
-  const [feedConnectionState, setFeedConnectionState] =
-    createSignal<FeedConnectionState>("connecting");
-  const [lastAttentionUpdate, setLastAttentionUpdate] = createSignal<number>();
-  const recentlyArchived = new Set<Journal.PlantId>();
   let activeIds = new Set<Journal.PlantId>();
   let activePlantIdsLoaded = false;
   let loadVersion = 0;
   let initialViewLoaded = false;
-  let unsubscribeFeed: (() => void) | undefined;
 
-  const orderedGardenHistories = createMemo(() => {
-    const proj = attentionProjection();
-    const histories = gardenHistories();
-    if (proj === undefined) return histories;
-    const samplesById = new Map(proj.plants.map((s) => [s.plant, s]));
-    const pending: GardenHistory[] = [];
-    const knownHistories: GardenHistory[] = [];
-    const plantAttentions: { plant: Journal.Plant; watering: Journal.WateringAttention }[] = [];
-    for (const h of histories) {
-      const sample = samplesById.get(h.plant.id);
-      if (sample !== undefined) {
-        knownHistories.push(h);
-        plantAttentions.push({ plant: h.plant, watering: sample.watering });
-      } else {
-        pending.push(h);
-      }
-    }
-    const ordered = orderPlantAttention(plantAttentions);
-    const sortedKnown = knownHistories.toSorted(
-      (a, b) =>
-        ordered.findIndex((pa) => pa.plant.id === a.plant.id) -
-        ordered.findIndex((pa) => pa.plant.id === b.plant.id),
-    );
-    return [...pending, ...sortedKnown];
-  });
+  const attentionFeed = createAttentionFeed(
+    createMemo(() => props.attention),
+    gardenHistories,
+    () => (activePlantIdsLoaded ? activeIds : undefined),
+    () => setView("failed"),
+  );
 
   const histories = () =>
-    selected() === "garden" ? orderedGardenHistories() : cemeteryHistories();
+    selected() === "garden" ? attentionFeed.orderedGardenHistories() : cemeteryHistories();
 
   const filteredHistories = createMemo(() => filterHistoriesBySearch(histories(), searchQuery()));
 
@@ -122,16 +96,6 @@ export const App: Component<AppProps> = (props) => {
       ? "No plants match your search."
       : undefined,
   );
-
-  const isProjectionValid = (
-    proj: Journal.AttentionProjection,
-    ids: Set<Journal.PlantId>,
-  ): boolean => {
-    const samples = proj.plants;
-    if (samples.length !== new Set(samples.map((s) => s.plant)).size) return false;
-    const filtered = samples.filter((s) => !recentlyArchived.has(s.plant));
-    return !filtered.some((s) => !ids.has(s.plant));
-  };
 
   const loadJournal = async (animate = false) => {
     const version = ++loadVersion;
@@ -161,8 +125,11 @@ export const App: Component<AppProps> = (props) => {
     setPesticides(pesticidesResult.entries);
 
     const newActiveIds = new Set(plantsResult.plants.map((plant) => plant.id));
-    const proj = attentionProjection();
-    if (proj !== undefined && !isProjectionValid(proj, newActiveIds)) {
+    const proj = attentionFeed.attentionProjection();
+    if (
+      proj !== undefined &&
+      !isAttentionProjectionValid(proj, newActiveIds, attentionFeed.recentlyArchived)
+    ) {
       setView("failed");
       return;
     }
@@ -237,6 +204,18 @@ export const App: Component<AppProps> = (props) => {
     setView("loaded");
   };
 
+  // A reload can be superseded by a newer one; only the latest may report
+  // failure, so capture the version before awaiting and re-check it on rejection.
+  const guardReload = (reload: Promise<void>): Promise<void> => {
+    const version = loadVersion;
+    return reload.catch(() => {
+      if (version === loadVersion) setView("failed");
+    });
+  };
+
+  const refreshCurrentView = (animate = false): Promise<void> =>
+    selected() === "garden" ? loadJournal(animate) : loadCemetery(true);
+
   const selectView = (next: PlantView, updateUrl = true) => {
     setSearchQuery("");
     if (updateUrl) {
@@ -252,11 +231,7 @@ export const App: Component<AppProps> = (props) => {
       setView("loaded");
     } else if (selected() !== "cemetery" || view() !== "loaded") {
       setSelected("cemetery");
-      const pending = loadCemetery();
-      const version = loadVersion;
-      void pending.catch(() => {
-        if (version === loadVersion) setView("failed");
-      });
+      void guardReload(loadCemetery());
     }
   };
 
@@ -270,10 +245,9 @@ export const App: Component<AppProps> = (props) => {
     if (result.kind === "plantMissing") return "This plant no longer exists.";
     if (result.kind === "alreadyArchived") return "This plant was already archived.";
     if (result.kind === "archiveFailed") return "The plant could not be archived.";
-    recentlyArchived.add(plant.id);
+    attentionFeed.markRecentlyArchived(plant.id);
     await loadJournal().catch(() => setView("failed"));
-    setArchiveCompleted(true);
-    setArchiveTarget(undefined);
+    archive.complete();
     return undefined;
   };
 
@@ -328,7 +302,7 @@ export const App: Component<AppProps> = (props) => {
     }
     setPlantTarget(undefined);
     await loadJournal().catch(() => setView("failed"));
-    document.getElementById(editPlantControlId(plant.id))?.focus();
+    document.getElementById(Controls.editPlantControlId(plant.id))?.focus();
   };
 
   const saveOperation = async (
@@ -371,12 +345,7 @@ export const App: Component<AppProps> = (props) => {
       setFormTarget(undefined);
       setSaveError(undefined);
     }
-    const refresh =
-      selected() === "garden" ? loadJournal(target.kind === "log") : loadCemetery(true);
-    const version = loadVersion;
-    await refresh.catch(() => {
-      if (version === loadVersion) setView("failed");
-    });
+    await guardReload(refreshCurrentView(target.kind === "log"));
     setOperationChange(
       editedOperation === undefined
         ? { kind: "logged" }
@@ -396,16 +365,14 @@ export const App: Component<AppProps> = (props) => {
     if (result.kind === "cannotDeleteLatestRepot")
       return "This is the plant's current repot and cannot be deleted.";
     if (result.kind === "deleteFailed") return "The operation could not be deleted.";
-    setDeleteCompleted(true);
-    setDeleteTarget(undefined);
+    deleteOperation.complete();
     setFormTarget(undefined);
     setSaveError(undefined);
-    const refresh = selected() === "garden" ? loadJournal() : loadCemetery(true);
-    const version = loadVersion;
-    await refresh.catch(() => {
-      if (version === loadVersion) setView("failed");
-    });
+    await guardReload(refreshCurrentView());
     setOperationChange({ kind: "deleted" });
+    // The edit sheet's own return control is the deleted operation's edit button, which the reload
+    // removes — leaving focus on the document. Land on the plant's persistent log button instead.
+    document.getElementById(Controls.logOperationControlId(operation.plant))?.focus();
     return undefined;
   };
 
@@ -425,16 +392,14 @@ export const App: Component<AppProps> = (props) => {
   const pesticideCatalog = createPesticideCatalogController(pesticideCatalogClient, setPesticides);
   const { addPesticide, editPesticide, archivePesticide } = pesticideCatalog;
 
-  const requestDeleteSubstrateMix = (mix: Journal.SubstrateMix) => {
-    setDeleteMixCompleted(false);
-    setDeleteMixTarget(mix);
-  };
+  // Bound to a stable identifier so both sheets receive it as a static prop
+  // rather than a per-call-site reactive getter (a member expression would be).
+  const requestDeleteMix = deleteMix.request;
 
   const confirmDeleteSubstrateMix = async (mix: Journal.SubstrateMix) => {
     const message = await substrateCatalog.deleteSubstrateMix(mix);
     if (message !== undefined) return message;
-    setDeleteMixCompleted(true);
-    setDeleteMixTarget(undefined);
+    deleteMix.complete();
     return undefined;
   };
 
@@ -442,36 +407,11 @@ export const App: Component<AppProps> = (props) => {
     if (!ready() || initialViewLoaded) return;
     initialViewLoaded = true;
     if (selected() === "cemetery") {
-      const pending = loadCemetery();
-      const version = loadVersion;
-      void pending.catch(() => {
-        if (version === loadVersion) setView("failed");
-      });
+      void guardReload(loadCemetery());
     }
   });
 
   onMount(() => {
-    unsubscribeFeed = props.attention.subscribe((event) => {
-      if (event.kind === "connectionState") {
-        setFeedConnectionState(event.state);
-      } else {
-        const proj = event.projection;
-        for (const id of recentlyArchived)
-          if (!proj.plants.some((s) => s.plant === id)) recentlyArchived.delete(id);
-        if (activePlantIdsLoaded) {
-          if (!isProjectionValid(proj, activeIds)) {
-            setView("failed");
-            return;
-          }
-        }
-        setAttentionProjection(proj);
-        setLastAttentionUpdate(Date.now());
-      }
-    });
-    onCleanup(() => {
-      unsubscribeFeed?.();
-    });
-
     const navigate = () => {
       selectView(viewFromUrl(), false);
     };
@@ -491,8 +431,8 @@ export const App: Component<AppProps> = (props) => {
         gardenCount={gardenHistories().length}
         cemeteryCount={cemeteryCount()}
         selected={selected()}
-        connectionState={feedConnectionState()}
-        lastUpdateAt={lastAttentionUpdate()}
+        connectionState={attentionFeed.connectionState()}
+        lastUpdateAt={attentionFeed.lastUpdateAt()}
         searchQuery={searchQuery()}
         onSelect={selectView}
         onAddPlant={() => {
@@ -518,7 +458,7 @@ export const App: Component<AppProps> = (props) => {
             view={selected()}
             histories={filteredHistories()}
             emptyMessage={emptyMessage()}
-            attentionProjection={attentionProjection()}
+            attentionProjection={attentionFeed.attentionProjection()}
             substrateComponents={substrateComponents()}
             pesticides={pesticides()}
             getOperations={(plant, window) => props.operations.getOperations(plant, window)}
@@ -530,10 +470,7 @@ export const App: Component<AppProps> = (props) => {
               setSaveError(undefined);
               setFormTarget({ kind: "log", plant });
             }}
-            onArchive={(plant) => {
-              setArchiveCompleted(false);
-              setArchiveTarget(plant);
-            }}
+            onArchive={archive.request}
             onEditPlant={(plant) => {
               setPlantSaveError(undefined);
               setPlantTarget({ kind: "edit", plant });
@@ -562,11 +499,11 @@ export const App: Component<AppProps> = (props) => {
             onEditComponent={editSubstrateComponent}
             onArchiveComponent={archiveSubstrateComponent}
             onAddSubstrateMix={addSubstrateMix}
-            onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
+            onRequestDeleteSubstrateMix={requestDeleteMix}
             onCancel={() => {
               setPlantTarget(undefined);
             }}
-            deleteMixConfirming={deleteMixTarget() !== undefined}
+            deleteMixConfirming={deleteMix.target() !== undefined}
           />
         )}
       </Show>
@@ -583,7 +520,7 @@ export const App: Component<AppProps> = (props) => {
             onEditSubstrateComponent={editSubstrateComponent}
             onArchiveSubstrateComponent={archiveSubstrateComponent}
             onAddSubstrateMix={addSubstrateMix}
-            onRequestDeleteSubstrateMix={requestDeleteSubstrateMix}
+            onRequestDeleteSubstrateMix={requestDeleteMix}
             onAddPesticide={addPesticide}
             onEditPesticide={editPesticide}
             onArchivePesticide={archivePesticide}
@@ -595,25 +532,24 @@ export const App: Component<AppProps> = (props) => {
                 ? {
                     controlId: Controls.deleteOperationControlId(target.operation.id),
                     onClick: () => {
-                      setDeleteCompleted(false);
-                      setDeleteTarget(target.operation);
+                      deleteOperation.request(target.operation);
                     },
                   }
                 : undefined
             }
-            deleteConfirming={deleteTarget() !== undefined || deleteMixTarget() !== undefined}
+            deleteConfirming={
+              deleteOperation.target() !== undefined || deleteMix.target() !== undefined
+            }
           />
         )}
       </Show>
-      <Show when={archiveTarget()} keyed>
+      <Show when={archive.target()} keyed>
         {(plant) => (
           <ArchiveConfirmation
             plant={plant}
-            completed={archiveCompleted()}
+            completed={archive.completed()}
             onConfirm={() => confirmArchive(plant)}
-            onCancel={() => {
-              setArchiveTarget(undefined);
-            }}
+            onCancel={archive.dismiss}
           />
         )}
       </Show>
@@ -628,27 +564,23 @@ export const App: Component<AppProps> = (props) => {
           />
         )}
       </Show>
-      <Show when={deleteTarget()} keyed>
+      <Show when={deleteOperation.target()} keyed>
         {(operation) => (
           <DeleteOperationConfirmation
             operation={operation}
-            completed={deleteCompleted()}
+            completed={deleteOperation.completed()}
             onConfirm={() => confirmDelete(operation)}
-            onCancel={() => {
-              setDeleteTarget(undefined);
-            }}
+            onCancel={deleteOperation.dismiss}
           />
         )}
       </Show>
-      <Show when={deleteMixTarget()} keyed>
+      <Show when={deleteMix.target()} keyed>
         {(mix) => (
           <DeleteSubstrateMixConfirmation
             mix={mix}
-            completed={deleteMixCompleted()}
+            completed={deleteMix.completed()}
             onConfirm={() => confirmDeleteSubstrateMix(mix)}
-            onCancel={() => {
-              setDeleteMixTarget(undefined);
-            }}
+            onCancel={deleteMix.dismiss}
           />
         )}
       </Show>
