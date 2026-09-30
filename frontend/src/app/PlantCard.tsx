@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import type * as Journal from "../domain/Journal";
 import { InfoControl } from "./InfoControl";
@@ -142,7 +142,7 @@ const WateringStatus: Component<{
   plantName: string;
   plant: Journal.PlantId;
 }> = (props) => {
-  const presentation = () => wateringPresentation(props.watering, props.measuredAt);
+  const presentation = createMemo(() => wateringPresentation(props.watering, props.measuredAt));
   const detailsId = () => `watering-attention-${props.plant}`;
 
   return (
@@ -162,7 +162,7 @@ const WateringStatus: Component<{
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const name = () => plantDisplayName(props.plant);
-  const recentOperations = () => [...props.operationPage.operations].reverse();
+  const recentOperations = createMemo(() => [...props.operationPage.operations].reverse());
 
   return (
     <article
