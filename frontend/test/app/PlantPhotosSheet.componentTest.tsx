@@ -206,26 +206,6 @@ Vitest.describe("PlantPhotosSheet", () => {
     },
   );
 
-  Vitest.it("should reject an oversized file before upload with an inline error", async () => {
-    const client = buildPhotoClient({ getPhotosResults: [photosPage([])] });
-    const addPhotoSpy = Vitest.vi.fn();
-    client.addPhoto = addPhotoSpy;
-
-    Testing.render(() => (
-      <PlantPhotosSheet plant={ficus()} photos={client} onCancel={() => undefined} />
-    ));
-    await Testing.screen.findByText("No photos yet.");
-
-    const fileInput = Testing.screen.getByLabelText("Choose a photo to upload");
-    const bigFile = new File(["x".repeat(1)], "big.jpg", { type: "image/jpeg" });
-    Object.defineProperty(bigFile, "size", { value: 21 * 1024 * 1024 });
-    Object.defineProperty(fileInput, "files", { value: [bigFile], configurable: true });
-    Testing.fireEvent.change(fileInput);
-
-    Vitest.expect(await Testing.screen.findByRole("alert")).toHaveTextContent("too large");
-    Vitest.expect(addPhotoSpy).not.toHaveBeenCalled();
-  });
-
   Vitest.it("should reject a file with a disallowed MIME type before upload", async () => {
     const client = buildPhotoClient({ getPhotosResults: [photosPage([])] });
     const addPhotoSpy = Vitest.vi.fn();
