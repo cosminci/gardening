@@ -6,6 +6,7 @@ import { formatLocalDate, formatSubstrate, plantDisplayName } from "./JournalLab
 import * as Controls from "./OperationControlIds";
 import { OperationCell } from "./OperationCell";
 import { OperationHistory, type OperationHistoryChange } from "./OperationHistory";
+import { useCardsView } from "./useCardsView";
 
 export const plantPhotosControlId = (id: Journal.PlantId) => `plant-photos-${String(id)}`;
 import "./plant-card.css";
@@ -161,7 +162,15 @@ const WateringStatus: Component<{
 
 export const PlantCard: Component<PlantCardProps> = (props) => {
   const name = () => plantDisplayName(props.plant);
-  const recentOperations = createMemo(() => [...props.operationPage.operations].reverse());
+  const cardsView = useCardsView();
+  // Operations arrive newest-first. The stacked cards view reads top-to-bottom,
+  // so it keeps that order (newest on top); the desktop row reads left-to-right
+  // oldest→newest, so only it reverses.
+  const recentOperations = createMemo(() =>
+    cardsView()
+      ? [...props.operationPage.operations]
+      : [...props.operationPage.operations].reverse(),
+  );
 
   return (
     <article

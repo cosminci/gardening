@@ -70,6 +70,7 @@ const archivedCardProps = {
 describe("plant cards", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("should show a pending attention indicator when no projection has arrived", () => {
@@ -128,8 +129,23 @@ describe("plant cards", () => {
     expect(onEdit).toHaveBeenCalledOnce();
   });
 
-  it("should display ordinal dates for the three most recent operations", () => {
-    const days = [11, 13, 23];
+  it("should order the recent operations to match the active layout", () => {
+    // Operations arrive newest-first, as the backend returns them.
+    const days = [23, 13, 11];
+    const listeners = new Set<(event: MediaQueryListEvent) => void>();
+    let cards = false;
+    vi.stubGlobal("matchMedia", (media: string) => ({
+      media,
+      get matches() {
+        return cards;
+      },
+      addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => {
+        listeners.delete(listener);
+      },
+    }));
     render(() => (
       <PlantCard
         {...emptyCardProps}
@@ -147,11 +163,18 @@ describe("plant cards", () => {
       />
     ));
 
-    const expectedDates = ["11th of March", "13th of March", "23rd of March"];
-    const times = screen.getAllByRole("time");
-    const actualDates = times.map((time) => within(time).getByText(/of March/).textContent);
-    expect(actualDates).toEqual(expectedDates.toReversed());
-    expect(times[0]).toHaveAttribute("datetime", "2026-03-23T08:00:00Z");
+    const orderedDates = () =>
+      screen.getAllByRole("time").map((time) => within(time).getByText(/of March/).textContent);
+
+    // Desktop row reads left-to-right, so oldest-first.
+    expect(orderedDates()).toEqual(["11th of March", "13th of March", "23rd of March"]);
+
+    // Crossing to the stacked cards view flips to newest-first, top-down.
+    cards = true;
+    listeners.forEach((listener) => {
+      listener({ matches: true } as MediaQueryListEvent);
+    });
+    expect(orderedDates()).toEqual(["23rd of March", "13th of March", "11th of March"]);
   });
 
   it("should show history access only when older operations exist", () => {
