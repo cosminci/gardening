@@ -31,7 +31,7 @@
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.6.1",
     "prettier": "^3.9.9",
-    "typescript": "^5.8.2",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.70.1",
     "vite": "^8.3.0",
     "vite-plugin-solid": "^2.11.6",
