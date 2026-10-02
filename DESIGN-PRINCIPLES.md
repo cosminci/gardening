@@ -1,11 +1,14 @@
 # Design principles
 
-How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise. They are adapted from the UPS RO Application Design Guidelines (Ports & Adapters, DDD, Fractal Design, Anti-Corruption Layers, Indirection Layers, Strict Build Guardrails), which are language-agnostic, plus one this repo makes its own — keeping complexity in check as the system grows (§7); this document grounds them in the choices this repo actually makes.
+How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise.
+
+They are adapted from the language-agnostic [UPS RO Application Design Guidelines](https://wiki.corp.adobe.com/spaces/DMSArchitecture/pages/3455792989/Application+Design+Guidelines), including the 2026-10-02 revision's Keeping Complexity in Check and Code Expresses Intent guidance. This document grounds them in the choices this repo actually makes.
 
 The aims:
 
 - Low, even cognitive load across the codebase.
 - Cheap to extend, and cheap to change on purpose.
+- Intentional changes that respect the domain and its code structure.
 - Maintenance and dependencies that stay healthy over the long run.
 - Reuse and modularity, favoured over one-off solutions.
 
@@ -25,7 +28,7 @@ The domain is modelled explicitly and made hard to misuse:
 
 - **Strong types over primitives.** Identifiers, quantities, and labels are their own types (`PlantId`, `OperationId`, a percentage that is known to be in range), not bare `String`/`Int`.
 - **Invalid states are unrepresentable.** Prefer a type that cannot hold a bad value over a check that might be forgotten; prefer a total `enum` and exhaustive matches over open-ended strings. Avoid nullable/optional fields where a value is always present.
-- **Domain values hold no capabilities.** Values carry data and rules only — no clock, database, or I/O. Domain services orchestrate capability ports around those pure values.
+- **Domain values hold no capabilities.** Values carry self-contained, independently testable data and rules only — no clock, database, or I/O. Domain services orchestrate capability ports around those pure values.
 - **Give event time an explicit owner.** When an event can be recorded after it happened, its timestamp is caller input, not an implicit server clock read. Convert local entry to an absolute instant at the boundary, validate it, and preserve it as part of the event's history.
 - **Ubiquitous language.** Code, docs, and the UI use one vocabulary, in English, matching how we talk about plants and care. Romanian source records are translated at the boundary (see §4), never carried inward.
 
@@ -45,39 +48,54 @@ The system reads the same at every zoom level: `main` is the most zoomed-out vie
 
 ## 4. Anti-Corruption Layer
 
-External models are translated into internal ones at the edge, so no foreign shape or semantics leak into the domain. Two data worlds are kept distinct: **wire DTOs** (the tapir request/response types, single-sourced into the OpenAPI contract) and **domain models**. Adapters translate between them, and validators reject malformed input before it crosses inward. Boundary encodings must preserve domain semantics used outside the core: if storage compares encoded values, their canonical representation must preserve domain ordering, including across migrated data. The import path that ingests the Romanian source records is the largest instance of this: it maps a foreign vocabulary into the English domain.
+External models are translated into internal ones at the edge, so no foreign shape or semantics leak into the domain. This boundary absorbs external model changes without forcing changes to business logic.
+
+Two data worlds are kept distinct: **wire DTOs** (the tapir request/response types, single-sourced into the OpenAPI contract) and **domain models**. Adapters translate between them, and validators reject malformed input before it crosses inward.
+
+Boundary encodings must preserve domain semantics used outside the core: if storage compares encoded values, their canonical representation must preserve domain ordering, including across migrated data. The import path that ingests the Romanian source records is the largest instance of this: it maps a foreign vocabulary into the English domain.
 
 ## 5. Indirection Layers
 
-Just as the ACL protects the domain from the outside, interfaces protect internal components from each other. Business collaborators talk through explicit `trait`s; the only things called concretely are pure, stateless utilities. Two rules follow:
+Just as the ACL protects the domain from the outside, interfaces protect internal components from each other. Business collaborators talk through explicit `trait`s; the only things called concretely are pure, stateless utilities.
 
 - **Caller-defined interfaces.** A service interface is shaped by what its consumer needs, kept minimal and named in the consumer's terms — not dictated by an implementation.
+- **Contracts expose responsibilities, not implementations.** Injected interfaces make dependencies understandable and substitutable in tests without reopening or redundantly testing collaborator internals. Defining those contracts forces deliberate abstraction and domain modelling.
 - **Adapters depend on services, never on other adapters or on a capability directly.** An HTTP handler calls an application service and, in its own tests, substitutes that service. It must not reach past the service to a port such as the database — the database is reached only through its port, and only from within the service that owns that interaction.
 
 ## 6. Strict Build Guardrails
 
-The build is deliberately strict, and staying inside the lines is what makes high speed safe (learn the Formula 1 car; then you go fast on the track). The guardrails:
+The build is deliberately strict, and staying inside the lines is what makes high speed safe (learn the Formula 1 car; then you go fast on the track). Every guardrail is a means to modularity, quality, maintainability, and security, not a goal in itself.
 
 - **100% coverage — as a means, not a goal.** Full coverage is a signal, not a trophy: when something is hard to test, that is the design telling you to fix it, not a reason to hack the test. The HTTP layer is tested at its seam — logic-bearing endpoints through the tapir stub interpreter, static serving against a live server — not excluded. The one narrow exclusion is the composition root in `app/`, which only wires already-tested parts together and is exercised by the packaged runtime. Never lower a threshold, disable an inspection, or widen an exclusion to get to green.
 - **Static analysis with zero tolerance.** scalafix `DisableSyntax` and WartRemover fail the build on any finding; ESLint, Prettier, and dependency-cruiser do the same on the frontend. Start at zero warnings and stay there.
-- **A strict compiler.** `-Werror`, `-Wunused:all`, `-Wvalue-discard`, and a pinned Java output version turn whole classes of mistake into compile errors.
-- **Healthy dependencies.** The toolchain and libraries are pinned (mise, `build.sbt`, `package.json`) and kept current, so CVEs and deprecations are paid down continuously rather than in a late, expensive migration.
+- **A strict compiler.** `-Werror`, `-Wunused:all`, `-Wvalue-discard`, and a pinned Java output version turn whole classes of mistake into compile errors. Choose compiler and analysis rules that reject unsafe constructs, unused imports, and implicit numeric widening.
+- **Healthy dependencies.** The toolchain and libraries are pinned (mise, `build.sbt`, `package.json`); automate update proposals to keep them current and pay down CVEs, deprecations, and end-of-life risks continuously rather than in a late, expensive migration.
 - **Dependency direction is mechanised, not reviewed.** `ArchitectureTest` (ArchUnit) fails the build if `domain` or `capabilities` gains an outgoing dependency, `ports` depends on anything but `domain`, `usecases` reaches into `adapters`/`app`, or an adapter depends on another adapter — the five-package boundary in §1 holds by construction, not by review discipline.
 
 ### Conventions the guardrails don't (or can't) mechanise
 
-- **Code documents itself; comments are the exception.** Names carry the meaning. A comment that restates what the code does is duplicated knowledge that drifts out of step with it — and DRY is about knowledge, not lines. So: no scaladoc/JSDoc narrating a type, method, or field; no notes about code that used to be here or once didn't compile (git holds the history). A comment earns its place only when it records _why_ a non-obvious choice was made and that reason cannot live in a name — a build workaround for a library bug, a deliberate deviation. Contract-level text that ships to consumers (an endpoint `summary`, an OpenAPI description) is API content, not a code comment, and stays.
 - **Real imports, not fully-qualified paths.** Reach for a symbol by importing it; inline `a.b.c.Thing` references are noise that hides dependencies.
 - **Don't contort a test to cover glue.** If covering a line needs a cast to `Any`, an untyped response, or similar gymnastics, that is the "hard to test ⇒ fix the design" signal: either the code wants a seam, or it is a transport shell that belongs in the coverage exclusion — not a hack.
 - **`Wart.Any` is intentionally _off_.** tapir encodes "no streaming capability" as the type parameter `Any` in every endpoint signature, so a blanket ban fires on all adapter code and cannot be used here. The `Any`-widening hacks it would otherwise catch are prevented by the two rules above and by scalafix's ban on the `asInstanceOf`/`isInstanceOf` family.
 
 ## 7. Keeping Complexity in Check
 
-§3 shapes the system at rest; this is how it holds that shape as it grows. The system is evolved, not accreted — protecting against complexity is part of the change that adds behavior, not a later cleanup.
+§3 shapes the system at rest; this is how it holds that shape as it grows. Complexity must earn its place through the value it delivers; narrow or reject a change when that tradeoff does not hold.
 
-- **Refactor as work arrives.** A unit that was rightly one thing may need to split once new work grows it past a single responsibility (§3) — not a past mistake, but the point where one responsibility became several. Do the split in the change that crosses the line, never later.
-- **Size is measured, not felt.** You cannot feel a file, class, or suite becoming a monster — reading 100 or 2000 lines costs the same. So read the number: a unit past a screenful, or a test suite past roughly 3× the code it exercises, is carrying more than one reason to change. Investigate and split the unit; never trim the suite to hide the ratio.
+- **Occam's Razor.** Compare alternatives that fit the system; prefer fewer assumptions and moving parts.
+- **Scope versus complexity.** Ask whether 90% of the value is achievable with 10% of the complexity.
+- **Intentional change.** Before the spec, decide what to extend, reuse, build, or split; record why, and revisit the decision as evidence changes.
+- **Refactor as work arrives.** Extract newly exposed responsibilities into their own modules in the change that exposes them, not a later cleanup. Leave no broken windows behind.
+- **Size is measured, not felt.** A unit past a screenful, a test suite past roughly 3× the code it exercises, or code that is difficult to test warrants inspection, not an automatic split. Split distinct responsibilities and justify larger cohesive units; never trim the suite to hide the ratio.
 - **Complexity outranks completeness.** When holding complexity down conflicts with shipping more, reduce complexity first and ship the fuller feature second.
+
+## 8. Code Expresses Intent
+
+Meaningful names, strong types (§2), clear constructs, and cohesive modules (§3) carry intent. Comments are often design smells: investigate the use case that needs explaining before adding one.
+
+- **Design before commentary.** Question the API, domain model, and responsibility boundaries; rewrite the code to remove the need for explanation when possible. A newly identified subdomain may need its own package.
+- **High-signal documentation.** Keep rationale in concise, authoritative docs. Retain comments only for constraints or non-obvious reasons code cannot express, such as a library workaround or deliberate deviation.
+- **Avoid duplicated narration.** No scaladoc/JSDoc restating a type, method, or field; no notes about code that used to be here or once didn't compile (git holds the history). Contract-level text that ships to consumers (an endpoint `summary`, an OpenAPI description) is API content, not a code comment, and stays.
 
 ## Direct style, no effect system
 
