@@ -2,7 +2,7 @@
 
 How this codebase is designed and built. These are engineering principles, not agent instructions — they apply to anyone working here, human or otherwise.
 
-They are adapted from the language-agnostic [UPS RO Application Design Guidelines](https://wiki.corp.adobe.com/spaces/DMSArchitecture/pages/3455792989/Application+Design+Guidelines), including the 2026-10-02 revision's Keeping Complexity in Check and Code Expresses Intent guidance. This document grounds them in the choices this repo actually makes.
+These principles are language-agnostic; this document grounds them in the choices this repo actually makes.
 
 The aims:
 
